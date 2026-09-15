@@ -52,7 +52,7 @@ type PageListInput struct {
 	Content     string    `query:"content"`
 	ContentType string    `query:"content_type"`
 	CreatedAt   time.Time `query:"created_at"`
-	IsPublic    *bool     `query:"is_public"`
+	IsPublic    bool      `query:"is_public"`
 	Slug        string    `query:"slug"`
 	Theme       string    `query:"theme"`
 	Title       string    `query:"title"`
@@ -79,8 +79,8 @@ func (in *PageListInput) ToListOptions() db.ListOptions {
 	if !in.CreatedAt.IsZero() {
 		opts.Filter = append(opts.Filter, db.Where{Field: "created_at", Value: in.CreatedAt, Operator: db.OpEq})
 	}
-	if in.IsPublic != nil {
-		opts.Filter = append(opts.Filter, db.Where{Field: "is_public", Value: *in.IsPublic, Operator: db.OpEq})
+	if in.IsPublic {
+		opts.Filter = append(opts.Filter, db.Where{Field: "is_public", Value: in.IsPublic, Operator: db.OpEq})
 	}
 	if in.Slug != "" {
 		opts.Filter = append(opts.Filter, db.Where{Field: "slug", Value: in.Slug, Operator: db.OpEq})

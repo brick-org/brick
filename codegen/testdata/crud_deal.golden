@@ -39,7 +39,7 @@ type InvoiceListInput struct {
 	Sort   string `query:"sort"`
 	Search string `query:"search"`
 	Id     string `query:"id"`
-	Amount *int32 `query:"amount"`
+	Amount int32  `query:"amount"`
 	Notes  string `query:"notes"`
 	Status string `query:"status"`
 	Title  string `query:"title"`
@@ -55,8 +55,8 @@ func (in *InvoiceListInput) ToListOptions() db.ListOptions {
 	if in.Id != "" {
 		opts.Filter = append(opts.Filter, db.Where{Field: "id", Value: in.Id, Operator: db.OpEq})
 	}
-	if in.Amount != nil {
-		opts.Filter = append(opts.Filter, db.Where{Field: "amount", Value: *in.Amount, Operator: db.OpEq})
+	if in.Amount != 0 {
+		opts.Filter = append(opts.Filter, db.Where{Field: "amount", Value: in.Amount, Operator: db.OpEq})
 	}
 	if in.Notes != "" {
 		opts.Filter = append(opts.Filter, db.Where{Field: "notes", Value: in.Notes, Operator: db.OpEq})

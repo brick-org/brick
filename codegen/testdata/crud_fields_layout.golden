@@ -31,9 +31,9 @@ type Fields_layoutListInput struct {
 	Search     string    `query:"search"`
 	Name       string    `query:"name"`
 	Creation   time.Time `query:"creation"`
-	Docstatus  *int32    `query:"docstatus"`
+	Docstatus  int32     `query:"docstatus"`
 	Dt         string    `query:"dt"`
-	Idx        *int32    `query:"idx"`
+	Idx        int32     `query:"idx"`
 	Layout     string    `query:"layout"`
 	Modified   time.Time `query:"modified"`
 	ModifiedBy string    `query:"modified_by"`
@@ -55,14 +55,14 @@ func (in *Fields_layoutListInput) ToListOptions() db.ListOptions {
 	if !in.Creation.IsZero() {
 		opts.Filter = append(opts.Filter, db.Where{Field: "creation", Value: in.Creation, Operator: db.OpEq})
 	}
-	if in.Docstatus != nil {
-		opts.Filter = append(opts.Filter, db.Where{Field: "docstatus", Value: *in.Docstatus, Operator: db.OpEq})
+	if in.Docstatus != 0 {
+		opts.Filter = append(opts.Filter, db.Where{Field: "docstatus", Value: in.Docstatus, Operator: db.OpEq})
 	}
 	if in.Dt != "" {
 		opts.Filter = append(opts.Filter, db.Where{Field: "dt", Value: in.Dt, Operator: db.OpEq})
 	}
-	if in.Idx != nil {
-		opts.Filter = append(opts.Filter, db.Where{Field: "idx", Value: *in.Idx, Operator: db.OpEq})
+	if in.Idx != 0 {
+		opts.Filter = append(opts.Filter, db.Where{Field: "idx", Value: in.Idx, Operator: db.OpEq})
 	}
 	if in.Layout != "" {
 		opts.Filter = append(opts.Filter, db.Where{Field: "layout", Value: in.Layout, Operator: db.OpEq})

@@ -242,6 +242,9 @@ func emitListInput(b *strings.Builder, goName string, r ResourceDef) {
 			continue
 		}
 		def := s.Fields[field]
+		if def.Type == schema.FieldJSON {
+			continue // unrepresentable as a query param (see listInputGoType)
+		}
 		b.WriteString(fmt.Sprintf("\t%s %s `query:\"%s\"`\n", schema.ListInputFieldName(field), listInputGoType(field, def, pkDef(r)), field))
 	}
 	b.WriteString("}\n\n")
@@ -254,16 +257,17 @@ func emitListInput(b *strings.Builder, goName string, r ResourceDef) {
 			continue
 		}
 		def := s.Fields[field]
+		if def.Type == schema.FieldJSON {
+			continue
+		}
 		gfn := schema.ListInputFieldName(field)
 		switch def.Type {
-		case schema.FieldJSON:
-			b.WriteString(fmt.Sprintf("\tif in.%s != nil {\n\t\topts.Filter = append(opts.Filter, db.Where{Field: \"%s\", Value: *in.%s, Operator: db.OpEq})\n\t}\n", gfn, field, gfn))
 		case schema.FieldBool:
-			b.WriteString(fmt.Sprintf("\tif in.%s != nil {\n\t\topts.Filter = append(opts.Filter, db.Where{Field: \"%s\", Value: *in.%s, Operator: db.OpEq})\n\t}\n", gfn, field, gfn))
+			b.WriteString(fmt.Sprintf("\tif in.%s {\n\t\topts.Filter = append(opts.Filter, db.Where{Field: \"%s\", Value: in.%s, Operator: db.OpEq})\n\t}\n", gfn, field, gfn))
 		case schema.FieldTimestamp:
 			b.WriteString(fmt.Sprintf("\tif !in.%s.IsZero() {\n\t\topts.Filter = append(opts.Filter, db.Where{Field: \"%s\", Value: in.%s, Operator: db.OpEq})\n\t}\n", gfn, field, gfn))
 		case schema.FieldInt, schema.FieldFloat:
-			b.WriteString(fmt.Sprintf("\tif in.%s != nil {\n\t\topts.Filter = append(opts.Filter, db.Where{Field: \"%s\", Value: *in.%s, Operator: db.OpEq})\n\t}\n", gfn, field, gfn))
+			b.WriteString(fmt.Sprintf("\tif in.%s != 0 {\n\t\topts.Filter = append(opts.Filter, db.Where{Field: \"%s\", Value: in.%s, Operator: db.OpEq})\n\t}\n", gfn, field, gfn))
 		default:
 			b.WriteString(fmt.Sprintf("\tif in.%s != \"\" {\n\t\topts.Filter = append(opts.Filter, db.Where{Field: \"%s\", Value: in.%s, Operator: db.OpEq})\n\t}\n", gfn, field, gfn))
 		}
@@ -272,24 +276,14 @@ func emitListInput(b *strings.Builder, goName string, r ResourceDef) {
 	b.WriteString("}\n\n")
 }
 
-// listInputGoType is the ListInput field type. Scalar bool/int/float/json
-// filters are pointers so zero values (false, 0) stay filterable —
-// presence is nil, not the zero value. Strings and timestamps keep their
-// existing guards ("" / IsZero).
+// listInputGoType is the ListInput field type. Fields stay scalar (value
+// types) because huma v2.37.3 panics at registration on pointer query/path
+// params ("pointers are not supported for ... parameters"). Consequence
+// (known limitation, no current caller affected): false / 0 are not
+// filterable through CRUD list — presence is indistinguishable from the
+// zero value. JSON columns are excluded from ListInput entirely
+// (unrepresentable as query params). Revisit on huma upgrade.
 func listInputGoType(field string, def *schema.FieldDef, pk *schema.PK) string {
-	switch def.Type {
-	case schema.FieldBool:
-		return "*bool"
-	case schema.FieldInt:
-		if pk != nil && field == pk.Column && pk.Autoname.Strategy == schema.AutonameAutoinc {
-			return "*int64"
-		}
-		return "*int32"
-	case schema.FieldFloat:
-		return "*float64"
-	case schema.FieldJSON:
-		return "*json.RawMessage"
-	}
 	return schema.GoTypeFor(field, def, pk)
 }
 

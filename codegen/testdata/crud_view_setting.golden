@@ -96,28 +96,28 @@ type View_settingListInput struct {
 	Limit              int       `query:"limit"`
 	Sort               string    `query:"sort"`
 	Search             string    `query:"search"`
-	Name               *int64    `query:"name"`
+	Name               int64     `query:"name"`
 	ColumnField        string    `query:"column_field"`
 	Columns            string    `query:"columns"`
 	Creation           time.Time `query:"creation"`
-	Docstatus          *int32    `query:"docstatus"`
+	Docstatus          int32     `query:"docstatus"`
 	Dt                 string    `query:"dt"`
 	Filters            string    `query:"filters"`
 	GroupByField       string    `query:"group_by_field"`
 	Icon               string    `query:"icon"`
-	Idx                *int32    `query:"idx"`
-	IsDefault          *int32    `query:"is_default"`
-	IsStandard         *int32    `query:"is_standard"`
+	Idx                int32     `query:"idx"`
+	IsDefault          int32     `query:"is_default"`
+	IsStandard         int32     `query:"is_standard"`
 	KanbanColumns      string    `query:"kanban_columns"`
 	KanbanFields       string    `query:"kanban_fields"`
 	Label              string    `query:"label"`
-	LoadDefaultColumns *int32    `query:"load_default_columns"`
+	LoadDefaultColumns int32     `query:"load_default_columns"`
 	Modified           time.Time `query:"modified"`
 	ModifiedBy         string    `query:"modified_by"`
 	OrderBy            string    `query:"order_by"`
 	Owner              string    `query:"owner"`
-	Pinned             *int32    `query:"pinned"`
-	Public             *int32    `query:"public"`
+	Pinned             int32     `query:"pinned"`
+	Public             int32     `query:"public"`
 	RouteName          string    `query:"route_name"`
 	Rows               string    `query:"rows"`
 	Team               string    `query:"team"`
@@ -133,8 +133,8 @@ func (in *View_settingListInput) ToListOptions() db.ListOptions {
 		Sort:   in.Sort,
 		Search: in.Search,
 	}
-	if in.Name != nil {
-		opts.Filter = append(opts.Filter, db.Where{Field: "name", Value: *in.Name, Operator: db.OpEq})
+	if in.Name != 0 {
+		opts.Filter = append(opts.Filter, db.Where{Field: "name", Value: in.Name, Operator: db.OpEq})
 	}
 	if in.ColumnField != "" {
 		opts.Filter = append(opts.Filter, db.Where{Field: "column_field", Value: in.ColumnField, Operator: db.OpEq})
@@ -145,8 +145,8 @@ func (in *View_settingListInput) ToListOptions() db.ListOptions {
 	if !in.Creation.IsZero() {
 		opts.Filter = append(opts.Filter, db.Where{Field: "creation", Value: in.Creation, Operator: db.OpEq})
 	}
-	if in.Docstatus != nil {
-		opts.Filter = append(opts.Filter, db.Where{Field: "docstatus", Value: *in.Docstatus, Operator: db.OpEq})
+	if in.Docstatus != 0 {
+		opts.Filter = append(opts.Filter, db.Where{Field: "docstatus", Value: in.Docstatus, Operator: db.OpEq})
 	}
 	if in.Dt != "" {
 		opts.Filter = append(opts.Filter, db.Where{Field: "dt", Value: in.Dt, Operator: db.OpEq})
@@ -160,14 +160,14 @@ func (in *View_settingListInput) ToListOptions() db.ListOptions {
 	if in.Icon != "" {
 		opts.Filter = append(opts.Filter, db.Where{Field: "icon", Value: in.Icon, Operator: db.OpEq})
 	}
-	if in.Idx != nil {
-		opts.Filter = append(opts.Filter, db.Where{Field: "idx", Value: *in.Idx, Operator: db.OpEq})
+	if in.Idx != 0 {
+		opts.Filter = append(opts.Filter, db.Where{Field: "idx", Value: in.Idx, Operator: db.OpEq})
 	}
-	if in.IsDefault != nil {
-		opts.Filter = append(opts.Filter, db.Where{Field: "is_default", Value: *in.IsDefault, Operator: db.OpEq})
+	if in.IsDefault != 0 {
+		opts.Filter = append(opts.Filter, db.Where{Field: "is_default", Value: in.IsDefault, Operator: db.OpEq})
 	}
-	if in.IsStandard != nil {
-		opts.Filter = append(opts.Filter, db.Where{Field: "is_standard", Value: *in.IsStandard, Operator: db.OpEq})
+	if in.IsStandard != 0 {
+		opts.Filter = append(opts.Filter, db.Where{Field: "is_standard", Value: in.IsStandard, Operator: db.OpEq})
 	}
 	if in.KanbanColumns != "" {
 		opts.Filter = append(opts.Filter, db.Where{Field: "kanban_columns", Value: in.KanbanColumns, Operator: db.OpEq})
@@ -178,8 +178,8 @@ func (in *View_settingListInput) ToListOptions() db.ListOptions {
 	if in.Label != "" {
 		opts.Filter = append(opts.Filter, db.Where{Field: "label", Value: in.Label, Operator: db.OpEq})
 	}
-	if in.LoadDefaultColumns != nil {
-		opts.Filter = append(opts.Filter, db.Where{Field: "load_default_columns", Value: *in.LoadDefaultColumns, Operator: db.OpEq})
+	if in.LoadDefaultColumns != 0 {
+		opts.Filter = append(opts.Filter, db.Where{Field: "load_default_columns", Value: in.LoadDefaultColumns, Operator: db.OpEq})
 	}
 	if !in.Modified.IsZero() {
 		opts.Filter = append(opts.Filter, db.Where{Field: "modified", Value: in.Modified, Operator: db.OpEq})
@@ -193,11 +193,11 @@ func (in *View_settingListInput) ToListOptions() db.ListOptions {
 	if in.Owner != "" {
 		opts.Filter = append(opts.Filter, db.Where{Field: "owner", Value: in.Owner, Operator: db.OpEq})
 	}
-	if in.Pinned != nil {
-		opts.Filter = append(opts.Filter, db.Where{Field: "pinned", Value: *in.Pinned, Operator: db.OpEq})
+	if in.Pinned != 0 {
+		opts.Filter = append(opts.Filter, db.Where{Field: "pinned", Value: in.Pinned, Operator: db.OpEq})
 	}
-	if in.Public != nil {
-		opts.Filter = append(opts.Filter, db.Where{Field: "public", Value: *in.Public, Operator: db.OpEq})
+	if in.Public != 0 {
+		opts.Filter = append(opts.Filter, db.Where{Field: "public", Value: in.Public, Operator: db.OpEq})
 	}
 	if in.RouteName != "" {
 		opts.Filter = append(opts.Filter, db.Where{Field: "route_name", Value: in.RouteName, Operator: db.OpEq})

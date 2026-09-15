@@ -195,9 +195,12 @@ func TestGenerateDB_EmitsCompositeUniquesAndIndexes(t *testing.T) {
 	}
 }
 
-// ─── Zero-value filter fix (B3/B4) ────────────────────────────────────────
+// ─── ListInput scalar filters (huma-compat) ───────────────────────────────
+// huma v2.37.3 panics at registration on POINTER query/path params, so
+// ListInput filters stay scalar (beta shapes). false/0 are not filterable
+// through CRUD list (known limitation); JSON columns are excluded.
 
-func TestListInput_PointerFilters(t *testing.T) {
+func TestListInput_ScalarFilters(t *testing.T) {
 	s := &schema.DynamicSchema{
 		Fields: schema.Fields{
 			"id":        schema.String(),
@@ -216,36 +219,33 @@ func TestListInput_PointerFilters(t *testing.T) {
 		t.Fatalf("GenerateCRUD: %v", err)
 	}
 
-	// NOTE: gofmt aligns struct columns, so match with \s+ (see matchField).
 	for _, want := range []struct{ field, typ, query string }{
-		{"IsPublic", `\*bool`, "is_public"},
-		{"Count", `\*int32`, "count"},
-		{"Price", `\*float64`, "price"},
-		{"Meta", `\*json\.RawMessage`, "meta"},
+		{"IsPublic", `bool`, "is_public"},
+		{"Count", `int32`, "count"},
+		{"Price", `float64`, "price"},
 		{"Name", `string`, "name"},
 	} {
 		matchField(t, out, want.field, want.typ, want.query)
 	}
-	for _, want := range []string{
-		"if in.IsPublic != nil {",
-		"Value: *in.IsPublic",
-		"if in.Count != nil {",
-		"Value: *in.Count",
-		"if in.Meta != nil {",
-	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("expected %q in ListInput output", want)
+	// No JSON in LIST input (unrepresentable as a query param — bodies
+	// still carry Meta as JSON, which is fine).
+	if strings.Contains(out, "`query:\"meta\"`") {
+		t.Errorf("JSON column must not appear in ListInput")
+	}
+	for _, gone := range []string{"*bool `query", "*int32 `query", "*float64 `query", "RawMessage `query"} {
+		if strings.Contains(out, gone) {
+			t.Errorf("found huma-incompatible pointer/slice query field %q", gone)
 		}
 	}
-	// Old buggy guards must be gone.
-	for _, gone := range []string{"if in.IsPublic {", "if in.Count != 0 {"} {
-		if strings.Contains(out, gone) {
-			t.Errorf("found stale zero-value guard %q", gone)
+	// Zero-value guards (documented limitation: false/0 unfilterable).
+	for _, want := range []string{"if in.IsPublic {", "if in.Count != 0 {"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected zero-value guard %q", want)
 		}
 	}
 }
 
-func TestListInput_AutoincPKIsInt64Pointer(t *testing.T) {
+func TestListInput_AutoincPKIsInt64Value(t *testing.T) {
 	s := &schema.DynamicSchema{
 		Fields: schema.Fields{"subject": schema.String()},
 	}
@@ -257,8 +257,8 @@ func TestListInput_AutoincPKIsInt64Pointer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateCRUD: %v", err)
 	}
-	if !fieldRe(t, out, "Name", `\*int64`, "name") {
-		t.Fatalf("expected *int64 autoinc filter; got:\n%s", out)
+	if !fieldRe(t, out, "Name", `int64`, "name") {
+		t.Fatalf("expected int64 autoinc filter; got:\n%s", out)
 	}
 }
 
