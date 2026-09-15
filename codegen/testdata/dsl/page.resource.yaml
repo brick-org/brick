@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=../resource.schema.json
+name: page
+table: pages
+fields:
+  id: { type: uuid, readonly: true }
+  slug: { type: string, required: true, unique: true, searchable: true }
+  title: { type: string, required: true, searchable: true }
+  content: { type: text, required: true }
+  content_type:
+    type: enum
+    values: [html, markdown]
+    default: markdown
+    filterable: true
+  is_public: { type: bool, default: false, filterable: true }
+  theme:
+    type: enum
+    values: [github-dark, github-light, dracula, nord]
+    default: github-dark
+  user_id: { type: string, from: session.userId }
+  created_at: { type: timestamp, readonly: true }
+  updated_at: { type: timestamp, readonly: true }

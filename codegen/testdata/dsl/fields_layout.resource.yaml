@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=../resource.schema.json
+name: fields_layout
+table: tabCRM Fields Layout
+pk:
+  column: name
+  strategy: hash
+  length: 10
+operations:
+  create: false
+  update: false
+  delete: false
+fields:
+  creation: { type: timestamp, readonly: true }
+  modified: { type: timestamp, readonly: true }
+  modified_by: { type: string, readonly: true }
+  owner: { type: string, readonly: true }
+  docstatus: { type: int, default: 0, readonly: true }
+  idx: { type: int, default: 0, readonly: true }
+  dt: { type: string, required: true, filterable: true }
+  type:
+    type: enum
+    values:
+      [
+        'Quick Entry',
+        'Side Panel',
+        'Data Fields',
+        'Grid Row',
+        'Required Fields',
+      ]
+    required: true
+    filterable: true
+  team: { type: string, filterable: true }
+  layout: { type: text }

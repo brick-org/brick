@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=../resource.schema.json
+name: view_setting
+table: tabCRM View Settings
+pk:
+  column: name
+  strategy: autoincrement
+fields:
+  creation: { type: timestamp, readonly: true }
+  modified: { type: timestamp, readonly: true }
+  modified_by: { type: string, readonly: true }
+  owner: { type: string, readonly: true }
+  docstatus: { type: int, default: 0, readonly: true }
+  idx: { type: int, default: 0, readonly: true }
+  team: { type: string, required: true, filterable: true }
+  label: { type: string, required: true, filterable: true }
+  icon: { type: string }
+  user: { type: string, filterable: true }
+  is_standard: { type: int, default: 0, filterable: true }
+  is_default: { type: int, default: 0, filterable: true }
+  type:
+    type: enum
+    values: [list, group_by, kanban]
+    default: list
+    filterable: true
+  dt: { type: string, required: true, filterable: true }
+  route_name: { type: string }
+  pinned: { type: int, default: 0, filterable: true }
+  public: { type: int, default: 0, filterable: true }
+  filters: { type: text }
+  order_by: { type: text }
+  group_by_field: { type: string }
+  column_field: { type: string }
+  title_field: { type: string }
+  load_default_columns: { type: int, default: 0 }
+  columns: { type: text }
+  rows: { type: text }
+  kanban_columns: { type: text }
+  kanban_fields: { type: text }
