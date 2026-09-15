@@ -1,0 +1,5 @@
+name: bad_key
+table: bads
+bogus_extra_key: true
+fields:
+  id: { type: uuid }

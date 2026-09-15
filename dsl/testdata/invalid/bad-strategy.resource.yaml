@@ -1,0 +1,5 @@
+name: bad_strategy
+table: bads
+pk: {column: name, strategy: bogus}
+fields:
+  id: { type: uuid }

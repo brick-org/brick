@@ -1,0 +1,4 @@
+name: bad_table
+table: ""
+fields:
+  id: { type: uuid }

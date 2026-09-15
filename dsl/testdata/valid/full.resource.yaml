@@ -1,0 +1,60 @@
+# yaml-language-server: $schema=../../schemas/resource.schema.json
+name: widget
+table: widgets
+tenant: team
+title: label
+lookup_field: slug
+auto_create: false
+unique:
+  - [team, label]
+indexes:
+  - [owner, status]
+soft_delete: archived_at
+audit: true
+versioned: true
+writable_on_update: [status, owner]
+pk:
+  column: name
+  strategy: hash
+  length: 10
+operations:
+  get: true
+  list: true
+  create: true
+  update: true
+  delete: true
+parent:
+  resource: gadget
+  on_delete: CASCADE
+singleton:
+  scope_column: team
+  scope_model: teams
+polymorphic:
+  - id_field: ref_id
+    type_field: ref_type
+    allowed: [CRM Lead, CRM Deal]
+    on_delete: CASCADE
+fields:
+  name: { type: string, readonly: true }
+  slug: { type: string, required: true, unique: true, searchable: true, sortable: true }
+  label: { type: string, required: true, filterable: true }
+  team: { type: string, required: true, filterable: true }
+  owner: { type: string, filterable: true }
+  status:
+    type: enum
+    values: [open, closed]
+    default: open
+    filterable: true
+  owner_id: { type: foreign, model: workspace_member, required: true }
+  legacy_id: { type: foreignkey, model: legacy }
+  organization_id: { type: string, from: session.activeOrganizationId }
+  score: { type: int, default: 0 }
+  ratio: { type: float }
+  active: { type: bool, default: false }
+  created_at: { type: timestamp, readonly: true }
+  meta: { type: json }
+  email: { type: string, email: true, max_length: 255 }
+  notes: { type: text }
+  secret: { type: string, hidden: true }
+  archived_at: { type: timestamp }
+  child_ids: { type: children, of: widget_part, order_by: position, index: true }

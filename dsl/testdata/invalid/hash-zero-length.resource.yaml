@@ -1,0 +1,5 @@
+name: bad_hash
+table: bads
+pk: {column: name, strategy: hash, length: 0}
+fields:
+  id: { type: uuid }

@@ -206,4 +206,9 @@ type ResourceDef struct {
 	Schema     *DynamicSchema
 	Operations Operations
 	PolyFKs    []PolyFKDef
+	// LookupField overrides the default "id" lookup column (slug/token
+	// resources). Consumed by M5 route registration.
+	LookupField string
+	// AutoCreate auto-creates a row on GET 404. Consumed by M5.
+	AutoCreate bool
 }

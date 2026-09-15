@@ -1,0 +1,6 @@
+name: read_only
+table: things
+operations: [get, list]
+fields:
+  id: { type: uuid, readonly: true }
+  name: { type: string, required: true }

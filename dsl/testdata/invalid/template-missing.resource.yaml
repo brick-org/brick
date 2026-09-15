@@ -1,0 +1,5 @@
+name: bad_template
+table: bads
+pk: {column: name, strategy: naming_series}
+fields:
+  id: { type: uuid }

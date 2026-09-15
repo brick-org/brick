@@ -1,0 +1,7 @@
+name: bad_poly_ondelete
+table: bads
+polymorphic: [{id_field: ref_id, type_field: ref_type, on_delete: BOGUS}]
+fields:
+  id: { type: uuid }
+  ref_id: { type: string }
+  ref_type: { type: string }

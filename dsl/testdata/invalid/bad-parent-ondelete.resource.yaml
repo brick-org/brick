@@ -1,0 +1,5 @@
+name: bad_parent_ondelete
+table: bads
+parent: {resource: lead, on_delete: BOGUS}
+fields:
+  id: { type: uuid }
