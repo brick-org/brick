@@ -32,11 +32,30 @@ jobs:
             fi
           done
 
-      - name: Bump versions and commit
+      - name: Prepare release context
+        run: |
+          NEW="${{ inputs.version }}"
+          # Previous root release (dsl/* tags excluded by the pattern).
+          # Computed BEFORE the bump commit below so the changelog entry,
+          # the release notes, and the tagged range all agree — the bump
+          # commit itself must not appear in its own release notes.
+          PREV=$(git tag --list 'v[0-9]*' --sort=-v:refname | grep -vx "$NEW" | head -1)
+          {
+            echo "PREV_TAG=${PREV}"
+            echo "RELEASE_DATE=$(date -u +%Y-%m-%d)"
+            echo 'RELEASE_LOG<<EOF'
+            if [ -n "$PREV" ]; then
+              git log "$PREV..HEAD" --pretty=format:'- %s (%h)' --no-merges
+            else
+              git log HEAD --pretty=format:'- %s (%h)' --no-merges | head -50
+            fi
+            echo 'EOF'
+          } >> "$GITHUB_ENV"
+          echo "prev=$PREV"
+
+      - name: Bump versions
         run: |
           VERSION="${{ inputs.version }}"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
           # Lockstep versions: the runtime requires the dsl module at the
           # same version, and the examples pin both. No `go` directives.
           sed -i "s|\(brick-org/brick/dsl \)v[0-9][0-9.]*|\1${VERSION}|" \
@@ -44,10 +63,35 @@ jobs:
           sed -i "s|\(brick-org/brick \)v[0-9][0-9.]*|\1${VERSION}|" \
             examples/shop/app/go.mod
           git diff --stat
+
+      - name: Update CHANGELOG.md
+        run: |
+          VERSION="${{ inputs.version }}"
+          LOG="$RELEASE_LOG"
+          [ -z "$LOG" ] && LOG="- No new commits."
+          ENTRY=$(mktemp)
+          {
+            echo "## ${VERSION} (${RELEASE_DATE})"
+            echo
+            echo "$LOG"
+            echo
+          } > "$ENTRY"
+          [ -f CHANGELOG.md ] || printf '# Changelog\n' > CHANGELOG.md
+          { head -1 CHANGELOG.md; echo; cat "$ENTRY"; tail -n +2 CHANGELOG.md; } > CHANGELOG.md.new
+          # Collapse accidental blank runs; changelog bodies never need them.
+          awk 'BEGIN{b=0} /^$/{b++; if(b<=1)print; next} {b=0; print}' CHANGELOG.md.new > CHANGELOG.md
+          rm -f "$ENTRY" CHANGELOG.md.new
+          head -14 CHANGELOG.md
+
+      - name: Commit release
+        run: |
+          VERSION="${{ inputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           if git diff --quiet; then
-            echo "requires already at ${VERSION}; nothing to commit"
+            echo "already at ${VERSION}; nothing to commit"
           else
-            git add brick/go.mod examples/shop/dsl/go.mod examples/shop/app/go.mod
+            git add brick/go.mod examples/shop/dsl/go.mod examples/shop/app/go.mod CHANGELOG.md
             git commit -m "chore(release): bump to ${VERSION}"
             git push origin HEAD:main
           fi
@@ -67,25 +111,19 @@ jobs:
 
       - name: Build release notes from main
         run: |
-          NEW="${{ inputs.version }}"
-          # Previous root release (dsl/* tags excluded by the pattern).
-          # This lists every commit on main — including direct pushes that
-          # GitHub's auto-generated notes (PRs only) would miss.
-          PREV=$(git tag --list 'v[0-9]*' --sort=-v:refname | grep -vx "$NEW" | head -1)
+          # Same pre-bump log as the changelog entry (see Prepare step):
+          # the bump commit must not appear in its own release notes.
           {
-            if [ -n "$PREV" ]; then
-              echo "## What's changed on main since $PREV"
-              echo
-              LOG=$(git log "$PREV..HEAD" --pretty=format:'- %s (%h)' --no-merges)
+            if [ -n "$PREV_TAG" ]; then
+              echo "## What's changed on main since $PREV_TAG"
             else
               echo "## What's changed"
-              echo
-              LOG=$(git log HEAD --pretty=format:'- %s (%h)' --no-merges | head -50)
             fi
-            if [ -z "$LOG" ]; then
+            echo
+            if [ -z "$RELEASE_LOG" ]; then
               echo "- No new commits."
             else
-              echo "$LOG"
+              echo "$RELEASE_LOG"
             fi
             echo
           } > release-notes.md
