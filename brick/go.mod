@@ -3,7 +3,7 @@ module github.com/brick-org/brick
 go 1.26
 
 require (
-	github.com/brick-org/brick/dsl v0.1.0
+	github.com/brick-org/brick/dsl v0.2.0
 	github.com/uptrace/bun v1.2.18
 	github.com/uptrace/bun/dialect/pgdialect v1.2.18
 	github.com/uptrace/bun/driver/pgdriver v1.2.18
