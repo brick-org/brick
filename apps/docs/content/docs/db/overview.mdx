@@ -1,0 +1,59 @@
+---
+title: DB layer
+description: Postgres-only DML over bun — no DDL, injection-safe by construction.
+icon: Database
+---
+
+Source: `db/`. Postgres only. Brick performs **no DDL** — Frappe (or your migrations) owns the schema.
+
+## DB
+
+```go
+bdb := db.New(bunDB)
+bdb.RunInTx(ctx, nil, func(ctx context.Context, txDB *db.DB) error { ... })
+bdb.InsertMap(ctx, table, body)
+bdb.FindByFieldTableWhere(ctx, table, field, value, where)
+bdb.UpdateByFieldTableWhere(ctx, table, field, value, patch, where)
+bdb.DeleteByFieldTableWhere(ctx, table, field, value, where)
+bdb.List(ctx, slice, opts) / bdb.ListMap(ctx, table, opts)
+bdb.Count(ctx, ...)
+bdb.Raw(...)
+```
+
+`DeleteWhere` with an empty predicate is refused — scoped deletes always carry the lookup + guard filters.
+
+## Where
+
+```go
+db.Where{Field: "team", Value: teamID, Operator: db.OpEq}
+```
+
+Operators: `eq ne gt gte lt lte in not_in contains starts_with ends_with is_null is_not_null`, with `Connector` (`AND`/`OR`), `Or`, `Not`, nesting depth ≤ 8. Identifiers go through `bun.Ident`, values through `?` / `bun.In`, LIKE patterns escaped with `ESCAPE` — injection-safe by construction.
+
+## Listing
+
+```go
+type ListOptions struct {
+    Page, Limit int
+    Search      string   // ILIKE-OR over Searchable
+    Filter      []Where
+    Sort        string   // "col" or "-col", allowlist-checked
+    Sortable    []string
+    Searchable  []string
+}
+```
+
+`DefaultLimit = 50`, `MaxLimit = 500`; the exec layer echoes effective `page`/`limit`. Sort outside the allowlist is rejected (`400`) in the resource layer and ignored as backup in `db`.
+
+Fluent helper:
+
+```go
+db.QueryFilter{}.Eq("team", teamID).Search("acme").OrderDesc("modified").Limit(25)
+qf.EqIf(cond, "status", "open") // false-kept variant
+qf.Options()                    // → ListOptions
+qf.ApplyTo(&opts)
+```
+
+## Series counters
+
+`NextFrappeIntPK` takes a tx advisory lock and computes `MAX(name)+1` — the backing for `naming_series` autoname under concurrency.

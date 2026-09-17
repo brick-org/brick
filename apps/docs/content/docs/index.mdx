@@ -1,0 +1,55 @@
+---
+title: What is Brick?
+description: Opinionated Go framework for CRUD APIs on Huma + Bun + Postgres.
+icon: BrickWall
+---
+
+Brick is an opinionated Go framework for building CRUD APIs. You declare a **resource** once and get typed routes, validation, auth pushdown, and an OpenAPI 3.1 spec — without writing handlers by hand.
+
+## Stack
+
+- **HTTP + OpenAPI:** [Huma v2](https://huma.rocks) on `bunrouter` (`brick.go`)
+- **Postgres access:** `bun` via a thin `db.DB` wrapper (`db/`) — Postgres only, no DDL
+- **Declaration:** Go `Schema` types or `*.resource.yaml` DSL files (`dsl/`, `schema/`)
+- **Codegen:** deterministic `gofmt`-clean emitters with golden tests (`codegen/`)
+
+## What you get per resource
+
+`GET /api/{name}` (list) · `GET /api/{name}/{id}` · `POST /api/{name}` · `PATCH /api/{name}/{id}` · `DELETE /api/{name}/{id}` — each gated by the same exec pipeline:
+
+1. Guard `Check` (session-level deny, before any DB hit)
+2. Strip unknown / readonly / PK keys (mass-assignment guard)
+3. `from:` injection (server-overwrites-client), defaults, timestamps
+4. Validation (`422` on failure, `409` on unique conflicts)
+5. Guard `Filter` pushdown into a single query — out-of-scope reads are `404`, not `403`
+
+## Concepts
+
+<Cards>
+  <Card title="App setup" href="/docs/core/app-setup" description="Brick[TCtx], Config, Middleware, Handler, Scalar docs" />
+  <Card title="Resources" href="/docs/core/resources" description="Schema → Resource() → ResourceConfig and CRUD routes" />
+  <Card title="Access control" href="/docs/core/access" description="Guards, Access slots, Check + Filter pushdown" />
+  <Card title="Hooks" href="/docs/core/hooks" description="Before/After + Validate inside the write transaction" />
+  <Card title="Schema DSL" href="/docs/schema/dsl" description="Write *.resource.yaml instead of Go structs" />
+  <Card title="Codegen" href="/docs/codegen/overview" description="GenerateDB + GenerateCRUD emitters" />
+  <Card title="DB layer" href="/docs/db/overview" description="db.DB, Where, ListOptions, QueryFilter" />
+  <Card title="REST & OpenAPI" href="/docs/api/rest" description="Routes, pagination envelope, error shape" />
+</Cards>
+
+## Repo layout
+
+```txt
+brick.go        app bootstrap (Brick[TCtx], Config, Handler, OpenAPISpec)
+resource.go     Schema → Resource() + exec pipelines
+access.go       Guards / Access
+hooks.go        lifecycle hooks
+validate.go     validation + unique precheck
+autoname.go     PK strategies
+context.go      User / Session / AppCtx identity plumbing
+errors.go       RFC 9457 helpers (404/401/403/400/422/409/500)
+schema/         typed field vocabulary (DSL ↔ codegen contract)
+dsl/            *.resource.yaml parser → schema.ResourceDef
+codegen/        GenerateDB + GenerateCRUD
+db/             Postgres DML wrapper (no DDL)
+apps/docs/      this site (TanStack Start + Fumadocs)
+```

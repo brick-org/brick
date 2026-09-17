@@ -1,0 +1,61 @@
+---
+title: Access control
+description: Guards, Access slots, and Check + Filter pushdown.
+icon: ShieldCheck
+---
+
+Source: `access.go`, `resource.go` (`opGuards`, `collectFilters`).
+
+Brick is auth-agnostic: it never mints identity, it only enforces predicates against the identity your middleware stored (see [Context](/docs/core/context)).
+
+## Guard
+
+```go
+type Guard[Row any] struct {
+    Check  func(AccessCtx[Row]) error
+    Filter func(AccessCtx[Row]) []db.Where
+}
+
+type AccessCtx[Row any] struct {
+    Actor   any
+    Session any
+    Record  map[string]any
+    Context context.Context
+}
+```
+
+- `Check` runs **before any DB hit**. Session-only checks (e.g. `IsAuthenticated`) go here.
+- `Filter` returns `[]db.Where` that is **ANDed into the SQL**. Record-scoping goes here — never read-then-check.
+
+## Composition
+
+```go
+type Access struct {
+    List, Get, Create, Update, Delete []Guard[map[string]any]
+}
+```
+
+`Schema.Guards` applies to **all** ops; `Access` slots are per-op. For op *o*: `Guards` run first, then the matching slot (`opGuards`). Both run — there is no override.
+
+```go
+brick.Guards(requireAuth) // uniform example shape
+Access: brick.Access{
+    List:   []brick.Guard[map[string]any]{ownTeamOnly},
+    Get:    []brick.Guard[map[string]any]{ownTeamOnly},
+    Create: []brick.Guard[map[string]any]{requireAuth},
+    Update: []brick.Guard[map[string]any]{ownTeamOnly},
+    Delete: []brick.Guard[map[string]any]{ownTeamOnly},
+}
+```
+
+`GuardChain` / `Guards()` helpers compose chains; `CheckRowsAffected` is the internal evaluator used by the exec pipeline.
+
+## The 404-not-403 rule
+
+Guard filters are pushed into `SELECT` / `UPDATE` / `DELETE`. A row outside your scope simply isn't found:
+
+<Callout type="warn">
+  Out-of-scope access returns `404`, never `403`. This avoids an existence oracle.
+</Callout>
+
+Client `Filter` values narrow only — guard predicates are appended to a fresh slice, never aliased, so clients can't widen scope.

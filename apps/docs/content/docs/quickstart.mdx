@@ -1,0 +1,98 @@
+---
+title: Quickstart
+description: From go get to your first CRUD resource in minutes.
+icon: Rocket
+---
+
+## Install
+
+```bash
+go get github.com/brick-org/brick
+```
+
+Requires Go 1.26+ and Postgres (Brick does no DDL — your schema already exists or is managed elsewhere, e.g. Frappe).
+
+## 1. Define generated types
+
+In real projects these come from `codegen` (see [Codegen](/docs/codegen/overview)). Hand-written equivalent:
+
+```go
+type DealRow struct {
+    ID     string `bun:"id,pk" json:"id"`
+    Title  string `bun:"title" json:"title"`
+    Amount int64  `bun:"amount" json:"amount"`
+}
+
+type DealResponse struct {
+    ID     string `json:"id"`
+    Title  string `json:"title"`
+    Amount int64  `json:"amount"`
+}
+
+type DealCreateBody struct {
+    Title  string `json:"title"`
+    Amount int64  `json:"amount,omitempty"`
+}
+
+type DealUpdateBody struct {
+    Title  *string `json:"title,omitempty"`
+    Amount *int64  `json:"amount,omitempty"`
+}
+
+type DealListInput struct {
+    Title string `query:"title,omitempty"`
+    // + page, limit, search, sort, filter handled by ToListOptions
+}
+
+func (i *DealListInput) ToListOptions() db.ListOptions { /* ... */ }
+```
+
+<Callout type="info">
+  Update bodies use pointers so Brick can tell "absent" from "zero". List inputs only allow scalar query fields — no JSON blobs.
+</Callout>
+
+## 2. Declare the schema and resource
+
+```go
+dealSchema := brick.Schema[DealRow, DealResponse, DealCreateBody, DealUpdateBody, DealListInput]{
+    Fields: schema.Fields{
+        "title":  schema.String().Required().Searchable().Sortable(),
+        "amount": schema.Int().Default(0),
+    },
+    Operations: schema.Operations{}, // nil = all enabled
+}
+
+deal := brick.Resource("deal", "deals", dealSchema)
+```
+
+## 3. Boot the app
+
+```go
+bunDB := bun.NewDB(sqldb, pgdialect.New())
+
+b, err := brick.New[any](brick.Config[any]{
+    Title:     "My API",
+    Version:   "1.0.0",
+    DB:        bunDB,
+    Resources: []brick.ResourceConfig{deal},
+})
+if err != nil {
+    log.Fatal(err)
+}
+
+http.ListenAndServe(":8080", b.Handler())
+```
+
+You now have:
+
+- `GET /api/deal` · `GET /api/deal/{id}` · `POST /api/deal` · `PATCH /api/deal/{id}` · `DELETE /api/deal/{id}`
+- OpenAPI 3.1 at `b.Huma().OpenAPI()` / `b.OpenAPISpec()`
+- Scalar reference UI via `brick.ScalarDocsHTML(specURL)` mounted on `b.Router()`
+
+## Next steps
+
+<Cards>
+  <Card title="App setup" href="/docs/core/app-setup" />
+  <Card title="Access control" href="/docs/core/access" />
+  <Card title="Schema DSL (YAML)" href="/docs/schema/dsl" />
+</Cards>

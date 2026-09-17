@@ -1,0 +1,4 @@
+{
+  "title": "Core",
+  "pages": ["app-setup", "resources", "access", "hooks", "validation-errors", "context", "autoname"]
+}

@@ -1,0 +1,137 @@
+@import '@fontsource-variable/dm-sans';
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/catppuccin.css';
+@import 'fumadocs-ui/css/preset.css';
+
+@font-face {
+  font-family: 'FiraCodeNerdFont';
+  src: url('/fonts/FiraCodeNerdFont-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'FiraCodeNerdFont';
+  src: url('/fonts/FiraCodeNerdFont-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Portfolio look: DM Sans body, FiraCode Nerd Font mono, sharp corners */
+@theme {
+  --font-sans: 'DM Sans Variable', 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'FiraCodeNerdFont', ui-monospace, monospace;
+
+  --radius-xs: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-3xl: 0;
+}
+
+html {
+  scrollbar-gutter: stable;
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0px !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}
+
+::selection {
+  background-color: color-mix(in srgb, var(--color-fd-primary) 30%, transparent);
+}
+
+::-webkit-scrollbar {
+  height: 2px;
+  border-radius: 999px;
+  width: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--color-fd-border);
+  border-radius: 999px;
+}
+
+/* Gradient display heading, like the portfolio .h0 */
+.fd-display {
+  background: linear-gradient(
+    121.57deg,
+    var(--color-fd-foreground),
+    color-mix(in srgb, var(--color-fd-foreground) 66%, transparent),
+    transparent
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Animated underline for links */
+.animated-underline {
+  background-image:
+    linear-gradient(#11113300, #11113300),
+    linear-gradient(to right, var(--color-fd-primary), var(--color-fd-primary));
+  background-size:
+    100% 2px,
+    0 2px;
+  background-position:
+    100% 100%,
+    0 100%;
+  background-repeat: no-repeat;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .animated-underline {
+    transition: 0.3s ease;
+    transition-property: background-size, color, background-color, border-color;
+  }
+}
+
+.animated-underline:hover,
+.animated-underline:focus-visible {
+  background-size:
+    0 2px,
+    100% 2px;
+}
+
+/* Portfolio prose touches: gradient blockquote edge + gradient dividers */
+.prose blockquote {
+  border-style: solid;
+  border-width: 0 0 0 0.25rem;
+  border-image: linear-gradient(to top, #00ff94, #00e0f3, #00c4fd) 1;
+}
+
+.prose hr {
+  border-style: solid;
+  border-width: 0 0 1px 0;
+  border-image: linear-gradient(to right, #00ff9480, #00e0f380, #00c4fd80) 1;
+}
+
+/* Keyboard keys in Nerd Font mono */
+.prose kbd,
+kbd {
+  padding: 0.125rem 0.375rem;
+  pointer-events: none;
+  margin-left: 0.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.25;
+  border: 1px solid var(--color-fd-border);
+  background-color: var(--color-fd-muted);
+  font-size: 0.75em;
+  color: var(--color-fd-muted-foreground);
+  font-family: 'FiraCodeNerdFont', monospace;
+  box-shadow: 0 1px 0 0 color-mix(in srgb, var(--color-fd-border) 60%, transparent);
+}

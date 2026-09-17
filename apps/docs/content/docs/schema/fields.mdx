@@ -1,0 +1,57 @@
+---
+title: Fields
+description: The typed field vocabulary shared by DSL, codegen, and runtime.
+icon: TableProperties
+---
+
+Source: `schema/` (`fields.go`, `schema.go`, `pk.go`, `parent.go`, `singleton.go`, `children.go`, `casing.go`).
+
+## FieldDef flags
+
+| Flag | Meaning |
+| --- | --- |
+| `required` / `optional` | create-time presence (updates are always partial) |
+| `unique` | in-tx precheck + `409` on `23505` |
+| `default` | applied when the key is absent |
+| `maxLength` / `email` | string rules → `422` |
+| `hidden` | excluded from Response / Create / Update / ListInput |
+| `readonly` | stripped on write (PK, `created_at`, computed) |
+| `searchable` / `filterable` / `sortable` | list surface (`ILIKE` search, `Where` filters, sort allowlist) |
+| `index` | hint for `BusinessIndexes()` |
+| `enum` | closed value set |
+| `foreign` / `onDelete` | FK reference + delete behavior |
+| `from` | `session.*` / `actor.*` server injection |
+| `computed` / `normalize` | derived / normalized values |
+| `children` | virtual child collection (not a column) |
+
+Chainable builders:
+
+```go
+schema.String().Required().Searchable().Sortable()
+schema.Int().Default(0)
+schema.Enum("a", "b").Required()
+schema.ForeignKey("team").OnDelete("cascade")
+schema.String().From("session.active_team_id")
+```
+
+## DynamicSchema extras
+
+`TenantColumn`, `TitleField`, `CompositeUniques` / `Indexes`, `SoftDeleteColumn` (timestamp-only), `Audited`, `Versioned`, `UpdateWritable` — consumed by codegen and the exec pipeline.
+
+## PK, parent, singleton
+
+- `PK{Column, Type, Autoname}` — `uuid | naming_series | field: | format: | hash | prompt | autoincrement`. `ApplyPK` injects the column as readonly.
+- `ParentRef` / `ApplyParent` — child owns a parent FK; codegen emits `XxxChildInput`.
+- `SingletonConfig` — disables create/list/delete (single-row resources like settings).
+- `PolyFKDef` — polymorphic references surface via `BusinessIndexes()`.
+
+## Operations
+
+```go
+type Operations struct{ /* per-op enable flags */ }
+func (o Operations) Enabled(op string) bool // nil/empty = enabled
+```
+
+## Casing
+
+`Title`, `GoFieldName`, `GoType` / `GoTypeFor`, `SortedFields` centralize YAML ↔ Go naming so codegen, docs, and runtime agree. `bun` / `json` / `query` tags derive from these — don't hand-edit generated tags.

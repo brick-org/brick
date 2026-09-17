@@ -1,0 +1,43 @@
+---
+title: Context & identity
+description: User, Session, AppCtx — Brick carries identity, your app mints it.
+icon: KeyRound
+---
+
+Source: `context.go`.
+
+```go
+type User struct {
+    ID    string
+    Email string
+    Name  string
+}
+
+type Session struct {
+    ID                 string
+    UserID             string
+    ActiveOrganizationID string
+    ActiveTeamID         string
+}
+
+type AppCtx struct {
+    Actor   any
+    Session any
+}
+
+type AppCtxer interface {
+    BrickActor() any
+    BrickSession() any
+}
+```
+
+## Flow
+
+1. Your middleware verifies credentials (headers, tokens, cookies — Brick reads none of this).
+2. You map the verified identity to `User` / `Session` (or your own types behind `AppCtxer`) in `Config.CtxFromRequest`.
+3. Brick stores it in the request context via `storeAppCtx`.
+4. Guards, hooks, and `from:` injection read it back with `GetActor()`, `GetSession()`, or `GetAppCtx[T]()`.
+
+`from: session.active_team_id` / `from: actor.id` field sources resolve through JSON-tag reflection against whatever your `AppCtxer` returns — so custom actor/session shapes keep working as long as the JSON names match.
+
+Nil `CtxFromRequest` result means anonymous. `applyFromSources` returns `401` when a required `from:` field has no authenticated source.

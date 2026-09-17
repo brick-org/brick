@@ -1,0 +1,51 @@
+---
+title: Validation & errors
+description: "Field rules, from-injection, unique precheck, and RFC 9457 errors."
+icon: ListChecks
+---
+
+Sources: `validate.go`, `errors.go`, `logging.go`.
+
+## Create vs update
+
+- **Create:** `required`, `maxLength`, and `enum` enforced; unknown keys stripped; readonly + PK stripped; `from:` sources applied; defaults applied; timestamps stamped; unique precheck in-tx.
+- **Update:** partial — `required` is **not** enforced (absent means "don't touch"); same stripping rules; empty body after stripping is `400 nothing to update`.
+
+## Field rules
+
+| Rule | Behavior |
+| --- | --- |
+| `required` | create rejects when missing/empty → `422` |
+| `maxLength` | rejects over-long strings → `422` |
+| `enum` | rejects values outside set → `422` |
+| `unique` | in-tx precheck + `23505 → 409` race cover |
+| `email` / `domain` | format helpers via `Validation` collector |
+| `from: session.*\|actor.*` | server-overwrites-client; `401` if unauthenticated and the field is required |
+
+App-facing collector:
+
+```go
+v := brick.Validation{}
+v.Required(input, "title")
+v.Email(input, "email")
+v.Range(input, "amount", 0, 1_000_000)
+if errs := v.Errs(); len(errs) > 0 {
+    return brick.Unprocessable(errs)
+}
+```
+
+`FieldError{Field, Message}` items become the `422` detail list.
+
+## Errors (RFC 9457)
+
+```go
+brick.NotFound("deal not found")       // 404
+brick.Unauthorized("login required")   // 401
+brick.Forbidden("not allowed")         // 403
+brick.BadRequest("nothing to update")  // 400
+brick.Unprocessable(errs)              // 422
+brick.Conflict("deal already exists")  // 409
+brick.Internal("boom")                 // 500 (prefer internalError path)
+```
+
+`500`s hide Postgres internals — response carries only `request_id`. `X-Request-ID` is passed through or minted per request, echoed as a response header, and attached to server logs as `{request_id, op, error}`. Only `500`s are logged.

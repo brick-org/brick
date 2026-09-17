@@ -1,0 +1,41 @@
+---
+title: Codegen overview
+description: Deterministic GenerateDB + GenerateCRUD emitters with golden tests.
+icon: Cog
+---
+
+Source: `codegen/`. Only two entry points:
+
+```go
+dbSrc, err := codegen.GenerateDB(pkg string, defs []ResourceDef, opts Options)
+crudSrc, err := codegen.GenerateCRUD(pkg string, defs []ResourceDef)
+```
+
+Output is `gofmt`-clean and golden-pinned (`codegen/testdata/*.golden`) — diffs are reviewable and regeneration is byte-stable.
+
+## GenerateDB
+
+Emits `XxxRow` bun models plus:
+
+- `BusinessModels()` — registry of rows
+- `BusinessIndexes()` — polyFK / composite-unique / index DDL hints
+- `NamingSeriesCounterRow` — when a series PK is used
+
+## GenerateCRUD
+
+Per resource emits:
+
+- `XxxResponse` (hidden fields excluded)
+- `XxxCreateBody` (hidden + readonly + auto PK/`created_at`/`updated_at` + children-virtual excluded)
+- `XxxUpdateBody` (same exclusions, pointer fields for partial updates)
+- `XxxListInput` + `ToListOptions()` (hidden excluded; scalars only — Huma query has a no-pointer limit; JSON excluded)
+- `XxxChildInput` when parent-owned
+- Aliases/vars: `XxxSchema` (`Schema[Row, Response, Create, Update, ListInput]`), `XxxSchemaFields`, `XxxSchemaPK`, `XxxSchemaParent`, `XxxSchemaSingleton`
+
+`Options{Aggregates}` toggles aggregate helpers.
+
+## Rules worth knowing
+
+- `bun` / `json` / `query` tags derive from schema casing — never hand-edit generated files.
+- Hidden fields never reach the API surface; readonly fields never accept writes.
+- Feed codegen from DSL (`dsl.LoadDir` → `ToResourceDef`) or hand-built `schema.ResourceDef` — both converge on the same emitters.

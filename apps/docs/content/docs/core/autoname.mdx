@@ -1,0 +1,29 @@
+---
+title: Autoname & primary keys
+description: UUID, autoincrement, hash, prompt, and series PK strategies.
+icon: Fingerprint
+---
+
+Source: `autoname.go`, `schema/pk.go`.
+
+PK generation runs **inside the create transaction, after Check + validation** — rejected creates never burn counters or take advisory locks.
+
+## Strategies
+
+```go
+brick.UUIDPK("id")            // random UUID (default when PK is nil: UUID "id")
+brick.AutoincPK("id")         // Postgres-managed autoincrement
+brick.AutonameHash(10)        // random base36, retries once on 409 collision
+brick.AutonamePrompt()        // client supplies the key — the only non-stripped PK
+// + naming_series / field: / format: via schema.PK Autoname (Frappe-style)
+```
+
+Declared in YAML (`dsl/`) or Go (`schema.PK{Column, Type, Autoname}`); `DynamicSchema.ApplyPK` injects the PK column as a readonly field so codegen and validation agree.
+
+`NextFrappeIntPK` (in `db/`) implements series counters with a transaction advisory lock + `MAX(name)+1` — safe under concurrency.
+
+## Rules
+
+- The PK column is stripped from create bodies **even when not marked readonly** — except `AutonamePrompt`.
+- The lookup column (`LookupField || PK.Column || "id"`) is never updatable.
+- With no `PK` configured, Brick keeps the legacy default: a UUID `id` column auto-filled when absent and the schema declares `id`.

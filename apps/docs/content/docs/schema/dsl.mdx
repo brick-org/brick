@@ -1,0 +1,56 @@
+---
+title: Resource DSL (YAML)
+description: Declare resources in *.resource.yaml and parse them into ResourceDefs.
+icon: FileCode2
+---
+
+Source: `dsl/` (`parse.go`, `types.go`, `validate.go`, `convert.go`).
+
+## Example
+
+```yaml
+# fields_layout.resource.yaml
+name: fields_layout
+table: tabCRM Fields Layout
+pk:
+  column: name
+  strategy: hash
+  length: 10
+operations:
+  create: false
+  update: false
+  delete: false
+fields:
+  creation: { type: timestamp, readonly: true }
+  modified: { type: timestamp, readonly: true }
+  docstatus: { type: int, default: 0, readonly: true }
+  dt: { type: string, required: true, filterable: true }
+  type:
+    type: enum
+    values: ['Quick Entry', 'Side Panel', 'Data Fields']
+    required: true
+    filterable: true
+  team: { type: string, filterable: true }
+  layout: { type: text }
+```
+
+## Loading
+
+```go
+def, err := dsl.Parse(data)          // bytes
+def, err := dsl.ParseFile(path)      // single file
+defs, err := dsl.LoadDir(dir)        // sorted, deterministic
+resDef := file.ToResourceDef()       // applies PK / parent / singleton
+```
+
+`ResourceFile` carries `name`, `table`, `fields`, `operations` (deny-map or allow-list), `pk`, `parent`, `singleton`, `tenant`, `title`, `unique`, `indexes`, `soft_delete`, `audit`, `versioned`, `writable_on_update`, `polymorphic`, `lookup_field`, `auto_create`.
+
+## Validation rules
+
+- Known types only; `enum` requires `values`; `foreign` requires `model`; `children` requires `of`.
+- PK strategy args checked (`hash` needs `length`, `field:` needs a field, etc.).
+- `tenant` / `title` / `unique` / `indexes` / `soft_delete` must reference declared fields; `soft_delete` is timestamp-only.
+- `tab*` tables reject `soft_delete` / `audit` / `versioned` (Frappe owns those).
+- Singleton disables create/list/delete automatically.
+
+The parsed `schema.ResourceDef` feeds directly into `codegen.GenerateDB` + `GenerateCRUD`.

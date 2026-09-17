@@ -1,0 +1,56 @@
+---
+title: App setup
+description: Brick[TCtx], Config, middleware, handler, and docs endpoints.
+icon: AppWindow
+---
+
+Source: `brick.go`.
+
+## Brick[TCtx]
+
+`Brick[TCtx]` owns three things: a `bunrouter` router, a `huma.API` (OpenAPI 3.1), and a `db.DB` wrapper. `TCtx` is your app-defined context type — use `Config[any]` when you don't need one.
+
+```go
+type Config[TCtx any] struct {
+    Title   string
+    Version string
+    DB      *bun.DB
+
+    API       huma.API              // optional: inject your own (tests)
+    Resources []ResourceConfig
+    Routes    func(api huma.API, db *db.DB)
+
+    CtxFromRequest func(req *http.Request, base *AppCtx) *TCtx
+}
+```
+
+- `DB == nil` is an error, never a panic.
+- When `API` is nil, Brick builds its own router + adapter and owns the `http.Handler`. When `API` is supplied (typically `humatest` in tests), Brick uses it as-is and `Handler()` / `Router()` return nil — the caller owns the router.
+- `Routes` is the **only** custom-route mechanism; app code cannot override a resource's CRUD routes.
+
+## Lifecycle
+
+```go
+b, err := brick.New(cfg)   // registers Resources + Routes
+b.Huma()                   // underlying huma.API
+b.DB()                     // *db.DB wrapper
+b.Router()                 // *bunrouter.Router (nil when API injected)
+b.Handler()                // middleware + router (nil when API injected)
+b.ListenAndServe(":8080")  // errors when Brick doesn't own the router
+```
+
+## Middleware and identity
+
+`b.Middleware()` stores your typed app context on every request. Brick mounts **no auth of its own** — it calls `CtxFromRequest(r, nil)` with a nil base, and stores the result only if it implements `AppCtxer`. Nil result means anonymous; guards treat it as unauthenticated. Header parsing and crypto live in your middleware, Brick owns the plumbing. See [Context](/docs/core/context).
+
+`Handler()` wraps the router with `requestIDMiddleware` + `Middleware()`: `X-Request-ID` is passed through or minted, echoed as a response header, and put in the request context for error responses and logs.
+
+## OpenAPI and Scalar
+
+```go
+spec, err := b.OpenAPISpec()              // serialized OpenAPI 3.1 JSON
+html, err := brick.ScalarDocsHTML("/openapi.json") // Scalar viewer page
+b.Router().GET("/reference", ...)         // mount it as a non-huma route
+```
+
+Serve `OpenAPISpec()` bytes at the `specURL` you pass to `ScalarDocsHTML`.

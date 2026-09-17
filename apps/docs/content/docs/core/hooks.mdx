@@ -1,0 +1,50 @@
+---
+title: Hooks
+description: Before/After + Validate lifecycle inside the write transaction.
+icon: Webhook
+---
+
+Source: `hooks.go`.
+
+```go
+type Hooks[Input, Row any] struct {
+    BeforeCreate, AfterCreate   HookFunc[Input, Row]
+    BeforeUpdate, AfterUpdate   HookFunc[Input, Row]
+    BeforeDelete, AfterDelete   HookFunc[Input, Row]
+    Validate func(ValidateCtx) error
+}
+
+type HookCtx[Input, Row any] struct {
+    ResourceName string
+    Input    *Input          // mutable on Before* (assign back via hc.Input)
+    Record   Row             // created/updated row, or pre-delete snapshot
+    Previous Row             // pre-image on update/delete
+    Actor    any
+    DB       *db.DB          // transactional handle — use this, not the outer DB
+    Context  context.Context
+}
+
+type ValidateCtx struct {
+    ResourceName string
+    Input    map[string]any
+    Previous map[string]any  // nil on create
+    Actor    any
+    DB       *db.DB
+    Context  context.Context
+    // + IsCreate() / IsUpdate()
+}
+```
+
+## Where hooks run
+
+Inside the write `RunInTx`, after autoname/defaults/validation and the unique precheck, before the actual `INSERT` / `UPDATE` / `DELETE`:
+
+- **Create:** autoname → `BeforeCreate` (may mutate `*hc.Input`) → `Validate` → unique precheck → insert → `AfterCreate`
+- **Update:** load previous (scoped by guards, `404` if missing) → `BeforeUpdate` → `Validate` → unique precheck → update → `AfterUpdate`
+- **Delete:** load previous (scoped, `404` if missing) → `BeforeDelete` → delete → `AfterDelete`
+
+Lists and gets have no hooks — use guards for read scoping.
+
+## Errors
+
+Return any error to abort the transaction. `huma.StatusError` values (e.g. `brick.Forbidden()`, `brick.Unprocessable(...)`, `brick.BadRequest(...)`) are preserved as-is; anything else becomes a logged `500` with a `request_id`. Use `Validate` for cross-field and DB-backed rules that field validation can't express.

@@ -1,0 +1,74 @@
+---
+title: REST & OpenAPI
+description: Routes, pagination envelope, filtering, and error shape.
+icon: Globe
+---
+
+## Routes
+
+Every enabled resource exposes:
+
+```txt
+GET    /api/{name}        list
+GET    /api/{name}/{id}   get
+POST   /api/{name}        create
+PATCH  /api/{name}/{id}   update (partial)
+DELETE /api/{name}/{id}   delete
+```
+
+`{id}` addresses `LookupField || PK.Column || "id"`.
+
+## List query
+
+| Param | Meaning |
+| --- | --- |
+| `page` / `limit` | pagination (defaults `1` / `50`, cap `500`; response echoes effective values) |
+| `search` | `ILIKE`-OR across the resource's `searchable` fields |
+| `sort` | `"col"` or `"-col"`; must be in the `sortable` allowlist or `400` |
+| `{field}` | per-field equality for `filterable` fields (generated `ListInput`) |
+
+```json
+{
+  "data": [{ "id": "...", "title": "Acme" }],
+  "total": 132,
+  "page": 1,
+  "limit": 50
+}
+```
+
+## Writes
+
+- `POST` takes the `CreateBody` JSON; server fills PK (unless prompt), defaults, `from:` fields, and timestamps.
+- `PATCH` takes a partial `UpdateBody`; absent ≠ zero thanks to pointer fields. Empty effective patch → `400`.
+- Unknown keys are dropped silently (mass-assignment guard); readonly keys are dropped, not errored.
+
+## Errors
+
+RFC 9457 problem details with the Brick `code` mapping:
+
+| Status | Helper | When |
+| --- | --- | --- |
+| `400` | `BadRequest` | bad sort, empty update, malformed input |
+| `401` | `Unauthorized` | missing session / required `from:` source |
+| `403` | `Forbidden` | guard `Check` denial |
+| `404` | `NotFound` | missing **or out-of-scope** row |
+| `409` | `Conflict` | unique violation (SQLSTATE `23505`) |
+| `422` | `Unprocessable` | field validation failures (detail list) |
+| `500` | — | hidden internals + `request_id`; send the ID when reporting |
+
+## OpenAPI
+
+```go
+spec, _ := b.OpenAPISpec() // OpenAPI 3.1 JSON bytes
+```
+
+Serve those bytes at a stable URL and mount the Scalar viewer for interactive docs:
+
+```go
+html, _ := brick.ScalarDocsHTML("/openapi.json")
+b.Router().GET("/reference", func(w http.ResponseWriter, req bunrouter.Request) error {
+    w.Header().Set("Content-Type", "text/html")
+    _, _ = w.Write([]byte(html))
+    return nil
+})
+```
