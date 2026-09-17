@@ -32,10 +32,31 @@ jobs:
             fi
           done
 
-      - name: Create and push tags
+      - name: Bump versions and commit
         run: |
+          VERSION="${{ inputs.version }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Lockstep versions: the runtime requires the dsl module at the
+          # same version, and the examples pin both. No `go` directives.
+          sed -i "s|\(brick-org/brick/dsl \)v[0-9][0-9.]*|\1${VERSION}|" \
+            brick/go.mod examples/shop/dsl/go.mod
+          sed -i "s|\(brick-org/brick \)v[0-9][0-9.]*|\1${VERSION}|" \
+            examples/shop/app/go.mod
+          git diff --stat
+          if git diff --quiet; then
+            echo "requires already at ${VERSION}; nothing to commit"
+          else
+            git add brick/go.mod examples/shop/dsl/go.mod examples/shop/app/go.mod
+            git commit -m "chore(release): bump to ${VERSION}"
+            git push origin HEAD:main
+          fi
+
+      - name: Create and push tags
+        run: |
+          # Tags point at the bump commit above (or main HEAD when the
+          # requires were already current).
+          git pull --rebase origin main
           # Brick ships two modules versioned in lockstep: the runtime at
           # the repo root and the dependency-free DSL toolchain in dsl/.
           # Both tags are required — brick/go.mod requires
@@ -44,8 +65,34 @@ jobs:
           git tag -a "dsl/${{ inputs.version }}" -m "dsl/${{ inputs.version }}"
           git push origin "${{ inputs.version }}" "dsl/${{ inputs.version }}"
 
+      - name: Build release notes from main
+        run: |
+          NEW="${{ inputs.version }}"
+          # Previous root release (dsl/* tags excluded by the pattern).
+          # This lists every commit on main — including direct pushes that
+          # GitHub's auto-generated notes (PRs only) would miss.
+          PREV=$(git tag --list 'v[0-9]*' --sort=-v:refname | grep -vx "$NEW" | head -1)
+          {
+            if [ -n "$PREV" ]; then
+              echo "## What's changed on main since $PREV"
+              echo
+              LOG=$(git log "$PREV..HEAD" --pretty=format:'- %s (%h)' --no-merges)
+            else
+              echo "## What's changed"
+              echo
+              LOG=$(git log HEAD --pretty=format:'- %s (%h)' --no-merges | head -50)
+            fi
+            if [ -z "$LOG" ]; then
+              echo "- No new commits."
+            else
+              echo "$LOG"
+            fi
+            echo
+          } > release-notes.md
+          cat release-notes.md
+
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.version }}
-          generate_release_notes: true
+          body_path: release-notes.md
