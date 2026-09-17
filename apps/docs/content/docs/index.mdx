@@ -39,17 +39,19 @@ Brick is an opinionated Go framework for building CRUD APIs. You declare a **res
 ## Repo layout
 
 ```txt
-brick.go        app bootstrap (Brick[TCtx], Config, Handler, OpenAPISpec)
-resource.go     Schema → Resource() + exec pipelines
-access.go       Guards / Access
-hooks.go        lifecycle hooks
-validate.go     validation + unique precheck
-autoname.go     PK strategies
-context.go      User / Session / AppCtx identity plumbing
-errors.go       RFC 9457 helpers (404/401/403/400/422/409/500)
-schema/         typed field vocabulary (DSL ↔ codegen contract)
-dsl/            *.resource.yaml parser → schema.ResourceDef
-codegen/        GenerateDB + GenerateCRUD
-db/             Postgres DML wrapper (no DDL)
-apps/docs/      this site (TanStack Start + Fumadocs)
+go.work         workspace (use ./brick)
+brick/          the Go module (import github.com/brick-org/brick)
+  brick.go        app bootstrap (Brick[TCtx], Config, Handler, OpenAPISpec)
+  resource.go     Schema → Resource() + exec pipelines
+  access.go       Guards / Access
+  hooks.go        lifecycle hooks
+  validate.go     validation + unique precheck
+  autoname.go     PK strategies
+  context.go      User / Session / AppCtx identity plumbing
+  errors.go       RFC 9457 helpers (404/401/403/400/422/409/500)
+  schema/         typed field vocabulary (DSL ↔ codegen contract)
+  dsl/            *.resource.yaml parser → schema.ResourceDef
+  codegen/        GenerateDB + GenerateCRUD
+  db/             Postgres DML wrapper (no DDL)
+apps/docs/      docs site (TanStack Start + Fumadocs)
 ```
