@@ -8,7 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/brick-org/brick/db"
-	"github.com/brick-org/brick/schema"
+	"github.com/brick-org/brick/dsl/schema"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/uptrace/bun"
 )

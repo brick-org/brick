@@ -1,5 +1,0 @@
-name: minimal
-table: minimals
-fields:
-  id: { type: uuid, readonly: true }
-  name: { type: string, required: true }

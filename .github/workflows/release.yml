@@ -25,17 +25,24 @@ jobs:
             echo "Invalid version '$VERSION'. Use format vX.Y.Z (e.g. v0.1.0)."
             exit 1
           fi
-          if git rev-parse "$VERSION" >/dev/null 2>&1; then
-            echo "Tag '$VERSION' already exists. Pick a new version."
-            exit 1
-          fi
+          for TAG in "$VERSION" "dsl/$VERSION"; do
+            if git rev-parse "$TAG" >/dev/null 2>&1; then
+              echo "Tag '$TAG' already exists. Pick a new version."
+              exit 1
+            fi
+          done
 
-      - name: Create and push tag
+      - name: Create and push tags
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Brick ships two modules versioned in lockstep: the runtime at
+          # the repo root and the dependency-free DSL toolchain in dsl/.
+          # Both tags are required — brick/go.mod requires
+          # github.com/brick-org/brick/dsl at the same version.
           git tag -a "${{ inputs.version }}" -m "${{ inputs.version }}"
-          git push origin "${{ inputs.version }}"
+          git tag -a "dsl/${{ inputs.version }}" -m "dsl/${{ inputs.version }}"
+          git push origin "${{ inputs.version }}" "dsl/${{ inputs.version }}"
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/brick-org/brick/schema"
+	"github.com/brick-org/brick/dsl/schema"
 )
 
 func testSchema() *schema.DynamicSchema {

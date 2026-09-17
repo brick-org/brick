@@ -1,5 +1,0 @@
-name: bad_source
-table: bads
-pk: {column: name, strategy: field}
-fields:
-  id: { type: uuid }

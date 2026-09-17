@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/brick-org/brick/db"
-	"github.com/brick-org/brick/schema"
+	"github.com/brick-org/brick/dsl/schema"
 )
 
 // ─── PK constructors ───────────────────────────────────────────────────────

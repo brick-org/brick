@@ -38,4 +38,4 @@ Per resource emits:
 
 - `bun` / `json` / `query` tags derive from schema casing — never hand-edit generated files.
 - Hidden fields never reach the API surface; readonly fields never accept writes.
-- Feed codegen from DSL (`dsl.LoadDir` → `ToResourceDef`) or hand-built `schema.ResourceDef` — both converge on the same emitters.
+- Feed codegen from the Go DSL (`schema.Define` → `dsl.Run`) — definitions converge on the same emitters.

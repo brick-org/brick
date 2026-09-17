@@ -1,56 +1,88 @@
 ---
-title: Resource DSL (YAML)
-description: Declare resources in *.resource.yaml and parse them into ResourceDefs.
+title: Resource DSL (Go)
+description: Define resources in typed Go, generate db/crud code into the main app.
 icon: FileCode2
 ---
 
-Source: `dsl/` (`parse.go`, `types.go`, `validate.go`, `convert.go`).
+Source: the `github.com/brick-org/brick/dsl` module — `dsl/schema/` (`define.go`, `validate.go`), `dsl/` (`runner.go`, `emit.go`), `dsl/cmd/dsl`.
 
-## Example
+## Two-app model
 
-```yaml
-# fields_layout.resource.yaml
-name: fields_layout
-table: tabCRM Fields Layout
-pk:
-  column: name
-  strategy: hash
-  length: 10
-operations:
-  create: false
-  update: false
-  delete: false
-fields:
-  creation: { type: timestamp, readonly: true }
-  modified: { type: timestamp, readonly: true }
-  docstatus: { type: int, default: 0, readonly: true }
-  dt: { type: string, required: true, filterable: true }
-  type:
-    type: enum
-    values: ['Quick Entry', 'Side Panel', 'Data Fields']
-    required: true
-    filterable: true
-  team: { type: string, filterable: true }
-  layout: { type: text }
+```txt
+myapp/
+  go.work        # use ./dsl ./app  (one brick version both sides)
+  dsl/main.go    # schema.Define(...) + dsl.Run(...)
+  app/
+    main.go      # brick.New with generated resources
+    gen/         # brick_db.go + brick_crud.go (generated, COMMITTED)
 ```
 
-## Loading
+The DSL app holds the toolchain (`dsl`, `codegen`); the main app imports
+only `brick`, `brick/db`, `brick/schema` plus its `gen/` package — the
+production binary never contains the DSL. See `examples/shop/` in the repo.
+
+## Defining resources
 
 ```go
-def, err := dsl.Parse(data)          // bytes
-def, err := dsl.ParseFile(path)      // single file
-defs, err := dsl.LoadDir(dir)        // sorted, deterministic
-resDef := file.ToResourceDef()       // applies PK / parent / singleton
+def := schema.Define("deal", "deals", schema.Fields{
+    "title":  schema.String().Required().Searchable(),
+    "status": schema.Enum("open", "won", "lost").Default("open").Filterable(),
+    "value":  schema.Int().Default(0),
+},
+    schema.WithTitle("title"),
+    schema.WithPK(schema.HashPK("name", 10)),
+    schema.WithParent(schema.NewParent("lead", schema.Cascade)),
+    schema.WithSingleton(schema.ScopedSingleton("team", "teams")),
+    schema.WithOperations(schema.DisableOps("delete")),
+    schema.WithLookup("slug"),
+)
 ```
 
-`ResourceFile` carries `name`, `table`, `fields`, `operations` (deny-map or allow-list), `pk`, `parent`, `singleton`, `tenant`, `title`, `unique`, `indexes`, `soft_delete`, `audit`, `versioned`, `writable_on_update`, `polymorphic`, `lookup_field`, `auto_create`.
+Field constructors: `String`, `Text`, `Int`, `Float`, `Bool`, `Timestamp`,
+`UUID`, `JSON`, `Enum(...)`, `ForeignKey(model)`, `Children(resource)` —
+plus chainable modifiers (`Required`, `Unique`, `Searchable`, `Filterable`,
+`Sortable`, `Readonly`, `Hidden`, `Index`, `Email`, `MaxLen`, `Default`,
+`OnDelete`, `From`, `Computed`, `Normalize`, `OrderBy`).
 
-## Validation rules
+PK constructors bake in the column type, so invalid combinations are
+unrepresentable: `UUIDPK`, `SeriesPK(col, template)`, `FieldPK(col, source)`,
+`FormatPK(col, template)`, `HashPK(col, length)`, `PromptPK`,
+`AutoincPK`. Operations: `DisableOps(...)` or `OnlyOps(...)` (the
+allow-list form).
 
-- Known types only; `enum` requires `values`; `foreign` requires `model`; `children` requires `of`.
-- PK strategy args checked (`hash` needs `length`, `field:` needs a field, etc.).
-- `tenant` / `title` / `unique` / `indexes` / `soft_delete` must reference declared fields; `soft_delete` is timestamp-only.
-- `tab*` tables reject `soft_delete` / `audit` / `versioned` (Frappe owns those).
-- Singleton disables create/list/delete automatically.
+Resource options cover every resource-level key: `WithTenant`, `WithTitle`,
+`WithUnique` / `WithIndex`, `WithSoftDelete`, `WithAudit`,
+`WithVersioned`, `WithWritableOnUpdate`, `WithPolyFKs`,
+`WithAutoCreate`. `WithSingleton` disables create/list/delete automatically.
 
-The parsed `schema.ResourceDef` feeds directly into `codegen.GenerateDB` + `GenerateCRUD`.
+## Running codegen
+
+```go
+// dsl/main.go
+if err := dsl.Run(Resources(), dsl.RunOptions{
+    OutDir: "../app/gen", Package: "gen", Aggregates: true,
+}); err != nil { /* fail fast: names the resource */ }
+```
+
+`Run` validates every def (`ResourceDef.Validate` — cross-references, PK args, `tab*` gating), then writes
+`gen/brick_db.go` (`GenerateDB`) and `gen/brick_crud.go`
+(`GenerateCRUD`). Output is gofmt-clean, deterministic, overwritten in
+place — commit it and wire it up:
+
+```go
+brick.Resource("deal", "deals", gen.DealSchema{Fields: gen.DealSchemaFields})
+```
+
+## Scaffolding (`dsl` CLI)
+
+New project? `go run ./dsl/cmd/dsl init ./dsl` writes a starter DSL app
+(`Resources()` + `dsl.Run` wiring). From there: `go run . --out ../app/gen`.
+
+## Migrating from YAML
+
+The `*.resource.yaml` frontend is removed. If you're on a release that
+still has it, run that release's `dsl convert --dir ./resources
+--out ./dsl/resources.go` once — it emits equivalent `schema.Define`
+code (PK/parent columns fold into `WithPK`/`WithParent`; field chains
+match generated `SchemaFields`). Verify the output, then upgrade and
+delete the YAML directory.

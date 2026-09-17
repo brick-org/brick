@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/brick-org/brick/db"
-	"github.com/brick-org/brick/schema"
+	"github.com/brick-org/brick/dsl/schema"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/uptrace/bun/driver/pgdriver"
 )
@@ -916,16 +916,7 @@ func toMapSlice(slice any) ([]map[string]any, error) {
 }
 
 func buildDynamicSchema(fields schema.Fields) *schema.DynamicSchema {
-	hidden := make([]string, 0)
-	for name, def := range fields {
-		if def.IsHidden {
-			hidden = append(hidden, name)
-		}
-	}
-	return &schema.DynamicSchema{
-		Fields:       fields,
-		HiddenFields: hidden,
-	}
+	return schema.NewDynamicSchema(fields)
 }
 
 func title(s string) string {

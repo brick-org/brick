@@ -1,4 +1,0 @@
-name: bad_fk
-table: bads
-fields:
-  x: { type: fk }

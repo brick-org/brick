@@ -1,4 +1,0 @@
-name: bad_enum
-table: bads
-fields:
-  status: { type: enum }
