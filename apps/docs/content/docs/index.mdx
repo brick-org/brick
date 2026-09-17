@@ -41,7 +41,7 @@ Brick is an opinionated Go framework for building CRUD APIs. You declare a **res
 
 ```txt
 go.work         workspace (use ./brick, ./dsl, ./examples/...)
-brick/          runtime module (import github.com/brick-org/brick)
+brick/          runtime module (import github.com/brick-org/brick/brick; tagged brick/vX.Y.Z)
   brick.go        app bootstrap (Brick[TCtx], Config, Handler, OpenAPISpec)
   resource.go     Schema → Resource() + exec pipelines
   access.go       Guards / Access

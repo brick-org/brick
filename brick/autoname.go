@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"strings"
 
-	"github.com/brick-org/brick/db"
+	"github.com/brick-org/brick/brick/db"
 	"github.com/brick-org/brick/dsl/schema"
 )
 

@@ -4,6 +4,4 @@ use ./brick
 
 use ./dsl
 
-use ./examples/shop/app
-
 use ./examples/shop/dsl

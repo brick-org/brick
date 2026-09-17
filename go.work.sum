@@ -1,5 +1,7 @@
 github.com/andybalholm/brotli v1.2.0/go.mod h1:rzTDkvFWvIrjDXZHkuS16NPggd91W3kUSvPlQ1pLaKY=
 github.com/brick-org/brick v0.0.0/go.mod h1:Pe5l7Vo0gEhuUDa5Tmn/m7vMjuAEJs/cBsTxs9oGTxU=
+github.com/brick-org/brick v0.2.0/go.mod h1:mUyHTIpgz4wG6ZATMb6LFUR8kMB9Gfk3yr+J3gxICx4=
+github.com/brick-org/brick/dsl v0.2.0/go.mod h1:ib0ENP1lgBuYqmN2PJ2IVpa0r1Gezvn45ZoL7KqDq1w=
 github.com/bytedance/gopkg v0.1.3/go.mod h1:576VvJ+eJgyCzdjS+c4+77QF3p7ubbtiKARP3TxducM=
 github.com/bytedance/sonic v1.15.0/go.mod h1:tFkWrPz0/CUCLEF4ri4UkHekCIcdnkqXw9VduqpJh0k=
 github.com/bytedance/sonic/loader v0.5.0/go.mod h1:AR4NYCk5DdzZizZ5djGqQ92eEhCCcdf5x77udYiSJRo=

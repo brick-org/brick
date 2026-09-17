@@ -3,7 +3,7 @@ package brick
 import (
 	"context"
 
-	"github.com/brick-org/brick/db"
+	"github.com/brick-org/brick/brick/db"
 )
 
 // NoRecord is a sentinel type for operations where no record exists (List, Create).

@@ -3,8 +3,8 @@
 package gen
 
 import (
-	"github.com/brick-org/brick"
-	"github.com/brick-org/brick/db"
+	"github.com/brick-org/brick/brick"
+	"github.com/brick-org/brick/brick/db"
 	"github.com/brick-org/brick/dsl/schema"
 )
 

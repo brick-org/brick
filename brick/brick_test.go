@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/brick-org/brick/db"
+	"github.com/brick-org/brick/brick/db"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/uptrace/bun"

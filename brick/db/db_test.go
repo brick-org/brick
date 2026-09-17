@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brick-org/brick/db"
+	"github.com/brick-org/brick/brick/db"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/pgdialect"
 	"github.com/uptrace/bun/driver/pgdriver"

@@ -4,6 +4,10 @@ on:
   # No inputs: the version is computed from conventional commits on main
   # since the previous tag (feat -> minor, fix -> patch, ! -> major,
   # with pre-1.0 breaking bumping minor). Just press Run.
+  #
+  # Tag scheme: brick/vX.Y.Z (runtime module in brick/) + dsl/vX.Y.Z
+  # (toolchain in dsl/). Bare vX tags serve no module (no root go.mod)
+  # and are no longer created. The GitHub Release attaches to brick/vX.
   workflow_dispatch:
 
 permissions:
@@ -19,10 +23,18 @@ jobs:
 
       - name: Determine version
         run: |
-          PREV=$(git tag --list 'v[0-9]*' --sort=-v:refname | head -1)
+          # Previous runtime release. Falls back to the last bare tag once,
+          # for the transition release (bare vX tags serve no module and
+          # are discontinued after that).
+          PREV=$(git tag --list 'brick/v[0-9]*' --sort=-v:refname | head -1)
+          if [ -n "$PREV" ]; then
+            BASE="${PREV#brick/v}"
+          else
+            PREV=$(git tag --list 'v[0-9]*' --sort=-v:refname | head -1)
+            BASE="${PREV#v}"
+          fi
           if [ -n "$PREV" ]; then
             RANGE="$PREV..HEAD"
-            BASE="${PREV#v}"
           else
             RANGE="HEAD"
             BASE="0.0.0"
@@ -51,7 +63,7 @@ jobs:
             N="0.$((MINOR+1)).0"
           fi
           VERSION="v${N}"
-          for TAG in "$VERSION" "dsl/$VERSION"; do
+          for TAG in "brick/$VERSION" "dsl/$VERSION"; do
             if git rev-parse "$TAG" >/dev/null 2>&1; then
               echo "Tag '$TAG' already exists."
               exit 1
@@ -88,7 +100,7 @@ jobs:
           # same version, and the examples pin both. No `go` directives.
           sed -i "s|\(brick-org/brick/dsl \)v[0-9][0-9.]*|\1${VERSION}|" \
             brick/go.mod examples/shop/dsl/go.mod
-          sed -i "s|\(brick-org/brick \)v[0-9][0-9.]*|\1${VERSION}|" \
+          sed -i "s|\(brick-org/brick/brick \)v[0-9][0-9.]*|\1${VERSION}|" \
             examples/shop/app/go.mod
           git diff --stat
 
@@ -127,13 +139,10 @@ jobs:
           # Tags point at the bump commit above (or main HEAD when the
           # requires were already current).
           git pull --rebase origin main
-          # Brick ships two modules versioned in lockstep: the runtime at
-          # the repo root and the dependency-free DSL toolchain in dsl/.
-          # Both tags are required — brick/go.mod requires
-          # github.com/brick-org/brick/dsl at the same version.
-          git tag -a "$VERSION" -m "$VERSION"
+          # One tag per module; no bare tags (no root go.mod to version).
+          git tag -a "brick/$VERSION" -m "brick/$VERSION"
           git tag -a "dsl/$VERSION" -m "dsl/$VERSION"
-          git push origin "$VERSION" "dsl/$VERSION"
+          git push origin "brick/$VERSION" "dsl/$VERSION"
 
       - name: Build release notes from main
         run: |
@@ -158,5 +167,5 @@ jobs:
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.VERSION }}
+          tag_name: brick/${{ env.VERSION }}
           body_path: release-notes.md

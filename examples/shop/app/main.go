@@ -11,7 +11,7 @@ import (
 	"log"
 	"os"
 
-	brick "github.com/brick-org/brick"
+	brick "github.com/brick-org/brick/brick"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/pgdialect"
 	"github.com/uptrace/bun/driver/pgdriver"

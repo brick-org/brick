@@ -1,4 +1,4 @@
-module github.com/brick-org/brick
+module github.com/brick-org/brick/brick
 
 go 1.26
 

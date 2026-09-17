@@ -97,8 +97,8 @@ func GenerateCRUD(pkg string, resources []ResourceDef) (string, error) {
 	if hasTime {
 		b.WriteString("\t\"time\"\n")
 	}
-	b.WriteString("\t\"github.com/brick-org/brick\"\n")
-	b.WriteString("\t\"github.com/brick-org/brick/db\"\n")
+	b.WriteString("\t\"github.com/brick-org/brick/brick\"\n")
+	b.WriteString("\t\"github.com/brick-org/brick/brick/db\"\n")
 	b.WriteString("\t\"github.com/brick-org/brick/dsl/schema\"\n")
 	b.WriteString(")\n\n")
 

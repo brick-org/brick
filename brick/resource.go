@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brick-org/brick/db"
+	"github.com/brick-org/brick/brick/db"
 	"github.com/brick-org/brick/dsl/schema"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/uptrace/bun/driver/pgdriver"
