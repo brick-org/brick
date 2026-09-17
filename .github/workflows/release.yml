@@ -1,11 +1,10 @@
 name: Release
 
 on:
+  # No inputs: the version is computed from conventional commits on main
+  # since the previous tag (feat -> minor, fix -> patch, ! -> major,
+  # with pre-1.0 breaking bumping minor). Just press Run.
   workflow_dispatch:
-    inputs:
-      version:
-        description: "Version to release (e.g. v0.1.0)"
-        required: true
 
 permissions:
   contents: write
@@ -18,44 +17,73 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Validate version
+      - name: Determine version
         run: |
-          VERSION="${{ inputs.version }}"
-          if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Invalid version '$VERSION'. Use format vX.Y.Z (e.g. v0.1.0)."
+          PREV=$(git tag --list 'v[0-9]*' --sort=-v:refname | head -1)
+          if [ -n "$PREV" ]; then
+            RANGE="$PREV..HEAD"
+            BASE="${PREV#v}"
+          else
+            RANGE="HEAD"
+            BASE="0.0.0"
+          fi
+          SUBJECTS=$(git log "$RANGE" --pretty=format:'%s')
+          BODIES=$(git log "$RANGE" --pretty=format:'%B')
+          if [ -z "$SUBJECTS" ]; then
+            echo "Nothing new on main since ${PREV:-the beginning}; nothing to release."
             exit 1
           fi
+          BUMP=patch
+          if echo "$SUBJECTS" | grep -Eq '^[[:alnum:]]+(\([^)]*\))?!:' \
+            || echo "$BODIES" | grep -Eq 'BREAKING[ -]CHANGE'; then
+            BUMP=major
+          elif echo "$SUBJECTS" | grep -Eq '^feat(\([^)]*\))?:'; then
+            BUMP=minor
+          fi
+          MAJOR=${BASE%%.*}; TMP=${BASE#*.}; MINOR=${TMP%%.*}; PATCH=${TMP##*.}
+          case "$BUMP" in
+            major) N="$((MAJOR+1)).0.0" ;;
+            minor) N="${MAJOR}.$((MINOR+1)).0" ;;
+            patch) N="${MAJOR}.${MINOR}.$((PATCH+1))" ;;
+          esac
+          # Pre-1.0 convention: breaking changes bump minor, never major.
+          if [ "$MAJOR" = "0" ] && [ "$BUMP" = "major" ]; then
+            N="0.$((MINOR+1)).0"
+          fi
+          VERSION="v${N}"
           for TAG in "$VERSION" "dsl/$VERSION"; do
             if git rev-parse "$TAG" >/dev/null 2>&1; then
-              echo "Tag '$TAG' already exists. Pick a new version."
+              echo "Tag '$TAG' already exists."
               exit 1
             fi
           done
+          {
+            echo "VERSION=${VERSION}"
+            echo "PREV_TAG=${PREV}"
+          } >> "$GITHUB_ENV"
+          echo "bump=$BUMP base=$BASE -> $VERSION"
 
       - name: Prepare release context
         run: |
-          NEW="${{ inputs.version }}"
-          # Previous root release (dsl/* tags excluded by the pattern).
-          # Computed BEFORE the bump commit below so the changelog entry,
-          # the release notes, and the tagged range all agree — the bump
-          # commit itself must not appear in its own release notes.
-          PREV=$(git tag --list 'v[0-9]*' --sort=-v:refname | grep -vx "$NEW" | head -1)
+          # Log is computed BEFORE the bump commit below so the changelog
+          # entry, the release notes, and the tagged range all agree.
           {
-            echo "PREV_TAG=${PREV}"
             echo "RELEASE_DATE=$(date -u +%Y-%m-%d)"
             echo 'RELEASE_LOG<<EOF'
-            if [ -n "$PREV" ]; then
-              git log "$PREV..HEAD" --pretty=format:'- %s (%h)' --no-merges
+            # NOTE: the trailing `sed` is load-bearing. `git log --pretty=format:`
+            # emits no newline after the last line, so without it the closing
+            # `EOF` would concatenate onto the final commit line and the runner
+            # would fail with "Matching delimiter not found 'EOF'".
+            if [ -n "$PREV_TAG" ]; then
+              git log "$PREV_TAG..HEAD" --pretty=format:'- %s (%h)' --no-merges | sed -e '$a\'
             else
-              git log HEAD --pretty=format:'- %s (%h)' --no-merges | head -50
+              git log HEAD --pretty=format:'- %s (%h)' --no-merges | head -50 | sed -e '$a\'
             fi
             echo 'EOF'
           } >> "$GITHUB_ENV"
-          echo "prev=$PREV"
 
       - name: Bump versions
         run: |
-          VERSION="${{ inputs.version }}"
           # Lockstep versions: the runtime requires the dsl module at the
           # same version, and the examples pin both. No `go` directives.
           sed -i "s|\(brick-org/brick/dsl \)v[0-9][0-9.]*|\1${VERSION}|" \
@@ -66,7 +94,6 @@ jobs:
 
       - name: Update CHANGELOG.md
         run: |
-          VERSION="${{ inputs.version }}"
           LOG="$RELEASE_LOG"
           [ -z "$LOG" ] && LOG="- No new commits."
           ENTRY=$(mktemp)
@@ -85,7 +112,6 @@ jobs:
 
       - name: Commit release
         run: |
-          VERSION="${{ inputs.version }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           if git diff --quiet; then
@@ -105,9 +131,9 @@ jobs:
           # the repo root and the dependency-free DSL toolchain in dsl/.
           # Both tags are required — brick/go.mod requires
           # github.com/brick-org/brick/dsl at the same version.
-          git tag -a "${{ inputs.version }}" -m "${{ inputs.version }}"
-          git tag -a "dsl/${{ inputs.version }}" -m "dsl/${{ inputs.version }}"
-          git push origin "${{ inputs.version }}" "dsl/${{ inputs.version }}"
+          git tag -a "$VERSION" -m "$VERSION"
+          git tag -a "dsl/$VERSION" -m "dsl/$VERSION"
+          git push origin "$VERSION" "dsl/$VERSION"
 
       - name: Build release notes from main
         run: |
@@ -132,5 +158,5 @@ jobs:
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.version }}
+          tag_name: ${{ env.VERSION }}
           body_path: release-notes.md
