@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.3.0 (2026-09-17)
+
+- refactor!: runtime module path is brick-org/brick/brick (206ce53)
+
 ## v0.2.0 (2026-09-17)
 
 - ci(release): auto-compute version from conventional commits (803610c)
