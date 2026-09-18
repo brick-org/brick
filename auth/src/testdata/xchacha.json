@@ -1,0 +1,20 @@
+{
+  "bare_hex": "7ce45de7b7fefa7d1ecf319503ca865fc61367f0122e5f87d311c96722de19e69c2ea4e2d06b10499d7378615db4ff3479f215786ecbc084212cfdc461978c6cedb8aa5e3be4460478c4c39d06e9daa8253aa9297ff2dfb52c9e59850cada0f01bb4b7d70c340e7d4e3fe6318487874c3b7a520794ec5ff17c44d390fc2be52398",
+  "envelope": "$ba$2$1563fa1601f176fe9d2455fd050c82f8cc35f91b42683a26eec2f2080fcc34f38099d269d451ecb5f837f122bd2da5002561dd26ec8a93dfb91bec10640750fc0de4d3386e5b15af6f3b7d5a954bb24a16dda636eeb6f49cb1787b0b97fded0b2695f1dbcb5f97c50db60fe76c67f64a1857f3c8a33b63b7148121ee2a023c54f5",
+  "envelope_secret_config": {
+    "current_version": 2,
+    "keys": {
+      "1": "auth-r5-04-xchacha-old",
+      "2": "auth-r5-04-xchacha-fixture-secret"
+    },
+    "legacy_secret": "auth-r5-04-xchacha-legacy"
+  },
+  "expected": {
+    "bare_hex_alphabet": "0123456789abcdef",
+    "envelope_prefix": "$ba$2$"
+  },
+  "legacy_bare_hex": "e96e18d749ae86179338af097669de629c0d7ba92e9b2668193163e3cfdaf6bfa689c75e23b82bbd4dd583810a2a",
+  "note": "Upstream: symmetricEncrypt/symmetricDecrypt/formatEnvelope/parseEnvelope (key = SHA-256(secret), XChaCha20-Poly1305, random 24-byte nonce prepended, hex).",
+  "plaintext": "{\"callbackURL\":\"/dashboard\",\"codeVerifier\":\"ts-verifier-0123456789abcdef\",\"theme\":\"dark\"}",
+  "secret": "auth-r5-04-xchacha-fixture-secret"
+}

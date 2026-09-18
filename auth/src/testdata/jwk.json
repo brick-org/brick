@@ -1,0 +1,30 @@
+{
+  "alg": "EdDSA",
+  "claims": {
+    "aud": "https://api.example.com",
+    "exp": 2105332181,
+    "iat": 1789972181,
+    "iss": "https://auth.example.com",
+    "sub": "fixture-user-1"
+  },
+  "crv": "Ed25519",
+  "generated_at": "2026-09-21T06:29:41Z",
+  "kid": "auth-r5-04-fixture-key-1",
+  "note": "TEST-ONLY keypair. Upstream: crypto/jwt.ts JWKOptions + plugins/jwt rotation.",
+  "private_jwk_test_only": {
+    "use": "sig",
+    "kty": "OKP",
+    "crv": "Ed25519",
+    "alg": "EdDSA",
+    "x": "PH_AVSNZZAv7vVFn5Xi5LHS_tKCXRqT0SoCV0W6mwII",
+    "d": "whwnQ9e66kMQAUEHUYxyXdp6LVmDDoj4kCrM7w9zWBM"
+  },
+  "public_jwk": {
+    "alg": "EdDSA",
+    "crv": "Ed25519",
+    "kty": "OKP",
+    "use": "sig",
+    "x": "PH_AVSNZZAv7vVFn5Xi5LHS_tKCXRqT0SoCV0W6mwII"
+  },
+  "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImF1dGgtcjUtMDQtZml4dHVyZS1rZXktMSIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJodHRwczovL2FwaS5leGFtcGxlLmNvbSIsImV4cCI6MjEwNTMzMjE4MSwiaWF0IjoxNzg5OTcyMTgxLCJpc3MiOiJodHRwczovL2F1dGguZXhhbXBsZS5jb20iLCJzdWIiOiJmaXh0dXJlLXVzZXItMSJ9.RYJ5Ve4fJAgbr0aGTuBjojw7emwQcp5oKhsKIacd0eUWkJBDx69wszoguweBNFjgN_p0V9onCjj5VchcR1BZAQ"
+}

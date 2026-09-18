@@ -1,0 +1,120 @@
+---
+title: Authentication
+description: Better Auth semantics in a standalone Go module, with first-class Brick mounting.
+icon: ShieldCheck
+---
+
+Auth is a standalone module: it does not import Brick and works with any
+Huma-compatible HTTP adapter. Brick exposes its owned adapter so auth can
+register on the same router without adding auth to applications that do not
+use it.
+
+```bash
+go get github.com/brick-org/brick/auth
+```
+
+The Go implementation tracks Better Auth `v1.7.5`. Its server-side package
+layout mirrors upstream (`api`, `cookies`, `crypto`, `db`, `oauth2`,
+`social-providers`, and `plugins`) to keep upgrades reviewable.
+
+## Mount on Brick
+
+```go
+import (
+    auth "github.com/brick-org/brick/auth"
+    authbun "github.com/brick-org/brick/auth/adapters/bun"
+    brick "github.com/brick-org/brick/brick"
+)
+
+b, err := brick.New(brick.Config[any]{
+    Title: "Shop API",
+    DB: bunDB,
+})
+if err != nil {
+    return err
+}
+
+authentication, err := auth.BetterAuth(auth.Options{
+    AppName: "Shop",
+    BaseURL: "https://shop.example.com",
+    Secret: os.Getenv("AUTH_SECRET"),
+    Adapter: b.Adapter(),
+    DB: authbun.New(bunDB, authbun.Config{}),
+    EmailAndPassword: auth.EmailAndPasswordOptions{Enabled: true},
+})
+if err != nil {
+    return err
+}
+_ = authentication
+
+// b.Handler() now serves Brick resources and /api/auth/*.
+```
+
+`b.Adapter()` is available when Brick owns its router (the normal production
+path). It returns `nil` when `Config.API` was injected; in that advanced path,
+pass the caller-owned Huma adapter to auth directly.
+
+## Use without Brick
+
+```go
+router := bunrouter.New()
+adapter := humabunrouter.NewAdapter(router)
+
+authentication, err := auth.BetterAuth(auth.Options{
+    Secret: os.Getenv("AUTH_SECRET"),
+    Adapter: adapter,
+    DB: authbun.New(bunDB, authbun.Config{}),
+})
+if err != nil {
+    return err
+}
+
+http.ListenAndServe(":8080", router)
+```
+
+The core module never imports `brick/`. Plugins are ordinary packages in the
+same module, so Go only links plugins explicitly imported by the application:
+
+```go
+import jwt "github.com/brick-org/brick/auth/plugins/jwt"
+
+opts.Plugins = []auth.Plugin{jwt.JWT(jwt.Options{})}
+```
+
+## Database ownership
+
+Auth receives the application's existing `*bun.DB`; the Bun adapter does not
+open or close the pool. This is safe for long-lived servers and cached
+serverless handlers. Run schema migrations outside request startup.
+
+## Behavior notes
+
+- `auth.BetterAuth` returns `(Auth, error)`: configuration failures (missing
+  secret, plugin init) are returned, not panicked — except secondary-storage
+  flags, which still panic until the backend lands.
+- Secrets come from `Options.Secret`/`Secrets`, or from `BETTER_AUTH_SECRET` /
+  `AUTH_SECRET` / `BETTER_AUTH_SECRETS` when unset; an empty secret is an
+  error and short secrets warn. The resolved, versioned config is on
+  `AuthContext.SecretConfig`.
+- Database rows use logical camelCase keys (`userId`, `createdAt`) with
+  pass-through native types; unknown `FindMany` limits default to 100 rows
+  (pass a negative limit for an explicitly unbounded read).
+- DB hooks support silent abort via `auth.ErrHookAbort`, and after-hooks run
+  after a transaction commits (skipped on rollback). The adapter offers atomic
+  `ConsumeOne` / `IncrementOne` primitives.
+- Sessions: `POST /get-session` exists (deferred refresh without it returns
+  `405`); `?disableCookieCache` / `?disableRefresh` force authoritative or
+  read-only serving. Cookie-cache versioning and refresh gating are honored;
+  JWT/JWE cache strategies fail closed.
+- Framework: `DynamicBaseURL` (allowed hosts/protocol/fallback) is validated
+  and merged into trusted origins; rate-limit storage backends are selectable
+  (`database` is rejected with a descriptive error); `RunInBackground`
+  dispatches background tasks.
+- OAuth: JWKS-cached ID-token verification, nonce mint/verify, `iss`
+  callback checks, and `private_key_jwt` transport are available in
+  `auth/oauth2`; per-provider option bags (Google/Apple/Discord/Microsoft/
+  GitHub) live in `auth/social-providers`. Social sign-in accepts a
+  client-submitted `idToken` object (`{redirect:false, token, user}` on
+  success); custom `CallbackPath` providers get dedicated callback mounts.
+- Error responses use upstream-derived HTTP statuses (`StatusForCode`):
+  untrusted callback URLs are `403`, unknown users `404`.

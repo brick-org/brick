@@ -5,8 +5,8 @@ on:
   # since the previous tag (feat -> minor, fix -> patch, ! -> major,
   # with pre-1.0 breaking bumping minor). Just press Run.
   #
-  # Tag scheme: brick/vX.Y.Z (runtime module in brick/) + dsl/vX.Y.Z
-  # (toolchain in dsl/). Bare vX tags serve no module (no root go.mod)
+  # Tag scheme: brick/vX.Y.Z (runtime), auth/vX.Y.Z (standalone auth), and
+  # dsl/vX.Y.Z (toolchain). Bare vX tags serve no module (no root go.mod)
   # and are no longer created. The GitHub Release attaches to brick/vX.
   workflow_dispatch:
 
@@ -63,7 +63,7 @@ jobs:
             N="0.$((MINOR+1)).0"
           fi
           VERSION="v${N}"
-          for TAG in "brick/$VERSION" "dsl/$VERSION"; do
+          for TAG in "brick/$VERSION" "auth/$VERSION" "dsl/$VERSION"; do
             if git rev-parse "$TAG" >/dev/null 2>&1; then
               echo "Tag '$TAG' already exists."
               exit 1
@@ -139,10 +139,11 @@ jobs:
           # Tags point at the bump commit above (or main HEAD when the
           # requires were already current).
           git pull --rebase origin main
-          # One tag per module; no bare tags (no root go.mod to version).
+          # One tag per public module; no bare tags (no root go.mod).
           git tag -a "brick/$VERSION" -m "brick/$VERSION"
+          git tag -a "auth/$VERSION" -m "auth/$VERSION"
           git tag -a "dsl/$VERSION" -m "dsl/$VERSION"
-          git push origin "brick/$VERSION" "dsl/$VERSION"
+          git push origin "brick/$VERSION" "auth/$VERSION" "dsl/$VERSION"
 
       - name: Build release notes from main
         run: |

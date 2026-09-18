@@ -1,0 +1,62 @@
+{
+  "fixtures": [
+    {
+      "file": "email_jwt.json",
+      "upstream_file": "packages/better-auth/src/api/routes/email-verification.ts; packages/better-auth/src/crypto/jwt.ts",
+      "upstream_test": "email-verification route tests; opt-in: pnpm --dir vendor/better-auth vitest run \u003ctest\u003e -t '\u003cpattern\u003e' (see gen-fixtures.sh --ts) crypto",
+      "generation_command": "GOWORK=off go run ./scripts/genfixtures (from auth/; wrapped by ./scripts/gen-fixtures.sh)"
+    },
+    {
+      "file": "xchacha.json",
+      "upstream_file": "packages/better-auth/src/crypto/index.ts",
+      "upstream_test": "packages/better-auth/src/crypto secret-rotation tests; opt-in: pnpm --dir vendor/better-auth vitest run \u003ctest\u003e -t '\u003cpattern\u003e' (see gen-fixtures.sh --ts)",
+      "generation_command": "GOWORK=off go run ./scripts/genfixtures (from auth/; wrapped by ./scripts/gen-fixtures.sh)"
+    },
+    {
+      "file": "session_jwt.json",
+      "upstream_file": "packages/better-auth/src/cookies/index.ts; packages/better-auth/src/crypto/jwt.ts",
+      "upstream_test": "cookies tests; opt-in: pnpm --dir vendor/better-auth vitest run \u003ctest\u003e -t '\u003cpattern\u003e' (see gen-fixtures.sh --ts) cookies",
+      "generation_command": "GOWORK=off go run ./scripts/genfixtures (from auth/; wrapped by ./scripts/gen-fixtures.sh)"
+    },
+    {
+      "file": "session_jwe.json",
+      "upstream_file": "packages/better-auth/src/cookies/index.ts; packages/better-auth/src/crypto/jwt.ts",
+      "upstream_test": "cookies tests; opt-in: pnpm --dir vendor/better-auth vitest run \u003ctest\u003e -t '\u003cpattern\u003e' (see gen-fixtures.sh --ts) cookies",
+      "generation_command": "GOWORK=off go run ./scripts/genfixtures (from auth/; wrapped by ./scripts/gen-fixtures.sh)"
+    },
+    {
+      "file": "jwk.json",
+      "upstream_file": "packages/better-auth/src/crypto/jwt.ts",
+      "upstream_test": "packages/plugins/jwt tests; opt-in: pnpm --dir vendor/better-auth vitest run \u003ctest\u003e -t '\u003cpattern\u003e' (see gen-fixtures.sh --ts) jwt",
+      "generation_command": "GOWORK=off go run ./scripts/genfixtures (from auth/; wrapped by ./scripts/gen-fixtures.sh)"
+    },
+    {
+      "file": "jwks.json",
+      "upstream_file": "packages/better-auth/src/crypto/jwt.ts",
+      "upstream_test": "jwks endpoint tests; opt-in: pnpm --dir vendor/better-auth vitest run \u003ctest\u003e -t '\u003cpattern\u003e' (see gen-fixtures.sh --ts) jwt",
+      "generation_command": "GOWORK=off go run ./scripts/genfixtures (from auth/; wrapped by ./scripts/gen-fixtures.sh)"
+    },
+    {
+      "file": "cookies.json",
+      "upstream_file": "packages/better-auth/src/cookies/index.ts; packages/better-auth/src/crypto",
+      "upstream_test": "cookie tests; auth/cookies/edge_parity_test.go (TestSignFixedVectors); auth/cookies/wave4_conformance_test.go",
+      "generation_command": "static HMAC/chunk vectors; verified by TestFixture_Cookies in auth/testutil"
+    },
+    {
+      "file": "wave10_redirects.json",
+      "upstream_file": "packages/better-auth/src/utils/trusted-origins.ts; packages/better-auth/src/context/helpers.ts",
+      "upstream_test": "trusted-origins.test.ts classes; auth/types/wave10_redirect_test.go (TestWave10_OpenRedirectEvilMatrix); auth/testutil/wave10_vectors_test.go (TestWave10_RedirectVectors)",
+      "generation_command": "static vectors transcribed from upstream trust classes; verified both-directions by TestWave10_RedirectVectors in auth/testutil"
+    },
+    {
+      "file": "wave10_registration.json",
+      "upstream_file": "packages/oauth-provider/src/register.ts (validateClientRedirectUri, FORBIDDEN_NATIVE_REDIRECT_SCHEMES)",
+      "upstream_test": "packages/oauth-provider registration tests; auth/plugins/oauthprovider/wave10_stress_test.go (TestWave10_RegistrationRedirectVectors, FuzzWave10_ValidateClientRedirectURI); auth/testutil/wave10_vectors_test.go (TestWave10_RegistrationVectors)",
+      "generation_command": "static DCR redirect-URI matrix; validity enforced by TestWave10_RegistrationRedirectVectors in auth/plugins/oauthprovider"
+    }
+  ],
+  "generated_at": "2026-09-21T06:29:41Z",
+  "generator": "auth/scripts/genfixtures/main.go via auth/scripts/gen-fixtures.sh",
+  "pinned_commit": "5468e6bfcdff799848537cf5ad06ebab15aad9dd",
+  "pinned_version": "v1.7.5"
+}

@@ -1,0 +1,24 @@
+{
+  "note": "Shared dynamic-client-registration redirect-URI vectors. web_ok/native_ok are the validateClientRedirectURI verdicts per application type (register.ts: web requires https on non-loopback hosts; native allows https non-loopback, http only on exact loopback hosts, or well-formed reverse-domain private-use schemes; forbidden schemes and fragments/credentials always fail). Mirrors packages/oauth-provider/src/register.ts + FORBIDDEN_NATIVE_REDIRECT_SCHEMES.",
+  "cases": [
+    {"name": "web https callback", "uri": "https://app.example.com/callback", "web_ok": true, "native_ok": true},
+    {"name": "web https explicit port", "uri": "https://app.example.com:443/cb", "web_ok": true, "native_ok": true},
+    {"name": "native http localhost", "uri": "http://localhost:8080/cb", "web_ok": false, "native_ok": true},
+    {"name": "native http 127.0.0.1", "uri": "http://127.0.0.1:3000/cb", "web_ok": false, "native_ok": true},
+    {"name": "native http loopback ipv6", "uri": "http://[::1]/cb", "web_ok": false, "native_ok": true},
+    {"name": "native http lan ip rejected", "uri": "http://192.168.1.5:3000/cb", "web_ok": false, "native_ok": false},
+    {"name": "plain http rejected", "uri": "http://example.com/cb", "web_ok": false, "native_ok": false},
+    {"name": "https loopback rejected both", "uri": "https://localhost/cb", "web_ok": false, "native_ok": false},
+    {"name": "https 127 loopback rejected both", "uri": "https://127.0.0.1/cb", "web_ok": false, "native_ok": false},
+    {"name": "localhost trailing dots", "uri": "https://localhost./cb", "web_ok": false, "native_ok": false},
+    {"name": "reverse-domain private-use", "uri": "com.example.app:/oauth2/callback", "web_ok": false, "native_ok": true},
+    {"name": "private-use with authority rejected", "uri": "com.example.app://x/cb", "web_ok": false, "native_ok": false},
+    {"name": "bare scheme rejected", "uri": "myapp:/callback", "web_ok": false, "native_ok": false},
+    {"name": "javascript rejected", "uri": "javascript:alert(1)", "web_ok": false, "native_ok": false},
+    {"name": "data rejected", "uri": "data:text/plain,hi", "web_ok": false, "native_ok": false},
+    {"name": "fragment rejected", "uri": "https://app.example.com/cb#frag", "web_ok": false, "native_ok": false},
+    {"name": "credentials rejected", "uri": "https://user:pass@app.example.com/cb", "web_ok": false, "native_ok": false},
+    {"name": "relative rejected", "uri": "not-a-uri", "web_ok": false, "native_ok": false},
+    {"name": "empty rejected", "uri": "", "web_ok": false, "native_ok": false}
+  ]
+}

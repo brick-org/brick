@@ -1,0 +1,52 @@
+{
+  "expected": {
+    "alg": "HS256",
+    "expiresMillis": 2105332181000
+  },
+  "header": {
+    "alg": "HS256",
+    "typ": "JWT"
+  },
+  "note": "Upstream: setCookieCache jwt branch (signSecretJWT HS256 over the auth secret).",
+  "payload": {
+    "exp": 2105332181,
+    "iat": 1789972181,
+    "session": {
+      "createdAt": "2026-01-01T00:00:00Z",
+      "expiresAt": "2036-01-01T00:00:00Z",
+      "id": "sess-fixture-1",
+      "token": "tok-fixture-1",
+      "updatedAt": "2026-01-01T00:00:00Z",
+      "userId": "user-fixture-1"
+    },
+    "updatedAt": 1789972181177,
+    "user": {
+      "createdAt": "2026-01-01T00:00:00Z",
+      "email": "fixture@example.com",
+      "emailVerified": true,
+      "id": "user-fixture-1",
+      "name": "Fixture",
+      "updatedAt": "2026-01-01T00:00:00Z"
+    },
+    "version": "1"
+  },
+  "secret": "auth-r5-04-session-cache-secret-at-least-32-chars!!",
+  "session": {
+    "createdAt": "2026-01-01T00:00:00Z",
+    "expiresAt": "2036-01-01T00:00:00Z",
+    "id": "sess-fixture-1",
+    "token": "tok-fixture-1",
+    "updatedAt": "2026-01-01T00:00:00Z",
+    "userId": "user-fixture-1"
+  },
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzZXNzaW9uIjp7ImNyZWF0ZWRBdCI6IjIwMjYtMDEtMDFUMDA6MDA6MDBaIiwiZXhwaXJlc0F0IjoiMjAzNi0wMS0wMVQwMDowMDowMFoiLCJpZCI6InNlc3MtZml4dHVyZS0xIiwidG9rZW4iOiJ0b2stZml4dHVyZS0xIiwidXBkYXRlZEF0IjoiMjAyNi0wMS0wMVQwMDowMDowMFoiLCJ1c2VySWQiOiJ1c2VyLWZpeHR1cmUtMSJ9LCJ1c2VyIjp7ImNyZWF0ZWRBdCI6IjIwMjYtMDEtMDFUMDA6MDA6MDBaIiwiZW1haWwiOiJmaXh0dXJlQGV4YW1wbGUuY29tIiwiZW1haWxWZXJpZmllZCI6dHJ1ZSwiaWQiOiJ1c2VyLWZpeHR1cmUtMSIsIm5hbWUiOiJGaXh0dXJlIiwidXBkYXRlZEF0IjoiMjAyNi0wMS0wMVQwMDowMDowMFoifSwidXBkYXRlZEF0IjoxNzg5OTcyMTgxMTc3LCJ2ZXJzaW9uIjoiMSIsImlhdCI6MTc4OTk3MjE4MSwiZXhwIjoyMTA1MzMyMTgxfQ.2weqiUiO6mxgnOFJOHmNmUW-Ei-KP-EqJXmoZqFmTho",
+  "user": {
+    "createdAt": "2026-01-01T00:00:00Z",
+    "email": "fixture@example.com",
+    "emailVerified": true,
+    "id": "user-fixture-1",
+    "name": "Fixture",
+    "updatedAt": "2026-01-01T00:00:00Z"
+  },
+  "version": "1"
+}

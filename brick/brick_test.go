@@ -24,6 +24,30 @@ func TestNewRejectsNilDB(t *testing.T) {
 	}
 }
 
+func TestAdapterOwnership(t *testing.T) {
+	sqlDB := sql.OpenDB(pgdriver.NewConnector(pgdriver.WithDSN("postgres://localhost:1/unused?sslmode=disable")))
+	defer sqlDB.Close()
+	bunDB := bun.NewDB(sqlDB, pgdialect.New())
+	defer bunDB.Close()
+
+	owned, err := New(Config[any]{DB: bunDB})
+	if err != nil {
+		t.Fatalf("New owned: %v", err)
+	}
+	if owned.Adapter() == nil {
+		t.Fatal("Brick-owned router must expose its Huma adapter")
+	}
+
+	_, api := humatest.New(t)
+	injected, err := New(Config[any]{DB: bunDB, API: api})
+	if err != nil {
+		t.Fatalf("New injected: %v", err)
+	}
+	if injected.Adapter() != nil {
+		t.Fatal("injected API adapter is caller-owned and must not be exposed")
+	}
+}
+
 // TestOpenAPISpecContents runs without a database: registration and spec
 // marshal touch no rows. The bun.DB wraps a lazy, never-connected pool.
 func TestOpenAPISpecContents(t *testing.T) {

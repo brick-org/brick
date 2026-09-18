@@ -2,6 +2,8 @@ go 1.26
 
 use ./brick
 
+use ./auth
+
 use ./dsl
 
 use ./examples/shop/dsl
