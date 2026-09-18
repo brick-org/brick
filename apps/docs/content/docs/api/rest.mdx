@@ -58,16 +58,15 @@ RFC 9457 problem details with the Brick `code` mapping:
 
 ## OpenAPI
 
-```go
-spec, _ := b.OpenAPISpec() // OpenAPI 3.1 JSON bytes
-```
+Huma serves the spec at `GET /openapi.json` (`application/openapi+json`;
+same bytes as `b.OpenAPISpec()`) and Stoplight docs at `/docs`. Mount the
+Scalar viewer for interactive docs with an absolute spec URL built per
+request (scalar-go rejects relative URLs; see [App setup](/docs/core/app-setup)):
 
-Serve those bytes at a stable URL and mount the Scalar viewer for interactive docs:
-
 ```go
-html, _ := brick.ScalarDocsHTML("/openapi.json")
+html, err := brick.ScalarDocsHTML(scheme + "://" + req.Host + "/openapi.json")
 b.Router().GET("/reference", func(w http.ResponseWriter, req bunrouter.Request) error {
-    w.Header().Set("Content-Type", "text/html")
+    w.Header().Set("Content-Type", "text/html; charset=utf-8")
     _, _ = w.Write([]byte(html))
     return nil
 })

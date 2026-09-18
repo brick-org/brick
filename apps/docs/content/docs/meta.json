@@ -1,4 +1,4 @@
 {
   "title": "Brick",
-  "pages": ["index", "quickstart", "---Core---", "core/app-setup", "core/resources", "core/access", "core/hooks", "core/validation-errors", "core/context", "core/autoname", "---Building Resources---", "schema/fields", "schema/dsl", "codegen/overview", "---Data & API---", "db/overview", "api/rest", "---Project---", "changelog"]
+  "pages": ["index", "quickstart", "---Core---", "core/app-setup", "core/resources", "core/access", "core/hooks", "core/validation-errors", "core/context", "core/autoname", "---Building Resources---", "schema/fields", "schema/dsl", "codegen/overview", "---Data & API---", "db/overview", "api/rest", "---Deploy---", "deployment/vercel", "---Project---", "changelog"]
 }

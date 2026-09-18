@@ -1,0 +1,138 @@
+---
+title: Deploy to Vercel
+description: Run a Brick API on Vercel with a pooled Postgres and zero framework changes.
+icon: Cloud
+---
+
+Brick needs no framework changes to run serverless: `Brick.Handler()` is a
+plain `net/http.Handler`, middleware is stateless, there are no background
+goroutines, and `db/` does DML only (no DDL at boot). Deployability is purely
+an entrypoint + connection-lifecycle pattern. Reference: `examples/shop/app/`.
+
+## Pick a path
+
+| | Go server (default) | Serverless functions |
+| --- | --- | --- |
+| Entrypoint | `main.go` listens on `PORT` | `api/index.go` exports `Handler` |
+| Config | `vercel.json`: `"framework": "go"` | no preset; one function per file |
+| Routing | whole Brick router, all paths natively | put all traffic behind one file + rewrites, or split by file |
+| When | API-only services (recommended) | mixing Go endpoints into a frontend project |
+
+Both share one constructor so local, preview, and production serve identical
+routes. The shop example ships both; delete the one you don't use.
+
+## Project setup (server path)
+
+Vercel detects the Go server from a root `go.mod` plus `main.go` (or
+`cmd/api/main.go`). In a monorepo, set the project's **Root Directory** to
+the app directory (e.g. `examples/shop/app`) — `go.work` above it is then
+ignored, and the app builds as a standalone module against tagged releases.
+
+```json
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "go"
+}
+```
+
+The server **must listen on `PORT`** (Vercel sets it; local default stays):
+
+```go
+addr := os.Getenv("PORT")
+if addr != "" {
+    addr = ":" + addr
+} else if addr = os.Getenv("ADDR"); addr == "" {
+    addr = ":8080"
+}
+log.Fatal(b.ListenAndServe(addr))
+```
+
+Vercel reads the toolchain from the `go` directive in `go.mod`. Commit
+`go.sum`; no `vercel.json` rewrites are needed — the server sees all paths.
+
+## One shared constructor
+
+Put Brick construction in an importable package both entrypoints call —
+never in `package main` (the function can't import it):
+
+```go
+// appshop.New builds the Brick, mounts /reference, returns handler + pool.
+func New(dsn string) (*brick.Brick[any], *bun.DB, error)
+
+func main() { // long-lived server
+    b, bunDB, err := appshop.New(dsn)
+    defer bunDB.Close()
+    log.Fatal(b.ListenAndServe(addr))
+}
+
+func Handler(w http.ResponseWriter, r *http.Request) { // api/index.go
+    h, err := cached() // sync.OnceValues: built once per instance
+    if err != nil { /* 500 problem JSON */ return }
+    h.ServeHTTP(w, r)
+}
+```
+
+## Postgres: pooler + singleton
+
+Serverless breaks the one-connection-per-server assumption: every instance
+opens its own pool, so point `DATABASE_URL` at a **pooled endpoint** (Neon,
+Supabase pooler `:6543`, pgbouncer) with `sslmode=require`, keep exactly one
+connection per instance, and never close per request:
+
+```go
+sqlDB := sql.OpenDB(pgdriver.NewConnector(pgdriver.WithDSN(dsn)))
+sqlDB.SetMaxOpenConns(1)
+sqlDB.SetMaxIdleConns(1)
+sqlDB.SetConnMaxLifetime(5 * time.Minute)
+sqlDB.SetConnMaxIdleTime(time.Minute)
+bunDB := bun.NewDB(sqlDB, pgdialect.New())
+// main.go: defer bunDB.Close() on exit.
+// api/: intentionally never closed — the instance owns it.
+```
+
+`pgdriver` dials lazily, so construction never needs a live database — only
+real queries do.
+
+## Env vars: fail at request time, never build time
+
+Vercel builds **without** runtime env. A missing `DATABASE_URL` must be a
+request-time 500, not a build failure — and never a silent localhost
+fallback in the function:
+
+```go
+dsn := os.Getenv("DATABASE_URL")
+if dsn == "" {
+    return nil, errors.New("DATABASE_URL is not set")
+}
+```
+
+Set `DATABASE_URL` (pooler URL) in preview + production environments;
+unreachable-database requests then surface as Brick 500 envelopes carrying
+`request_id`, same as any storage failure.
+
+## Docs routes
+
+- `/openapi.json` — served by Huma itself (`application/openapi+json`).
+- `/docs` — Huma's built-in Stoplight viewer.
+- `/reference` — mount Scalar yourself with a per-request absolute spec URL
+  (see [App setup](/docs/core/app-setup)). Never precompute the host: it
+  differs per environment.
+
+## Limits to design around
+
+- **Timeouts:** keep queries lean (Brick's pagination defaults help); move
+  anything slow out of the request path.
+- **Cold starts:** construction (`brick.New` + OpenAPI marshal) runs once per
+  instance thanks to the cached handler — warm requests pay nothing.
+- **No boot DDL:** Brick never migrates at startup; run migrations in CI.
+
+## Troubleshooting
+
+| Symptom | Cause → fix |
+| --- | --- |
+| `too many connections` | direct Postgres URL → switch to the pooler URL; keep `MaxOpenConns(1)` |
+| `DATABASE_URL is not set` 500 | env missing in that environment → set preview/production vars |
+| Build resolves `go.work` / wrong module | Root Directory not set → point it at the app dir |
+| `/reference` blank or errors | relative spec URL → build it per request from host + scheme |
+
+Verify locally with `vercel dev` before promoting a preview to production.
