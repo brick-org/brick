@@ -130,8 +130,17 @@
         "it: should handle cross-subdomain cookie migration without silent logout",
         "it: should work during cookieCache window even with stale session_data"
       ],
-      "covered": [],
-      "notes": "Compact cache issue/refresh plus JWT/JWE strategy wiring covered by session_cache/session_jwt suites; HMAC-fail fallback, malformed-expiry, and cross-subdomain migration matrices open."
+      "covered": [
+        {
+          "case": "ignores retired session_data when caching is disabled $mode",
+          "goTest": "TestV1_RetiredCacheCleanedWhenDisabled"
+        },
+        {
+          "case": "should expire malformed compact session_data and fall through to session_token DB validation",
+          "goTest": "TestV1_MalformedCacheExpiredAndServed"
+        }
+      ],
+      "notes": "Malformed-expiry fallthrough and disabled-cache cleanup covered; cross-subdomain migration, JWT/JWE-strategy fallback, and chunked re-issue legs open/excluded."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/api/routes/email-verification.test.ts",
@@ -363,8 +372,37 @@
         "it: sets Cache-Control: no-store on unauthenticated GET /get-session responses",
         "it: does not set Cache-Control: no-store on session-gated endpoints"
       ],
-      "covered": [],
-      "notes": "Query knobs, version rotation, strategy gates, remember-me mint, expired-row deletion covered by session_runtime/session_wave2/secondary_session suites; stateful refresh default, custom sessions, and full response matrices open."
+      "covered": [
+        {
+          "case": "should set cookies correctly on sign in",
+          "goTest": "TestV1_SessionTokenMaxAgeSignInDefault + TestV1_SessionTokenMaxAgeDefault (MaxAge defaults to expiresIn)"
+        },
+        {
+          "case": "should not exceed the 400-day browser Max-Age ceiling on session refresh",
+          "goTest": "TestV1_SessionTokenMaxAgeRefreshCeiling"
+        },
+        {
+          "case": "should require a fresh session to list sessions",
+          "goTest": "TestV1_ExpiredSessionListRevokeIs401 (expired token now 401)"
+        },
+        {
+          "case": "should work without database (session stored in cookie only)",
+          "goTest": "TestV1_DBlessGetSessionFromCookieCache"
+        },
+        {
+          "case": "should respect disableSessionRefresh config when deferSessionRefresh is enabled",
+          "goTest": "TestV1_DeferWithDisableSessionRefresh"
+        },
+        {
+          "case": "fails closed when the backing session is revoked in a stateful deployment",
+          "goTest": "TestV1_UpdateSessionRevokedFailsClosed"
+        },
+        {
+          "case": "still refreshes the cookie in a DB-less deployment when no row exists",
+          "goTest": "TestV1_DBlessUpdateSessionFromCookieCache (previously panicked on nil DB)"
+        }
+      ],
+      "notes": "MaxAge default/ceiling, expired-list/revoke 401, DB-less get/update paths, defer+disable, revocation fail-closed covered by session_v1_* suites; JWKS/JWT-plugin, org/admin authority, and returnHeaders legs out of scope."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/api/routes/sign-in.test.ts",

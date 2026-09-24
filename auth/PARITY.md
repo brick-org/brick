@@ -495,11 +495,11 @@ files are v1-excluded and removed from this table (previously 73 files).
 | Upstream test file                                                | Cases | Disposition    | Wave       | Covered cases | Go owner                                                       |
 | ----------------------------------------------------------------- | ----: | -------------- | ---------- | ------------: | -------------------------------------------------------------- |
 | `ba/api/routes/account.test.ts`                                   |    53 | partial        | AUTH-C7-02 |             0 | `account.go`, `account_extra.go` (+1)                          |
-| `ba/api/routes/cookie-cache-fallback.test.ts`                     |    11 | partial        | AUTH-C7-01 |             0 | `session.go`, `session_cache.go` (+1)                          |
+| `ba/api/routes/cookie-cache-fallback.test.ts`                     |    11 | partial        | AUTH-C7-01 |             2 | `session.go`, `session_cache.go` (+1)                          |
 | `ba/api/routes/email-verification.test.ts`                        |    29 | partial        | AUTH-C7-02 |             3 | `routes/email_verification.go`, `crypto/email_verification.go` |
 | `ba/api/routes/error.test.ts`                                     |     3 | open           | AUTH-C7-04 |             0 | `error.go`                                                     |
 | `ba/api/routes/password.test.ts`                                  |    21 | partial        | AUTH-C7-02 |             4 | `password.go`, `password_extra.go`                             |
-| `ba/api/routes/session-api.test.ts`                               |    85 | partial        | AUTH-C7-01 |             0 | `session.go`, `session_extra.go` (+1)                          |
+| `ba/api/routes/session-api.test.ts`                               |    85 | partial        | AUTH-C7-01 |             7 | `session.go`, `session_extra.go` (+1)                          |
 | `ba/api/routes/sign-in.test.ts`                                   |    30 | partial        | AUTH-C7-02 |             0 | `sign_in.go`                                                   |
 | `ba/api/routes/sign-out.test.ts`                                  |    10 | partial        | AUTH-C7-01 |             0 | `sign_out.go`                                                  |
 | `ba/api/routes/sign-up.test.ts`                                   |    40 | partial        | AUTH-C7-02 |             0 | `sign_up.go`                                                   |

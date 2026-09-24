@@ -142,6 +142,17 @@ func resolveGetSession(ctx context.Context, opts types.Options, req getSessionRe
 	}
 	now := time.Now().UTC()
 	headers := headersWithStoredRequest(ctx, req.headers)
+	cacheEnabled := opts.Session.CookieCache.Enabled
+	// A session_data value may be present even when the fast path cannot use
+	// it: retired while caching is disabled (upstream clean(),
+	// session.ts:102-109), or present but undecodable/mismatched while
+	// enabled (upstream expireCookie, session.ts:120-122). Either way the
+	// stale entries expire alongside the authoritative result below.
+	_, cachePresent := sessionDataCookieValue(req.cookieHeader, opts)
+	var staleCleanup []http.Cookie
+	if cachePresent && !cacheEnabled {
+		staleCleanup = expiredStaleSessionDataCookies(ctx, opts, headers, req.cookieHeader)
+	}
 	if !req.query.DisableCookieCache {
 		if cached, ok := cachedSessionFromRequestFull(ctx, req.cookieHeader, opts.AllSecrets(), req.token, opts); ok {
 			return &getSessionResult{
@@ -149,6 +160,9 @@ func resolveGetSession(ctx context.Context, opts types.Options, req getSessionRe
 				user:    cached.User,
 				cookies: maybeRefreshCookieCacheWithContext(ctx, opts, headers, req.token, cached, now, req.dontRememberMe),
 			}, nil
+		}
+		if cachePresent && cacheEnabled {
+			staleCleanup = expiredStaleSessionDataCookies(ctx, opts, headers, req.cookieHeader)
 		}
 	}
 
@@ -178,7 +192,7 @@ func resolveGetSession(ctx context.Context, opts types.Options, req getSessionRe
 	// DisableSessionRefresh flag only skips the database write (it feeds
 	// needsRefresh instead); cookie-cache emission below is unaffected.
 	if req.dontRememberMe || req.query.DisableRefresh {
-		return &getSessionResult{session: session, user: user}, nil
+		return &getSessionResult{session: session, user: user, cookies: staleCleanup}, nil
 	}
 	if req.readOnly {
 		// Deferred GET (upstream session.ts:350-365): no database writes,
@@ -186,18 +200,22 @@ func resolveGetSession(ctx context.Context, opts types.Options, req getSessionRe
 		res := &getSessionResult{session: session, user: user, needsRefresh: &needsRefresh}
 		if opts.Session.CookieCache.Enabled {
 			if cacheCookie, cacheErr := newSessionDataCookieWithContext(ctx, opts, session, user, opts.Session, now, req.dontRememberMe); cacheErr == nil {
-				res.cookies = []http.Cookie{cacheCookie}
+				res.cookies = append(staleCleanup, cacheCookie)
+			} else if len(staleCleanup) > 0 {
+				res.cookies = staleCleanup
 			}
+		} else if len(staleCleanup) > 0 {
+			res.cookies = staleCleanup
 		}
 		return res, nil
 	}
 	if refreshed || opts.Session.CookieCache.Enabled {
 		cookiesOut, cookieErr := issueSessionCookiesWithContext(ctx, opts, headers, req.token, session, user, opts.Session, now, false)
 		if cookieErr == nil {
-			return &getSessionResult{session: session, user: user, cookies: cookiesOut}, nil
+			return &getSessionResult{session: session, user: user, cookies: append(staleCleanup, cookiesOut...)}, nil
 		}
 	}
-	return &getSessionResult{session: session, user: user}, nil
+	return &getSessionResult{session: session, user: user, cookies: staleCleanup}, nil
 }
 
 // GetSessionFromRequest extracts the session and user from the HTTP request.
@@ -287,7 +305,12 @@ func ListSessions(api huma.API, basePath string, opts types.Options) {
 		sessionRow, userRow, refreshed, err := loadSessionAndUser(ctx, opts, token)
 		if err != nil {
 			if errors.Is(err, errSessionExpired) {
-				return nil, sessionRouteError(types.ErrSessionExpired)
+				// Kept 401 (differs from StatusForCode 400): upstream
+				// listSessions sits behind freshSessionMiddleware, which
+				// answers UNAUTHORIZED for expired sessions
+				// (session.ts:598-616); see the note in ChangePassword
+				// (password.go).
+				return nil, huma.Error401Unauthorized(types.ErrSessionExpired)
 			}
 			return nil, sessionRouteError(types.ErrFailedToGetSession)
 		}
@@ -376,7 +399,11 @@ func RevokeSession(api huma.API, basePath string, opts types.Options) {
 		sessionRow, userRow, refreshed, err := loadSessionAndUser(ctx, opts, currentToken)
 		if err != nil {
 			if errors.Is(err, errSessionExpired) {
-				return nil, sessionRouteError(types.ErrSessionExpired)
+				// Kept 401 (differs from StatusForCode 400): upstream
+				// revokeSession sits behind sensitiveSessionMiddleware,
+				// which answers UNAUTHORIZED for expired sessions
+				// (session.ts:561-572); same convention as RevokeSessions.
+				return nil, huma.Error401Unauthorized(types.ErrSessionExpired)
 			}
 			return nil, sessionRouteError(types.ErrFailedToGetSession)
 		}
@@ -688,6 +715,12 @@ func issueSessionCookie(opts types.Options, headers CookieRequestHeaders, token 
 	cookie.Expires = expiresAt.UTC()
 	if cfg.MaxAge != nil {
 		cookie.MaxAge = *cfg.MaxAge
+	} else {
+		// Upstream always carries Max-Age=expiresIn on the persistent
+		// session_token cookie (getCookies sessionMaxAge default,
+		// cookies/index.ts:122-125; refresh override session.ts:386-397).
+		// The 400-day browser ceiling (#9609) is then exactly expiresIn.
+		cookie.MaxAge = int(opts.Session.ExpiresInDuration().Seconds())
 	}
 	return cookie, nil
 }

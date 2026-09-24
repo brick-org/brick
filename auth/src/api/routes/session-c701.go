@@ -463,6 +463,10 @@ func issueSessionCookieWithContext(ctx context.Context, opts types.Options, head
 	cookie.Expires = expiresAt.UTC()
 	if cfg.MaxAge != nil {
 		cookie.MaxAge = *cfg.MaxAge
+	} else {
+		// Same persistent default as issueSessionCookie (upstream
+		// getCookies sessionMaxAge; refresh override session.ts:386-397).
+		cookie.MaxAge = int(opts.Session.ExpiresInDuration().Seconds())
 	}
 	return cookie, nil
 }
@@ -669,6 +673,59 @@ func expiredSessionCookiesWithContext(ctx context.Context, authOpts types.Option
 		MaxAge:   -1,
 		Expires:  time.Unix(0, 0).UTC(),
 	})
+	return out
+}
+
+// expiredStaleSessionDataCookies expires a retired or undecodable session_data
+// value plus any chunk variants present in the request, mirroring upstream
+// get-session's retired-cache clean() and decode-failure expireCookie
+// (session.ts:102-109,120-122) with the chunk-aware session-store clean.
+// The expired entries ride alongside the authoritative database result (and
+// any re-issued cache), so stale caches cannot linger in the browser or
+// shadow the fresh value. Expiry entries always precede fresh ones on the
+// wire so the fresh value wins.
+func expiredStaleSessionDataCookies(ctx context.Context, opts types.Options, headers CookieRequestHeaders, cookieHeader string) []http.Cookie {
+	headers = headersWithStoredRequest(ctx, headers)
+	dataCfg := resolveSessionDataCookieConfigWithContext(ctx, opts, headers)
+	expire := func(name string) http.Cookie {
+		return http.Cookie{
+			Name:     name,
+			Value:    "",
+			Path:     "/",
+			Domain:   dataCfg.Domain,
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+			Secure:   dataCfg.Secure,
+			MaxAge:   -1,
+			Expires:  time.Unix(0, 0).UTC(),
+		}
+	}
+	out := []http.Cookie{expire(dataCfg.Name)}
+	seen := map[string]struct{}{dataCfg.Name: {}}
+	if cookieHeader != "" {
+		parsed := cookies.ParseRequestCookies(cookieHeader)
+		candidates := sessionDataCookieLookupNames(opts)
+		for name := range parsed {
+			if _, dup := seen[name]; dup {
+				continue
+			}
+			matched := false
+			for _, candidate := range candidates {
+				if name == candidate {
+					matched = true
+					break
+				}
+				if _, ok := cookies.ParseChunkIndex(candidate, name); ok {
+					matched = true
+					break
+				}
+			}
+			if matched {
+				seen[name] = struct{}{}
+				out = append(out, expire(name))
+			}
+		}
+	}
 	return out
 }
 

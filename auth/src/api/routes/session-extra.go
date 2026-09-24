@@ -174,6 +174,34 @@ type updateSessionOutput struct {
 	}
 }
 
+// sessionUpdateFields validates an update-session body against the full
+// session schema (union semantics), shared by the stateful and stateless
+// (DB-less) update paths below.
+func sessionUpdateFields(body map[string]any, opts types.Options) (map[string]any, error) {
+	if body == nil {
+		return nil, huma.NewError(types.StatusForCode(types.ErrBodyMustBeAnObject), types.ErrBodyMustBeAnObject)
+	}
+	// Full-schema update fields (union semantics): known fields get
+	// upstream update semantics (input:false rejection, validator and
+	// transform input hooks); fields unknown to the full schema keep
+	// the legacy passthrough so previously accepted bodies are never
+	// newly rejected.
+	additionalFields, ferr := FilterSessionUpdateFieldsFull(body, fullSessionFields(opts))
+	if ferr != nil {
+		var parseErr *FieldParseError
+		if errors.As(ferr, &parseErr) {
+			return nil, huma.NewError(types.StatusForCode(parseErr.Code), parseErr.Code)
+		}
+		// Transform failures propagate raw upstream; surface them as a
+		// 500 like the other adapter/cookie failures in this handler.
+		return nil, huma.Error500InternalServerError(ferr.Error())
+	}
+	if len(additionalFields) == 0 {
+		return nil, huma.Error400BadRequest("No fields to update")
+	}
+	return additionalFields, nil
+}
+
 // UpdateSession registers POST /update-session.
 func UpdateSession(api huma.API, basePath string, opts types.Options) {
 	registerAuthOperation(api, huma.Operation{
@@ -188,6 +216,15 @@ func UpdateSession(api huma.API, basePath string, opts types.Options) {
 			return nil, huma.NewError(types.StatusForCode(types.ErrFailedToGetSession), types.ErrFailedToGetSession)
 		}
 
+		// Stateless (DB-less) deployments keep the session in the signed
+		// cookie cache only (upstream update-session.ts !isStateful branch):
+		// the cached pair is the record, so the update merges into it and
+		// re-issues the cookies. A missing or unverifiable cache fails
+		// closed like a revoked session.
+		if !isStatefulSessionStore(opts) {
+			return updateSessionStateless(ctx, input, opts, token)
+		}
+
 		_, userRow, _, err := loadSessionAndUser(ctx, opts, token)
 		if err != nil {
 			if errors.Is(err, errSessionExpired) {
@@ -199,26 +236,9 @@ func UpdateSession(api huma.API, basePath string, opts types.Options) {
 			return nil, huma.NewError(types.StatusForCode(types.ErrFailedToGetSession), types.ErrFailedToGetSession)
 		}
 
-		if input.Body == nil {
-			return nil, huma.NewError(types.StatusForCode(types.ErrBodyMustBeAnObject), types.ErrBodyMustBeAnObject)
-		}
-		// Full-schema update fields (union semantics): known fields get
-		// upstream update semantics (input:false rejection, validator and
-		// transform input hooks); fields unknown to the full schema keep
-		// the legacy passthrough so previously accepted bodies are never
-		// newly rejected.
-		additionalFields, ferr := FilterSessionUpdateFieldsFull(input.Body, fullSessionFields(opts))
+		additionalFields, ferr := sessionUpdateFields(input.Body, opts)
 		if ferr != nil {
-			var parseErr *FieldParseError
-			if errors.As(ferr, &parseErr) {
-				return nil, huma.NewError(types.StatusForCode(parseErr.Code), parseErr.Code)
-			}
-			// Transform failures propagate raw upstream; surface them as a
-			// 500 like the other adapter/cookie failures in this handler.
-			return nil, huma.Error500InternalServerError(ferr.Error())
-		}
-		if len(additionalFields) == 0 {
-			return nil, huma.Error400BadRequest("No fields to update")
+			return nil, ferr
 		}
 
 		now := time.Now().UTC()
@@ -300,4 +320,46 @@ func UpdateSession(api huma.API, basePath string, opts types.Options) {
 		out.Body.Session = session
 		return out, nil
 	})
+}
+
+// updateSessionStateless serves POST /update-session for DB-less deployments,
+// where the signed cookie cache is the session record (upstream
+// update-session.ts `updatedSession ?? {...session.session, ...fields}` fall
+// back under !isStateful). The cached pair authenticates (a missing or
+// unverifiable cache fails closed with expired cookies), the validated fields
+// merge over it, and the issuance set refreshes the cookies.
+func updateSessionStateless(ctx context.Context, input *updateSessionInput, opts types.Options, token string) (*updateSessionOutput, error) {
+	cached, ok := cachedSessionFromRequestFull(ctx, input.Cookie, opts.AllSecrets(), token, opts)
+	if !ok || cached == nil {
+		out := &updateSessionOutput{}
+		out.SetCookie = expiredSessionCookiesWithContext(ctx, opts, input.CookieRequestHeaders, input.Cookie)
+		return nil, huma.NewError(types.StatusForCode(types.ErrFailedToGetSession), types.ErrFailedToGetSession)
+	}
+
+	additionalFields, ferr := sessionUpdateFields(input.Body, opts)
+	if ferr != nil {
+		return nil, ferr
+	}
+
+	now := time.Now().UTC()
+	merged := cached.Session
+	if merged.AdditionalFields == nil {
+		merged.AdditionalFields = make(map[string]any, len(additionalFields))
+	}
+	for key, value := range additionalFields {
+		merged.AdditionalFields[key] = value
+	}
+	merged.UpdatedAt = now
+
+	cookiesOut, cookieErr := issueSessionCookiesWithContext(ctx, opts, headersWithStoredRequest(ctx, input.CookieRequestHeaders), token, merged, cached.User, opts.Session, now, false)
+	if cookieErr != nil {
+		// Kept 500 (differs from StatusForCode 401 for FAILED_TO_GET_SESSION):
+		// cookie failure while updating, not a semantic lookup failure.
+		return nil, huma.Error500InternalServerError(types.ErrFailedToGetSession)
+	}
+
+	out := &updateSessionOutput{}
+	out.SetCookie = cookiesOut
+	out.Body.Session = merged
+	return out, nil
 }
