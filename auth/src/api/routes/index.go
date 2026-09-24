@@ -47,10 +47,11 @@ package routes
 //	sign-up.go:              SignUpEmail (signUpWithEmailAndPassword)
 //
 //	V1 SCOPE (auth/SCOPE.md): social auth is explicitly out of scope.
-//	There is no `social.go` in this tree; `SignInSocial`/`CallbackOAuth`
-//	(`/sign-in/social`, `/callback/{provider}`) are not registered and must
-//	stay absent until v1 scope changes. The stale catalog line below is kept
-//	for archaeology only and does not describe a present file:
+//	`callback.go` is the exclusion stub for upstream `callback.ts`
+//	(`CallbackOAuth`/`SignInSocial` never registered); `DeleteUserCallback`
+//	(`/delete-user/callback`, owned by `update-user.ts`) lives in
+//	`delete-user-callback.go`. The stale catalog line below is kept
+//	for archaeology only and does not describe a present registrar:
 //
 // Intentional Go splits (same package, no import impact). Consolidation
 // toward the single-file TS owners was evaluated and deliberately deferred:
@@ -71,8 +72,9 @@ package routes
 //     `cookie-cache.ts`). `session-extra.go` -> `session.ts` (revoke
 //     variants) and `update-session.ts` (`UpdateSession`).
 //   - `social.go` -> `sign-in.ts` (`SignInSocial`) + `callback.ts`
-//     (`CallbackOAuth` GET+POST). V1-EXCLUDED (auth/SCOPE.md): no such file
-//     in tree; do not re-add without a scope change.
+//     (`CallbackOAuth` GET+POST). V1-EXCLUDED (auth/SCOPE.md): no such
+//     registrar in tree; `callback.go` is the exclusion stub. Do not re-add
+//     without a scope change.
 //   - `delete-user-callback.go` -> `callback.ts` side (`DeleteUserCallback`)
 //     alongside `update-user.ts` ownership of `DeleteUser`.
 //   - `hooks.go` -> `src/api/dispatch.go` + `src/api/to-auth-endpoints.go`

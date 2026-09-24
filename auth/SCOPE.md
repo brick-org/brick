@@ -34,7 +34,6 @@ Upstream tests tracked (13 files, 495 cases — see `parity_ledger.json`):
 - `packages/better-auth/src/crypto/secret-rotation.test.ts`
 
 ## Out of scope for v1 (not "missing", explicitly excluded)
-
 - All `src/plugins/*` (admin, organization, jwt, anonymous, email-otp,
   phone-number, two-factor, magic-link, bearer, multi-session, etc. — 27 total)
 - `packages/oauth-provider/src/*` (protocol, DCR, device-code, extensions)
@@ -60,3 +59,32 @@ upstream Better Auth (TS) directly.
    `src/utils/*.gen.go` only (`transpiler/README.md`).
 4. `PARITY.md` plugin/oauth-provider/social `Done` tables are superseded by
    this file; they describe code that does not exist in this tree.
+
+## File map (TS → Go, 1:1 at package level)
+
+Upstream module → Go counterpart. Splits are documented, never phantom:
+
+- `api/routes/account.ts` → `src/api/routes/account.go` (list-accounts)
+- `api/routes/update-user.ts` → `src/api/routes/account.go` (UpdateUser,
+  ChangeEmail, DeleteUser) + `delete-user-callback.go` (DeleteUserCallback)
+- `api/routes/callback.ts` → `src/api/routes/callback.go` (v1-excluded stub;
+  social `CallbackOAuth` never registered)
+- `api/routes/email-verification.ts` → `email-verification.go`
+- `api/routes/error.ts` → `error.go`
+- `api/routes/ok.ts` → `ok.go`
+- `api/routes/password.ts` → `password.go` + `password-extra.go`
+  (VerifyPassword, reset-password callback)
+- `api/routes/session.ts` → `session.go` + `session-extra.go`
+  (revoke variants, UpdateSession) + `session-c701.go` (cookie-cache issuance)
+- `api/routes/update-session.ts` → `session-extra.go` (UpdateSession)
+- `api/routes/sign-in.ts` (email leg) → `sign-in.go` (social leg excluded)
+- `api/routes/sign-out.ts` → `sign-out.go`
+- `api/routes/sign-up.ts` → `sign-up.go`
+- `api/routes/index.ts` → `index.go` (catalog doc only)
+- `cookies/*` → `src/cookies/*`, `crypto/*` → `src/crypto/*`,
+  `db/*` → `src/db/*` + `adapters/bun/*`, `context/*` → `src/context/*`
+
+Go-only (no TS counterpart, kept): `generate-id.go`, `schema-fields.go`,
+`hooks.go`, `api/dispatch.go`, `api/to-auth-endpoints.go`.
+Merges of the `*-extra.go` / `session-c701.go` splits into single-file TS
+owners are deferred as high-churn, behavior-neutral (see `index.go`).
