@@ -11,11 +11,11 @@ package cookies
 //
 // Port-blocked gaps (reported, not implemented — non-test files are
 // out of scope for this agent):
-//   - setRequestCookie (request-header cookie write/replace with
-//     percent-encoding of reserved octets) has no Go equivalent.
-//   - parseSetCookieHeader + toCookieOptions (response Set-Cookie parsing:
-//     Expires with commas, Max-Age, Secure/HttpOnly/SameSite/Partitioned)
-//     has no Go equivalent.
+//   - setRequestCookie: now implemented as SetRequestCookieHeader
+//     (see setcookie_v1_test.go); the note below is historical.
+//   - parseSetCookieHeader + toCookieOptions: now implemented as
+//     ParseSetCookieHeader + SetCookieAttributes.ToAttributes
+//     (see setcookie_v1_test.go); the note below is historical.
 
 import (
 	"crypto/hmac"

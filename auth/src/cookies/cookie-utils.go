@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // Cookie prefix constants mirroring
@@ -116,10 +118,10 @@ func ResolveDomain(crossSubDomainEnabled bool, domainOverride, baseURL string) (
 // Attributes describes the Set-Cookie attributes for a Better Auth cookie.
 // It mirrors better-call CookieOptions as used by upstream createCookie:
 // Secure, SameSite (default "lax"), Path (default "/"), HttpOnly (default
-// true), plus optional Domain (cross-subdomain), MaxAge, and Partitioned
-// (CHIPS). Per-cookie attribute overrides win over defaults, matching the
-// upstream spread order (defaults, then overrideAttributes, then
-// advanced.cookies[name].attributes).
+// true), plus optional Domain (cross-subdomain), MaxAge, Expires, and
+// Partitioned (CHIPS). Per-cookie attribute overrides win over defaults,
+// matching the upstream spread order (defaults, then overrideAttributes,
+// then advanced.cookies[name].attributes).
 type Attributes struct {
 	Secure      bool
 	SameSite    http.SameSite
@@ -128,6 +130,8 @@ type Attributes struct {
 	Domain      string
 	MaxAge      int
 	MaxAgeSet   bool
+	Expires     time.Time
+	ExpiresSet  bool
 	Partitioned bool
 }
 
@@ -164,6 +168,10 @@ func (a Attributes) WithOverrides(o Attributes) Attributes {
 		out.MaxAge = o.MaxAge
 		out.MaxAgeSet = true
 	}
+	if o.ExpiresSet {
+		out.Expires = o.Expires
+		out.ExpiresSet = true
+	}
 	// Booleans only override toward true here; clearing Secure/HttpOnly is
 	// done via explicit constructors to avoid ambiguous zero values.
 	if o.Secure {
@@ -196,6 +204,9 @@ func (a Attributes) ToHTTPCookie(name, value string) *http.Cookie {
 	}
 	if a.MaxAgeSet {
 		c.MaxAge = a.MaxAge
+	}
+	if a.ExpiresSet {
+		c.Expires = a.Expires
 	}
 	return c
 }
@@ -372,4 +383,357 @@ func tryDecodeCookieValue(value string) string {
 		return decoded
 	}
 	return value
+}
+
+// Set-Cookie response parsing and request-cookie writes, mirroring
+// vendor/better-auth/packages/better-auth/src/cookies/cookie-utils.ts
+// (splitSetCookieHeader, parseSetCookieHeader, toCookieOptions,
+// setRequestCookie, applySetCookies) and the expireCookie helper in
+// cookies/index.ts.
+//
+// The request-header writers operate on serialized Cookie header strings
+// (net/http has no JS-Headers equivalent here) with order-preserving
+// parse-mutate-serialize semantics matching the upstream Map-based merge.
+
+// SetCookieAttributes is one parsed Set-Cookie line, mirroring upstream
+// CookieAttributes: the decoded value plus the recognized attributes.
+// Unrecognized attributes are dropped (toCookieOptions ignores them too).
+type SetCookieAttributes struct {
+	Value       string
+	MaxAge      int
+	MaxAgeSet   bool
+	Expires     time.Time
+	ExpiresSet  bool
+	Domain      string
+	Path        string
+	Secure      bool
+	HttpOnly    bool
+	Partitioned bool
+	SameSite    http.SameSite
+}
+
+// SetCookieEntry pairs a cookie name with its parsed attributes, preserving
+// wire order for multi-cookie headers.
+type SetCookieEntry struct {
+	Name string
+	Attr SetCookieAttributes
+}
+
+// SplitSetCookieHeader splits a comma-joined Set-Cookie header into
+// individual cookie strings, mirroring upstream splitSetCookieHeader: a
+// comma starts a new cookie only when the text after it (past spaces) runs
+// to "=" before any ";" or "," — so Expires dates ("Mon, 02 Mar ... GMT;
+// ...") never split.
+func SplitSetCookieHeader(setCookie string) []string {
+	if setCookie == "" {
+		return nil
+	}
+	var result []string
+	start := 0
+	i := 0
+	for i < len(setCookie) {
+		if setCookie[i] == ',' {
+			j := i + 1
+			for j < len(setCookie) && setCookie[j] == ' ' {
+				j++
+			}
+			for j < len(setCookie) && setCookie[j] != '=' && setCookie[j] != ';' && setCookie[j] != ',' {
+				j++
+			}
+			if j < len(setCookie) && setCookie[j] == '=' {
+				if part := strings.TrimSpace(setCookie[start:i]); part != "" {
+					result = append(result, part)
+				}
+				start = i + 1
+				for start < len(setCookie) && setCookie[start] == ' ' {
+					start++
+				}
+				i = start
+				continue
+			}
+		}
+		i++
+	}
+	if last := strings.TrimSpace(setCookie[start:]); last != "" {
+		result = append(result, last)
+	}
+	return result
+}
+
+// parseSetCookieList parses a Set-Cookie header into ordered entries,
+// mirroring upstream parseSetCookieHeader before its Map assembly.
+func parseSetCookieList(setCookie string) []SetCookieEntry {
+	var out []SetCookieEntry
+	for _, line := range SplitSetCookieHeader(setCookie) {
+		rawParts := strings.Split(line, ";")
+		parts := make([]string, len(rawParts))
+		for i, p := range rawParts {
+			parts[i] = strings.TrimSpace(p)
+		}
+		nameValue := parts[0]
+		var name, rawValue string
+		if eq := strings.IndexByte(nameValue, '='); eq < 0 {
+			name = nameValue
+		} else {
+			name = nameValue[:eq]
+			rawValue = nameValue[eq+1:]
+		}
+		if name == "" {
+			continue
+		}
+		attr := SetCookieAttributes{Value: tryDecodeCookieValue(unquoteCookieValue(rawValue))}
+		for _, a := range parts[1:] {
+			var attrName, attrValue string
+			if eq := strings.IndexByte(a, '='); eq < 0 {
+				attrName = a
+			} else {
+				attrName = a[:eq]
+				attrValue = a[eq+1:]
+			}
+			switch strings.ToLower(strings.TrimSpace(attrName)) {
+			case "max-age":
+				if attrValue != "" {
+					if n, ok := parseJSInt(attrValue); ok {
+						attr.MaxAge, attr.MaxAgeSet = n, true
+					}
+				}
+			case "expires":
+				if attrValue != "" {
+					if t, ok := parseSetCookieDate(strings.TrimSpace(attrValue)); ok {
+						attr.Expires, attr.ExpiresSet = t, true
+					}
+				}
+			case "domain":
+				if attrValue != "" {
+					attr.Domain = strings.TrimSpace(attrValue)
+				}
+			case "path":
+				if attrValue != "" {
+					attr.Path = strings.TrimSpace(attrValue)
+				}
+			case "secure":
+				attr.Secure = true
+			case "httponly":
+				attr.HttpOnly = true
+			case "samesite":
+				if attrValue != "" {
+					attr.SameSite = ParseSameSite(attrValue)
+				}
+			case "partitioned":
+				attr.Partitioned = true
+			default:
+				// Any other attribute is ignored (toCookieOptions drops it).
+			}
+		}
+		out = append(out, SetCookieEntry{Name: name, Attr: attr})
+	}
+	return out
+}
+
+// ParseSetCookieHeader parses a Set-Cookie header into name/attributes
+// pairs, mirroring upstream parseSetCookieHeader. Values are unquoted per
+// RFC 6265 §4.1.1 quoted-string form and percent-decoded (malformed escapes
+// pass through verbatim). Duplicate names resolve last-wins, matching the
+// upstream Map assembly.
+func ParseSetCookieHeader(setCookie string) map[string]SetCookieAttributes {
+	out := map[string]SetCookieAttributes{}
+	for _, e := range parseSetCookieList(setCookie) {
+		out[e.Name] = e.Attr
+	}
+	return out
+}
+
+// ToAttributes converts parsed Set-Cookie attributes into cookie options,
+// mirroring upstream toCookieOptions.
+func (a SetCookieAttributes) ToAttributes() Attributes {
+	return Attributes{
+		Path:        a.Path,
+		Expires:     a.Expires,
+		ExpiresSet:  a.ExpiresSet,
+		MaxAge:      a.MaxAge,
+		MaxAgeSet:   a.MaxAgeSet,
+		Secure:      a.Secure,
+		HttpOnly:    a.HttpOnly,
+		SameSite:    a.SameSite,
+		Partitioned: a.Partitioned,
+		Domain:      a.Domain,
+	}
+}
+
+// setCookieDateLayouts parses the Expires formats upstream accepts via
+// `new Date(...)`: IMF-fixdate (RFC 1123), the RFC 850 variant, and asctime.
+var setCookieDateLayouts = []string{
+	time.RFC1123,
+	time.RFC850,
+	time.ANSIC,
+	"Monday, 02-Jan-2006 15:04:05 MST",
+}
+
+func parseSetCookieDate(s string) (time.Time, bool) {
+	for _, layout := range setCookieDateLayouts {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
+// parseJSInt parses an integer with JavaScript parseInt(s, 10) semantics:
+// leading whitespace, an optional sign, then the longest leading digit run.
+// It returns ok=false when no digits follow (NaN upstream).
+func parseJSInt(s string) (int, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, false
+	}
+	i := 0
+	if s[0] == '+' || s[0] == '-' {
+		i = 1
+	}
+	j := i
+	for j < len(s) && s[j] >= '0' && s[j] <= '9' {
+		j++
+	}
+	if j == i {
+		return 0, false
+	}
+	n, err := strconv.Atoi(s[:j])
+	if err != nil {
+		return 0, false
+	}
+	return n, true
+}
+
+type cookiePair struct {
+	name  string
+	value string
+}
+
+// parseRequestPairs parses a Cookie header into ordered, decoded pairs with
+// a name index, mirroring upstream parseCookies plus Map insertion order
+// (duplicate names update in place, keeping first position).
+func parseRequestPairs(header string) ([]cookiePair, map[string]int) {
+	index := map[string]int{}
+	if len(header) < 2 {
+		return nil, index
+	}
+	var pairs []cookiePair
+	for _, chunk := range strings.Split(header, ";") {
+		eq := strings.IndexByte(chunk, '=')
+		if eq < 0 {
+			continue
+		}
+		key := trimOWS(chunk[:eq])
+		val := unquoteCookieValue(trimOWS(chunk[eq+1:]))
+		if !validCookieName(key) || !validCookieValue(val) {
+			continue
+		}
+		val = tryDecodeCookieValue(val)
+		if i, ok := index[key]; ok {
+			pairs[i].value = val
+		} else {
+			index[key] = len(pairs)
+			pairs = append(pairs, cookiePair{name: key, value: val})
+		}
+	}
+	return pairs, index
+}
+
+func serializeCookiePairs(pairs []cookiePair) string {
+	parts := make([]string, 0, len(pairs))
+	for _, p := range pairs {
+		parts = append(parts, p.name+"="+EncodeCookieValue(p.value))
+	}
+	return strings.Join(parts, "; ")
+}
+
+// EncodeCookieValue percent-encodes a semantic cookie value for the Cookie
+// wire header, mirroring encodeURIComponent on write (upstream
+// setRequestCookie/applySetCookies): every byte outside the unreserved set
+// becomes %XX (uppercase hex), including UTF-8 continuation bytes.
+func EncodeCookieValue(s string) string {
+	const unreserved = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.!~*'()"
+	var sb strings.Builder
+	sb.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if strings.IndexByte(unreserved, c) >= 0 {
+			sb.WriteByte(c)
+		} else {
+			const hexd = "0123456789ABCDEF"
+			sb.WriteByte('%')
+			sb.WriteByte(hexd[c>>4])
+			sb.WriteByte(hexd[c&0x0F])
+		}
+	}
+	return sb.String()
+}
+
+// SetRequestCookieHeader adds or replaces name in the Cookie request header,
+// mirroring upstream setRequestCookie: existing pairs are preserved in order
+// (RFC 6265 "; " join), a same-name entry is replaced in place, malformed
+// pairs are dropped, and the value is percent-encoded on serialize. Names
+// outside the RFC 7230 token set are ignored (the header is still rebuilt
+// from the surviving pairs).
+func SetRequestCookieHeader(header, name, value string) string {
+	pairs, index := parseRequestPairs(header)
+	if validCookieName(name) {
+		if i, ok := index[name]; ok {
+			pairs[i].value = value
+		} else {
+			pairs = append(pairs, cookiePair{name: name, value: value})
+		}
+	}
+	return serializeCookiePairs(pairs)
+}
+
+// ApplySetCookiesHeader merges Set-Cookie header values into the Cookie
+// request header, mirroring upstream applySetCookies: only name=value lands
+// (attributes stripped), last-wins on duplicate names keeping first
+// position, values re-encoded on the wire join, and quoted-string wrapping
+// stripped via the Set-Cookie parse.
+func ApplySetCookiesHeader(header string, setCookies []string) string {
+	pairs, index := parseRequestPairs(header)
+	for _, sc := range setCookies {
+		for _, e := range parseSetCookieList(sc) {
+			if !validCookieName(e.Name) {
+				continue
+			}
+			if i, ok := index[e.Name]; ok {
+				pairs[i].value = e.Attr.Value
+			} else {
+				index[e.Name] = len(pairs)
+				pairs = append(pairs, cookiePair{name: e.Name, value: e.Attr.Value})
+			}
+		}
+	}
+	return serializeCookiePairs(pairs)
+}
+
+// ExpireCookie builds the expiry cookie for name (empty value, MaxAge=0,
+// attributes preserved), mirroring upstream expireCookie's setCookie call.
+// Wire rendering of MaxAge=0 follows net/http (absent attribute; MaxAge<0
+// renders "Max-Age=0"); callers that need the explicit wire attribute map
+// through their serializer.
+func ExpireCookie(name string, attrs Attributes) *http.Cookie {
+	expired := attrs
+	expired.MaxAge = 0
+	expired.MaxAgeSet = true
+	return expired.ToHTTPCookie(name, "")
+}
+
+// ScrubSetCookieEntries removes prior Set-Cookie entries for name and its
+// chunked variants ("<name>.<i>") from serialized entries, mirroring the
+// collapsed-header fallback of upstream removeSetCookieEntries (used when
+// Headers.getSetCookie is unavailable). Survivors keep wire order.
+func ScrubSetCookieEntries(entries []string, name string) []string {
+	exact, chunk := name+"=", name+"."
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if strings.HasPrefix(e, exact) || strings.HasPrefix(e, chunk) {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
 }
