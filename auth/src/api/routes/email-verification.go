@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -211,6 +212,14 @@ func sendVerificationEmailForUser(ctx context.Context, opts types.Options, userR
 	}
 	verificationURL := fmt.Sprintf("%s/verify-email?token=%s&callbackURL=%s", opts.BasePath, url.QueryEscape(token), url.QueryEscape(target))
 	if err := deliverVerificationEmail(ctx, opts, types.VerificationEmailData{User: &user, URL: verificationURL, Token: token}); err != nil {
+		// Upstream sendVerificationEmailFn awaits the sender directly
+		// (email-verification.ts:69-70, see #8757): a sender-thrown APIError
+		// (e.g. rate-limit TOO_MANY_REQUESTS) keeps its own status instead
+		// of collapsing to 500. Non-APIError delivery failures stay 500.
+		var httpErr types.HttpError
+		if errors.As(err, &httpErr) {
+			return huma.NewError(httpErr.Status, httpErr.Code)
+		}
 		return huma.Error500InternalServerError("failed to send verification email")
 	}
 	return nil
@@ -226,8 +235,8 @@ type verifyEmailInput struct {
 type verifyEmailOutput struct {
 	SetCookie []http.Cookie `header:"Set-Cookie"`
 	Body      struct {
-		Status bool        `json:"status"`
-		User   *types.User `json:"user,omitempty"`
+		Status bool      `json:"status"`
+		User   *flatUser `json:"user,omitempty"`
 	}
 }
 
@@ -251,7 +260,10 @@ func VerifyEmail(api huma.API, basePath string, opts types.Options) {
 		}
 		out := &verifyEmailOutput{}
 		out.Body.Status = true
-		out.Body.User = user
+		if user != nil {
+			flat := flatUser(*user)
+			out.Body.User = &flat
+		}
 		out.SetCookie = cookies
 		return out, nil
 	})
@@ -344,7 +356,11 @@ func VerifyEmailGet(api huma.API, basePath string, opts types.Options) {
 			redirect(callbackURL)
 			return
 		}
-		writeJSON(http.StatusOK, map[string]any{"status": true, "user": user})
+		var respUser any
+		if user != nil {
+			respUser = flatUser(*user)
+		}
+		writeJSON(http.StatusOK, map[string]any{"status": true, "user": respUser})
 	})
 }
 

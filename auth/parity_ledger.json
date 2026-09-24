@@ -103,8 +103,17 @@
         "it: refreshes a valid account cookie whose userId differs from the session user",
         "it: preserves a valid mismatched account cookie during stateless session refresh"
       ],
-      "covered": [],
-      "notes": "Link/unlink/get-access-token/refresh-token/account-info/delete-callback happy paths covered by new_endpoints_test.go; ValidateUserInfo, account-cookie storage, stateless legs, and full matrices open."
+      "covered": [
+        {
+          "case": "should list all accounts",
+          "goTest": "TestCredsV1_ListAccounts"
+        },
+        {
+          "case": "should not expose empty scope tokens from stored empty account scope",
+          "goTest": "TestCredsV1_ListAccountsEmptyScope"
+        }
+      ],
+      "notes": "List-accounts core legs covered; all social/link/token/account-cookie/stateless legs v1-excluded."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/api/routes/cookie-cache-fallback.test.ts",
@@ -195,9 +204,33 @@
         {
           "case": "should enforce a constant-time floor for both existing and non-existing emails",
           "goTest": "TestParity_SendVerificationEmailUnauthenticatedFloor"
+        },
+        {
+          "case": "should return APIError status when sendVerificationEmail throws (e.g. rate limit)",
+          "goTest": "TestCredsV1_SendVerificationSenderAPIErrorPropagates"
+        },
+        {
+          "case": "should still surface errors from sendVerificationEmail after the minimum delay",
+          "goTest": "TestCredsV1_SendVerificationMissingEmailFloor"
+        },
+        {
+          "case": "should send a verification email when enabled",
+          "goTest": "TestCredsV1_SendVerificationDelivers"
+        },
+        {
+          "case": "should not send verification email when a third party requests for an already verified user",
+          "goTest": "TestCredsV1_SendVerificationSkipsVerifiedThirdParty"
+        },
+        {
+          "case": "should redirect to callback",
+          "goTest": "TestCredsV1_VerifyEmailGetRedirectsToCallback (supplement)"
+        },
+        {
+          "case": "should preserve encoded characters in callback URL",
+          "goTest": "TestCredsV1_VerifyEmailGetPreservesEncodedCallback"
         }
       ],
-      "notes": "GET/redirect/POST-alias, timing floor, HS256 issuance covered (the covered 'should verify email' is the one in the 'Email Verification' describe; the Secondary Storage duplicate stays open); request-aware callbacks, cleanup flags, secondary-storage legs, and body-consumption cases open."
+      "notes": "Sender API-error propagation, delivery, verified-skip, redirect/encoding covered; cleanup flags and secondary-storage legs open."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/api/routes/error.test.ts",
@@ -214,12 +247,16 @@
         "it: should sanitize code parameter"
       ],
       "covered": [
-        "TestErrorPageSanitizesDescription",
-        "TestErrorPageSanitizesCode",
-        "TestErrorPageCustomRendering",
-        "TestErrorPageStructure"
+        {
+          "case": "should sanitize error description to prevent XSS",
+          "goTest": "TestErrorPageSanitizesDescription"
+        },
+        {
+          "case": "should sanitize code parameter",
+          "goTest": "TestErrorPageSanitizesCode"
+        }
       ],
-      "notes": "XSS sanitization + rendering covered by AUTH-C7-04 (Wave-10 verified); full upstream snapshot parity open."
+      "notes": "XSS sanitization covered by error_test.go; full snapshot parity open."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/api/routes/password.test.ts",
@@ -270,9 +307,45 @@
         {
           "case": "should verify password with correct password",
           "goTest": "TestVerifyPassword_AcceptsCurrentPassword"
+        },
+        {
+          "case": "should not reveal user existence on failure",
+          "goTest": "TestCredsV1_RequestResetUnknownUserWarnsGeneric"
+        },
+        {
+          "case": "should reject untrusted redirectTo",
+          "goTest": "TestCredsV1_RequestResetRejectsUntrustedRedirect (supplement)"
+        },
+        {
+          "case": "should allow callbackURL to have multiple query params",
+          "goTest": "TestCredsV1_ResetURLCallbackEncoding"
+        },
+        {
+          "case": "should not reveal failure of email sending",
+          "goTest": "TestCredsV1_ResetSenderFailureStillGeneric"
+        },
+        {
+          "case": "shouldn't allow the token to be used twice",
+          "goTest": "TestCredsV1_ResetTokenSingleUseHTTP (HTTP-level supplement)"
+        },
+        {
+          "case": "should verify the token",
+          "goTest": "TestCredsV1_ResetCallbackRedirect (callback-route leg)"
+        },
+        {
+          "case": "should verify password with correct password",
+          "goTest": "TestCredsV1_VerifyPasswordStatuses (supplement)"
+        },
+        {
+          "case": "should fail to verify password with incorrect password",
+          "goTest": "TestCredsV1_VerifyPasswordStatuses (supplement)"
+        },
+        {
+          "case": "should require a session to verify password",
+          "goTest": "TestCredsV1_VerifyPasswordStatuses (supplement)"
         }
       ],
-      "notes": "Single-use DB tokens, redirectTo trust, query tokens, verify-password happy path covered; revocation-on-reset, enumeration timing, and full error matrices open."
+      "notes": "Generic messages, redirectTo trust, sender-failure, single-use, callback redirects, verify-password statuses covered; revocation-on-reset and enumeration timing open."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/api/routes/session-api.test.ts",
@@ -445,8 +518,21 @@
         "it: should store email as lowercase regardless of input casing",
         "it: should not allow duplicate sign-ups with different email casing"
       ],
-      "covered": [],
-      "notes": "Credential and social-ID-token sign-in, remember-me/callbackURL pairs covered; request-aware callbacks, response variants, and enumeration timing open."
+      "covered": [
+        {
+          "case": "logs expected auth validation failures below error level",
+          "goTest": "TestCredsV1_SignInWarnLogs"
+        },
+        {
+          "case": "should return additionalFields in signInEmail response",
+          "goTest": "TestCredsV1_SignInAdditionalFields"
+        },
+        {
+          "case": "should sign in with different email casing than sign-up",
+          "goTest": "TestCredsV1_SignInCaseInsensitive"
+        }
+      ],
+      "notes": "Warn logs, additionalFields, case-insensitivity covered; CSRF/origin/form-data legs excluded."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/api/routes/sign-out.test.ts",
@@ -523,8 +609,41 @@
         "describe: sign-up enumeration protection \u2014 customSyntheticUser with admin plugin",
         "it: should return indistinguishable response with admin plugin fields"
       ],
-      "covered": [],
-      "notes": "Credential sign-up, synthetic duplicates, session creation covered; additional-field transforms, request-aware callbacks, rollback ordering open."
+      "covered": [
+        {
+          "case": "should work with custom fields on account table",
+          "goTest": "TestCredsV1_SignUpAdditionalFields"
+        },
+        {
+          "case": "should succeed when passing empty name",
+          "goTest": "TestCredsV1_SignUpEmptyName"
+        },
+        {
+          "case": "should not allow user to set the field that is set to input: false",
+          "goTest": "TestCredsV1_SignUpInputFalseRejected"
+        },
+        {
+          "case": "should return additionalFields in signUpEmail response",
+          "goTest": "TestCredsV1_SignUpAdditionalFields (response shape)"
+        },
+        {
+          "case": "should throw status code 400 when passing invalid body",
+          "goTest": "TestCredsV1_SignUpMissingPasswordIsClientError + TestCredsV1_SignUpShortPasswordWarns"
+        },
+        {
+          "case": "should properly encode callbackURL with query parameters when sending verification email",
+          "goTest": "TestCredsV1_SignUpVerificationURLEncoding"
+        },
+        {
+          "case": "should not allow duplicate sign-ups with different email casing",
+          "goTest": "TestCredsV1_SignUpDuplicateCaseInsensitive"
+        },
+        {
+          "case": "should have identical image key presence for real and synthetic user when image is omitted",
+          "goTest": "TestCredsV1_SyntheticResponseParity"
+        }
+      ],
+      "notes": "Additional-fields create, synthetic parity, enumeration, URL-encoding covered by creds_v1_signup suite; CSRF/form-data/secondary-storage legs excluded."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/api/routes/update-user.test.ts",
@@ -572,8 +691,65 @@
         "describe: setPassword",
         "it: sets the password on the existing passwordless credential account"
       ],
-      "covered": [],
-      "notes": "Update-user matrices partially covered by Wave 2 route suites; *Full parsing adoption and full hook matrices open."
+      "covered": [
+        {
+          "case": "should unset image",
+          "goTest": "TestCredsV1_UpdateUserUnsetsImage"
+        },
+        {
+          "case": "should not allow updating user with additional fields that are input: false",
+          "goTest": "TestCredsV1_UpdateUserInputFalseRejected"
+        },
+        {
+          "case": "should not update password if current password is wrong",
+          "goTest": "TestCredsV1_ChangePasswordWrongCurrent"
+        },
+        {
+          "case": "should revoke other sessions",
+          "goTest": "TestCredsV1_ChangePasswordRevokesOthers"
+        },
+        {
+          "case": "should return 200 when target email already exists",
+          "goTest": "TestCredsV1_ChangeEmailExistingTarget"
+        },
+        {
+          "case": "should return the same error for existing and non-existing emails",
+          "goTest": "TestCredsV1_ChangeEmailSameErrorWithoutSender"
+        },
+        {
+          "case": "preserves a callbackURL that carries its own query string",
+          "goTest": "TestCredsV1_ChangeEmailCallbackEncoding"
+        },
+        {
+          "case": "returns 400 when sendVerificationEmail is not configured",
+          "goTest": "TestCredsV1_ChangeEmailConfirmationOnlyConfig"
+        },
+        {
+          "case": "keeps one credential account when the user changes their sign-in email",
+          "goTest": "TestCredsV1_ChangeEmailKeepsCredentialAccount"
+        },
+        {
+          "case": "should change email only after confirming both addresses",
+          "goTest": "TestCredsV1_ChangeEmailDoubleConfirm"
+        },
+        {
+          "case": "should delete the user with a fresh session",
+          "goTest": "TestCredsV1_DeleteUserFreshSession"
+        },
+        {
+          "case": "should require password when session is no longer fresh",
+          "goTest": "TestCredsV1_DeleteUserRequiresPasswordWhenStale"
+        },
+        {
+          "case": "should delete with verification flow and password",
+          "goTest": "TestCredsV1_DeleteUserVerificationFlowWithPassword"
+        },
+        {
+          "case": "rejects /delete-user/callback when the backing session was revoked",
+          "goTest": "TestCredsV1_DeleteUserCallbackRevokedSession"
+        }
+      ],
+      "notes": "Update/change-email/delete-user matrices covered by creds_v1_account suite; secondary-storage propagation legs open."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/cookies/cookies.test.ts",

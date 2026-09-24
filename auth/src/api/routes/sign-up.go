@@ -2,9 +2,11 @@ package routes
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -13,28 +15,123 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 )
 
+type signUpBody struct {
+	Name     string  `json:"name" required:"true"`
+	Email    string  `json:"email" format:"email" required:"true"`
+	Password string  `json:"password" required:"true"`
+	Image    *string `json:"image,omitempty"`
+	// CallbackURL feeds the email-verification link (upstream
+	// sign-up.ts:402-405; "/" when absent).
+	CallbackURL *string `json:"callbackURL,omitempty"`
+	// RememberMe mirrors upstream's rememberMe (sign-up.ts:24,86-90):
+	// explicit false creates a non-persistent session (1-day expiry
+	// plus the dont_remember marker); absent or true remembers.
+	RememberMe *bool `json:"rememberMe,omitempty"`
+	// Extra carries additional user fields (upstream parseUserInput
+	// "create", sign-up.ts:242-246): unknown top-level keys are parsed
+	// against the full user schema instead of being dropped. See
+	// UnmarshalJSON/MarshalJSON.
+	Extra map[string]any `json:"-"`
+}
+
+// UnmarshalJSON captures known fields plus any additional user fields into
+// Extra, mirroring upstream's `{name, email, password, image, callbackURL,
+// rememberMe, ...rest}` split (sign-up.ts:200-208). Unknown keys are
+// preserved verbatim for ParseUserInputFull.
+func (b *signUpBody) UnmarshalJSON(data []byte) error {
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if raw == nil {
+		return nil
+	}
+	if v, ok := raw["name"]; ok {
+		if s, ok := v.(string); ok {
+			b.Name = s
+		}
+		delete(raw, "name")
+	}
+	if v, ok := raw["email"]; ok {
+		if s, ok := v.(string); ok {
+			b.Email = s
+		}
+		delete(raw, "email")
+	}
+	if v, ok := raw["password"]; ok {
+		if s, ok := v.(string); ok {
+			b.Password = s
+		}
+		delete(raw, "password")
+	}
+	if v, ok := raw["image"]; ok {
+		if s, ok := v.(string); ok {
+			b.Image = &s
+		}
+		delete(raw, "image")
+	}
+	if v, ok := raw["callbackURL"]; ok {
+		if s, ok := v.(string); ok {
+			b.CallbackURL = &s
+		}
+		delete(raw, "callbackURL")
+	}
+	if v, ok := raw["rememberMe"]; ok {
+		if bv, ok := v.(bool); ok {
+			b.RememberMe = &bv
+		}
+		delete(raw, "rememberMe")
+	}
+	if len(raw) > 0 {
+		b.Extra = raw
+	}
+	return nil
+}
+
+// MarshalJSON round-trips known fields plus Extra so test clients encoding
+// this body preserve additional fields.
+func (b signUpBody) MarshalJSON() ([]byte, error) {
+	out := map[string]any{}
+	if b.Extra != nil {
+		for k, v := range b.Extra {
+			out[k] = v
+		}
+	}
+	out["name"] = b.Name
+	out["email"] = b.Email
+	out["password"] = b.Password
+	if b.Image != nil {
+		out["image"] = *b.Image
+	}
+	if b.CallbackURL != nil {
+		out["callbackURL"] = *b.CallbackURL
+	}
+	if b.RememberMe != nil {
+		out["rememberMe"] = *b.RememberMe
+	}
+	return json.Marshal(out)
+}
+
+// TransformSchema permits additional properties on the sign-up body,
+// mirroring upstream's `z.object({...}).and(z.record(z.string(), z.any()))`
+// (sign-up.ts:17-26): unknown top-level keys are additional user fields for
+// parseUserInput, not validation failures. Without it huma rejects
+// additional-field sign-ups with 422 before the handler runs.
+func (b signUpBody) TransformSchema(r huma.Registry, s *huma.Schema) *huma.Schema {
+	s.AdditionalProperties = true
+	return s
+}
+
 type signUpInput struct {
 	CookieRequestHeaders
-	Body struct {
-		Name     string  `json:"name" required:"true"`
-		Email    string  `json:"email" format:"email" required:"true"`
-		Password string  `json:"password" required:"true"`
-		Image    *string `json:"image,omitempty"`
-		// CallbackURL feeds the email-verification link (upstream
-		// sign-up.ts:402-405; "/" when absent).
-		CallbackURL *string `json:"callbackURL,omitempty"`
-		// RememberMe mirrors upstream's rememberMe (sign-up.ts:24,86-90):
-		// explicit false creates a non-persistent session (1-day expiry
-		// plus the dont_remember marker); absent or true remembers.
-		RememberMe *bool `json:"rememberMe,omitempty"`
-	}
+	Body signUpBody
 }
 
 type signUpOutput struct {
 	SetCookie []http.Cookie `header:"Set-Cookie"`
 	Body      struct {
-		Token *string    `json:"token"`
-		User  types.User `json:"user"`
+		Token *string `json:"token"`
+		User  flatUser `json:"user"`
 	}
 }
 
@@ -52,15 +149,32 @@ func SignUpEmail(api huma.API, basePath string, opts types.Options) {
 		}
 
 		if len(input.Body.Password) < passwordMinLength(opts) {
+			Logf(opts, "warn", "Password is too short")
 			return nil, huma.NewError(types.StatusForCode(types.ErrPasswordTooShort), types.ErrPasswordTooShort)
 		}
 		if len(input.Body.Password) > passwordMaxLength(opts) {
+			Logf(opts, "warn", "Password is too long")
 			return nil, huma.NewError(types.StatusForCode(types.ErrPasswordTooLong), types.ErrPasswordTooLong)
 		}
 
 		email := strings.ToLower(input.Body.Email)
 		shouldReturnGenericDuplicateResponse := opts.EmailAndPassword.RequireEmailVerification
 		shouldSkipAutoSignIn := !autoSignInEnabled(opts) || shouldReturnGenericDuplicateResponse
+
+		// Additional user fields (upstream parseUserInput "create",
+		// sign-up.ts:242-246): validated/transformed against the full
+		// schema with create semantics (defaults applied, required
+		// enforced, input:false rejected); unknown keys are dropped by the
+		// parser, never persisted. Parsed before the duplicate check so a
+		// truthy input:false value fails even for an existing email,
+		// mirroring upstream's parse-before-lookup order.
+		additional, perr := ParseUserInputFull(input.Body.Extra, normalizeCreateFields(FullUserFields(opts)), "create")
+		if perr != nil {
+			if fp, ok := perr.(*FieldParseError); ok {
+				return nil, huma.NewError(types.StatusForCode(fp.Code), fp.Message)
+			}
+			return nil, huma.Error400BadRequest(perr.Error())
+		}
 
 		// Check for duplicate
 		existing, err := opts.DB.FindOne(ctx, "user", []types.Where{
@@ -125,12 +239,16 @@ func SignUpEmail(api huma.API, basePath string, opts types.Options) {
 							CreatedAt:     now,
 							UpdatedAt:     now,
 						},
-						AdditionalFields: map[string]any{},
+						AdditionalFields: additional,
 					})
+				} else {
+					for k, v := range additional {
+						syntheticRow[k] = v
+					}
 				}
 				out := &signUpOutput{}
 				out.Body.Token = nil
-				out.Body.User = rowToUser(syntheticRow, opts)
+				out.Body.User = flatUser(rowToUser(syntheticRow, opts))
 				return out, nil
 			}
 			return nil, huma.NewError(types.StatusForCode(types.ErrUserAlreadyExistsUseAnotherEmail), types.ErrUserAlreadyExistsUseAnotherEmail)
@@ -161,9 +279,27 @@ func SignUpEmail(api huma.API, basePath string, opts types.Options) {
 					"name": input.Body.Name, "image": input.Body.Image,
 					"createdAt": now, "updatedAt": now,
 				}
+				if opts.EmailAndPassword.CustomSyntheticUser != nil {
+					syntheticRow = opts.EmailAndPassword.CustomSyntheticUser(types.SyntheticUserData{
+						ID: syntheticID,
+						CoreFields: types.SyntheticUserCoreFields{
+							Name:          input.Body.Name,
+							Email:         email,
+							EmailVerified: false,
+							Image:         input.Body.Image,
+							CreatedAt:     now,
+							UpdatedAt:     now,
+						},
+						AdditionalFields: additional,
+					})
+				} else {
+					for k, v := range additional {
+						syntheticRow[k] = v
+					}
+				}
 				out := &signUpOutput{}
 				out.Body.Token = nil
-				out.Body.User = rowToUser(syntheticRow, opts)
+				out.Body.User = flatUser(rowToUser(syntheticRow, opts))
 				return out, nil
 			}
 			return nil, huma.NewError(403, err.Error())
@@ -188,6 +324,11 @@ func SignUpEmail(api huma.API, basePath string, opts types.Options) {
 			"image":         input.Body.Image,
 			"createdAt":     now,
 			"updatedAt":     now,
+		}
+		// Persist parsed additional fields alongside the core columns
+		// (upstream internalAdapter.createUser, sign-up.ts:345-354).
+		for k, v := range additional {
+			userData[k] = v
 		}
 		setRowID(userData, userID, userHasID)
 		// Upstream wraps creation in runWithTransaction (sign-up.ts:183): the
@@ -241,7 +382,7 @@ func SignUpEmail(api huma.API, basePath string, opts types.Options) {
 			if err != nil {
 				return nil, huma.Error500InternalServerError("failed to generate verification token")
 			}
-			url := fmt.Sprintf("%s/verify-email?token=%s&callbackURL=%s", opts.BasePath, token, verificationCallbackURL(input.Body.CallbackURL))
+			url := fmt.Sprintf("%s/verify-email?token=%s&callbackURL=%s", opts.BasePath, token, url.QueryEscape(verificationCallbackURL(input.Body.CallbackURL)))
 			user := rowToUser(userRow, opts)
 			// Upstream awaits via runInBackgroundOrAwait (sign-up.ts:408-417):
 			// delivery failures are logged and swallowed, the route still
@@ -253,7 +394,7 @@ func SignUpEmail(api huma.API, basePath string, opts types.Options) {
 		if shouldSkipAutoSignIn {
 			out := &signUpOutput{}
 			out.Body.Token = nil
-			out.Body.User = rowToUser(userRow, opts)
+			out.Body.User = flatUser(rowToUser(userRow, opts))
 			return out, nil
 		}
 
@@ -271,7 +412,10 @@ func SignUpEmail(api huma.API, basePath string, opts types.Options) {
 
 		session, err := createIssuedSession(ctx, opts, userID, token, expiresAt, now)
 		if err != nil {
-			return nil, huma.NewError(types.StatusForCode(types.ErrFailedToCreateSession), types.ErrFailedToCreateSession)
+			// Kept 400 (differs from StatusForCode 500): upstream
+			// sign-up.ts:435-439 throws BAD_REQUEST when session creation
+			// fails after the user was created.
+			return nil, huma.Error400BadRequest(types.ErrFailedToCreateSession)
 		}
 
 		user := rowToUser(userRow, opts)
@@ -288,7 +432,7 @@ func SignUpEmail(api huma.API, basePath string, opts types.Options) {
 		}
 		out.SetCookie = cookiesOut
 		out.Body.Token = &token
-		out.Body.User = user
+		out.Body.User = flatUser(user)
 		return out, nil
 	})
 }
@@ -301,6 +445,54 @@ func verificationCallbackURL(callbackURL *string) string {
 		return *callbackURL
 	}
 	return "/"
+}
+
+// normalizeCreateFields bridges the option-field required default to
+// upstream parseInputData semantics (db/schema.ts:206: `if
+// (fields[key].required && action === "create")`): an unset required flag is
+// falsy, so the field is optional on create. types.FieldAttribute documents
+// nil as default-true (the column default); route input parsing must not
+// inherit that, or every optional additional field would 400 sign-ups that
+// omit it. Explicit required:true survives the normalization and is still
+// enforced with MISSING_FIELD.
+func normalizeCreateFields(fields map[string]types.FieldAttribute) map[string]types.FieldAttribute {
+	out := make(map[string]types.FieldAttribute, len(fields))
+	optional := false
+	for k, f := range fields {
+		if f.Required == nil {
+			f.Required = &optional
+		}
+		out[k] = f
+	}
+	return out
+}
+
+// flatUser serializes a types.User the way upstream parseUserOutput does:
+// additional fields merge flat onto the user object instead of nesting
+// under "additionalFields" (PARITY.md AUTH-AUDIT-TMODELS-02 prescribes
+// "flatten in the response serializer"). types.User keeps the nested Go
+// shape (types/ is frozen to this lane); only the JSON boundary flattens,
+// so `res.user.newField` reads hold and real-vs-synthetic key order is
+// identical (both sides serialize here).
+type flatUser types.User
+
+// MarshalJSON implements json.Marshaler.
+func (u flatUser) MarshalJSON() ([]byte, error) {
+	out := map[string]any{
+		"id":            u.ID,
+		"email":         u.Email,
+		"emailVerified": u.EmailVerified,
+		"name":          u.Name,
+		"createdAt":     u.CreatedAt,
+		"updatedAt":     u.UpdatedAt,
+	}
+	if u.Image != nil {
+		out["image"] = *u.Image
+	}
+	for k, v := range u.AdditionalFields {
+		out[k] = v
+	}
+	return json.Marshal(out)
 }
 
 func rowToUser(row map[string]any, opts types.Options) types.User {
@@ -435,8 +627,19 @@ func requestContextForCallbacks(ctx context.Context) context.Context {
 
 func stringField(row map[string]any, keys ...string) string {
 	for _, key := range keys {
-		if v, _ := row[key].(string); v != "" {
-			return v
+		switch v := row[key].(type) {
+		case string:
+			if v != "" {
+				return v
+			}
+		case *string:
+			// Pointer cells arise when a create row carries an optional
+			// field straight from a decoded body (e.g. sign-up image) into
+			// an in-memory adapter; unwrap so they read like database
+			// strings. A nil pointer reads as absent, as before.
+			if v != nil && *v != "" {
+				return *v
+			}
 		}
 	}
 	return ""

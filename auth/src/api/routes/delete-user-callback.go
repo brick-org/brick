@@ -52,6 +52,27 @@ func DeleteUserCallback(api huma.API, basePath string, opts types.Options) {
 			return
 		}
 
+		deleteToken := ctx.Query("token")
+		callbackURL := ctx.Query("callbackURL")
+		// Upstream guards the query callbackURL with originCheck before the
+		// handler runs (update-user.ts:580): an untrusted value fails with
+		// 403 INVALID_CALLBACK_URL without consuming the token or deleting.
+		// Relative paths stay trusted (allowRelativePaths).
+		if callbackURL != "" {
+			reqForTrust := StoredRequestFromStd(ctx.Context())
+			if reqForTrust == nil {
+				reqForTrust = RequestFromHuma(ctx)
+			}
+			if !types.IsTrustedRedirect(callbackURL, opts, reqForTrust) {
+				writeJSON(http.StatusForbidden, map[string]any{
+					"status": http.StatusForbidden,
+					"title":  http.StatusText(http.StatusForbidden),
+					"detail": types.ErrInvalidCallbackURL,
+				})
+				return
+			}
+		}
+
 		token := sessionTokenFromRequest(ctx.Header("Cookie"), ctx.Header("Authorization"), opts)
 		if token == "" {
 			writeNotFound(types.ErrFailedToGetUserInfo)
@@ -64,8 +85,6 @@ func DeleteUserCallback(api huma.API, basePath string, opts types.Options) {
 			return
 		}
 
-		deleteToken := ctx.Query("token")
-		callbackURL := ctx.Query("callbackURL")
 		if deleteToken == "" {
 			writeNotFound(types.ErrInvalidToken)
 			return

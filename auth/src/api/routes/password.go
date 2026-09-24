@@ -83,6 +83,9 @@ func RequestPasswordReset(api huma.API, basePath string, opts types.Options) {
 			// timing stays comparable under every storage configuration.
 			_ = crypto.GenerateRandomString(24)
 			_, _ = findResetVerification(ctx, opts, "dummy-verification-token")
+			// Upstream password.ts:113 logs "Reset Password: User not found"
+			// while still answering the generic success below.
+			Logf(opts, "warn", "Reset Password: User not found")
 			return genericOK, nil // avoid leaking whether email exists
 		}
 
@@ -367,9 +370,9 @@ type changePasswordInput struct {
 
 type changePasswordOutput struct {
 	Body struct {
-		Status bool        `json:"status"`
-		Token  *string     `json:"token,omitempty"`
-		User   *types.User `json:"user,omitempty"`
+		Status bool      `json:"status"`
+		Token  *string   `json:"token,omitempty"`
+		User   *flatUser `json:"user,omitempty"`
 	}
 }
 
@@ -477,7 +480,8 @@ func ChangePassword(api huma.API, basePath string, opts types.Options) {
 				return nil, huma.NewError(types.StatusForCode(types.ErrFailedToCreateSession), types.ErrFailedToCreateSession)
 			}
 			out.Body.Token = &newToken
-			out.Body.User = &user
+			flat := flatUser(user)
+			out.Body.User = &flat
 		}
 		return out, nil
 	})

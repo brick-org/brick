@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -345,6 +346,16 @@ func (b updateUserBody) MarshalJSON() ([]byte, error) {
 	return json.Marshal(out)
 }
 
+// TransformSchema permits additional properties on the update-user body,
+// mirroring upstream's `{name, image, ...rest}` split (update-user.ts:104-110):
+// unknown top-level keys are additional user fields for parseUserInput, not
+// validation failures. Without it huma rejects additional-field updates with
+// 422 before the handler runs.
+func (b updateUserBody) TransformSchema(r huma.Registry, s *huma.Schema) *huma.Schema {
+	s.AdditionalProperties = true
+	return s
+}
+
 type updateUserInput struct {
 	Authorization string `header:"Authorization"`
 	Cookie        string `header:"Cookie"`
@@ -428,7 +439,10 @@ func UpdateUser(api huma.API, basePath string, opts types.Options) {
 			additional, perr := ParseUserInputFull(input.Body.Extra, FullUserFields(opts), "update")
 			if perr != nil {
 				if fp, ok := perr.(*FieldParseError); ok {
-					return nil, huma.NewError(types.StatusForCode(fp.Code), fp.Code)
+					// The message carries the upstream detail (e.g.
+					// "newField is not allowed to be set"), mirroring the
+					// APIError message the TS client surfaces.
+					return nil, huma.NewError(types.StatusForCode(fp.Code), fp.Message)
 				}
 				return nil, huma.Error400BadRequest(perr.Error())
 			}
@@ -516,6 +530,9 @@ func ChangeEmail(api huma.API, basePath string, opts types.Options) {
 			// (upstream update-user.ts:769-774 signs a verification JWT
 			// for the existing address before answering success).
 			_, _ = crypto.CreateEmailVerificationToken(opts.CurrentSecret(), currentUser.Email, newEmail, emailVerificationExpirySeconds(opts), nil)
+			// Upstream update-user.ts:776 logs the existing-email attempt at
+			// info while still answering success below.
+			Logf(opts, "info", "Change email attempt for existing email")
 			out := &changeEmailOutput{}
 			if refreshed {
 				cookie, cookieErr := newSessionCookie(opts, input.CookieRequestHeaders, token, sessionExpiresAt(sessionRow))
@@ -567,7 +584,7 @@ func ChangeEmail(api huma.API, basePath string, opts types.Options) {
 				}
 				sendVerificationEmailWithRequest(requestContextForCallbacks(ctx), opts, types.VerificationEmailData{
 					User:  &currentUser,
-					URL:   basePath + "/verify-email?token=" + verificationToken + "&callbackURL=" + callbackURL,
+					URL:   basePath + "/verify-email?token=" + verificationToken + "&callbackURL=" + url.QueryEscape(callbackURL),
 					Token: verificationToken,
 				})
 			}
@@ -589,7 +606,7 @@ func ChangeEmail(api huma.API, basePath string, opts types.Options) {
 			sendChangeEmailConfirmationMail(requestContextForCallbacks(ctx), opts, types.ChangeEmailData{
 				User:     &currentUser,
 				NewEmail: newEmail,
-				URL:      basePath + "/verify-email?token=" + confirmationToken + "&callbackURL=" + callbackURL,
+				URL:      basePath + "/verify-email?token=" + confirmationToken + "&callbackURL=" + url.QueryEscape(callbackURL),
 				Token:    confirmationToken,
 			})
 			out.Body.Status = true
@@ -607,7 +624,7 @@ func ChangeEmail(api huma.API, basePath string, opts types.Options) {
 		// Delivery failures never fail the route (see above).
 		sendVerificationEmailWithRequest(requestContextForCallbacks(ctx), opts, types.VerificationEmailData{
 			User:  &verificationUser,
-			URL:   basePath + "/verify-email?token=" + verificationToken + "&callbackURL=" + callbackURL,
+			URL:   basePath + "/verify-email?token=" + verificationToken + "&callbackURL=" + url.QueryEscape(callbackURL),
 			Token: verificationToken,
 		})
 
@@ -728,7 +745,7 @@ func DeleteUser(api huma.API, basePath string, opts types.Options) {
 			// runInBackgroundOrAwait, which logs and continues.
 			sendDeleteAccountVerificationMail(ctx, opts, types.DeleteAccountVerificationData{
 				User:  &currentUser,
-				URL:   basePath + "/delete-user/callback?token=" + deleteToken + "&callbackURL=" + callbackURL,
+				URL:   basePath + "/delete-user/callback?token=" + deleteToken + "&callbackURL=" + url.QueryEscape(callbackURL),
 				Token: deleteToken,
 			})
 			out := &deleteUserOutput{}

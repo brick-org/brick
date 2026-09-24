@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -38,7 +39,7 @@ type signInOutput struct {
 		Token    string     `json:"token"`
 		Redirect bool       `json:"redirect"`
 		URL      *string    `json:"url,omitempty"`
-		User     types.User `json:"user"`
+		User     flatUser `json:"user"`
 	}
 }
 
@@ -62,6 +63,9 @@ func SignInEmail(api huma.API, basePath string, opts types.Options) {
 		}, nil)
 		if err != nil || userRow == nil {
 			crypto.VerifyPassword(dummyPasswordHash, input.Body.Password) // timing guard
+			// Upstream sign-in.ts:540 logs "User not found" for a missing
+			// user or credential account alike.
+			Logf(opts, "warn", "User not found")
 			return nil, huma.NewError(types.StatusForCode(types.ErrInvalidEmailOrPassword), types.ErrInvalidEmailOrPassword)
 		}
 
@@ -73,15 +77,25 @@ func SignInEmail(api huma.API, basePath string, opts types.Options) {
 		}, nil)
 		if err != nil || accountRow == nil {
 			crypto.VerifyPassword(dummyPasswordHash, input.Body.Password)
+			Logf(opts, "warn", "User not found")
 			return nil, huma.NewError(types.StatusForCode(types.ErrInvalidEmailOrPassword), types.ErrInvalidEmailOrPassword)
 		}
 
 		storedHash, _ := accountRow["password"].(string)
+		if storedHash == "" {
+			// Upstream sign-in.ts:551 logs "Password not found" when the
+			// credential account carries no password.
+			crypto.VerifyPassword(dummyPasswordHash, input.Body.Password)
+			Logf(opts, "warn", "Password not found")
+			return nil, huma.NewError(types.StatusForCode(types.ErrInvalidEmailOrPassword), types.ErrInvalidEmailOrPassword)
+		}
 		validPassword, err := verifyPassword(opts, storedHash, input.Body.Password)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("failed to verify password")
 		}
-		if storedHash == "" || !validPassword {
+		if !validPassword {
+			// Upstream sign-in.ts:562 logs "Invalid password".
+			Logf(opts, "warn", "Invalid password")
 			return nil, huma.NewError(types.StatusForCode(types.ErrInvalidEmailOrPassword), types.ErrInvalidEmailOrPassword)
 		}
 		if opts.EmailAndPassword.RequireEmailVerification {
@@ -96,7 +110,7 @@ func SignInEmail(api huma.API, basePath string, opts types.Options) {
 					if tokenErr != nil {
 						return nil, huma.Error500InternalServerError("failed to generate verification token")
 					}
-					url := fmt.Sprintf("%s/verify-email?token=%s&callbackURL=%s", opts.BasePath, token, verificationCallbackURL(input.Body.CallbackURL))
+					url := fmt.Sprintf("%s/verify-email?token=%s&callbackURL=%s", opts.BasePath, token, url.QueryEscape(verificationCallbackURL(input.Body.CallbackURL)))
 					user := rowToUser(userRow, opts)
 					wctx := requestContextForCallbacks(ctx)
 					sendVerificationEmailWithRequest(wctx, opts, types.VerificationEmailData{User: &user, URL: url, Token: token})
@@ -137,7 +151,10 @@ func SignInEmail(api huma.API, basePath string, opts types.Options) {
 			if errors.As(err, &statusErr) {
 				return nil, statusErr
 			}
-			return nil, huma.NewError(types.StatusForCode(types.ErrFailedToCreateSession), types.ErrFailedToCreateSession)
+			// Kept 401 (differs from StatusForCode 500): upstream
+			// sign-in.ts:608-613 throws UNAUTHORIZED when session creation
+			// fails after credential checks.
+			return nil, huma.Error401Unauthorized(types.ErrFailedToCreateSession)
 		}
 
 		out := &signInOutput{}
@@ -163,7 +180,7 @@ func SignInEmail(api huma.API, basePath string, opts types.Options) {
 		} else {
 			out.Body.Redirect = false
 		}
-		out.Body.User = user
+		out.Body.User = flatUser(user)
 		return out, nil
 	})
 }
