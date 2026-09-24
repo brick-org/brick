@@ -27,7 +27,7 @@
     - [OAuth Provider helper catalog (17 paths)](#oauth-provider-helper-catalog-17-paths)
     - [Social provider catalog (36)](#social-provider-catalog-36)
     - [Explicit `Runtime: pending` markers (0 — closed Wave 10)](#explicit-runtime-pending-markers-0--closed-wave-10)
-    - [Upstream test disposition (73 files)](#upstream-test-disposition-73-files)
+    - [Upstream test disposition (13 files)](#upstream-test-disposition-13-files-v1-core-only)
   - [Intentional exclusions](#intentional-exclusions)
     - [Decision registry (AUTH-R5-03, pinned by `decisions_test.go`)](#decision-registry-auth-r5-03-pinned-by-decisions_testgo)
     - [Wave-10 exclusion registry](#wave-10-exclusion-registry)
@@ -117,9 +117,14 @@ they are documented as Go-only dispatchers.
 
 ## Compatibility status
 
-The Go module is a behaviorally complete port of Better Auth v1.7.5
-server-side behavior for its declared scope: every file below has reached
-Done, verified against the pinned source and tests through Waves 5–10.
+> **V1 scope is core-only: email/password + session (see [`SCOPE.md`](./SCOPE.md)).**
+> Plugin, OAuth-provider, and social-provider `Done` claims elsewhere in this
+> file are superseded — those directories do not exist in this tree.
+
+The Go module targets the v1-declared scope of Better Auth v1.7.5
+server-side behavior: the 23 core routes, cookies, crypto, DB/schema/adapter,
+and public types listed in `SCOPE.md`. Within that scope, every file below
+has reached Done, verified against the pinned source and tests.
 
 Status terms used below:
 
@@ -133,9 +138,10 @@ Status terms used below:
 
 ### Core
 
-All 30 upstream core route paths have Go equivalents. The
-dynamic callback spelling differs (`/callback/{provider}` in Huma versus
-`/callback/:id` upstream).
+All 23 v1 core route paths have Go equivalents (see [`SCOPE.md`](./SCOPE.md)).
+Excluded from v1 by decision (not missing): `/sign-in/social`,
+`/callback/{provider}`, `/account-info`, `/link-social`, `/unlink-account`,
+`/get-access-token`, `/refresh-token`.
 
 Important remaining contract differences are narrow and listed as intentional
 exclusions below:
@@ -162,6 +168,10 @@ exclusions below:
 
 ### First-party plugins
 
+Out of scope for v1 by decision (see [`SCOPE.md`](./SCOPE.md)): Admin,
+Organization, JWT, OAuth Provider, and all other upstream plugins have no Go
+counterpart in this tree. Rows below are historical and superseded.
+
 | Plugin         |                             Route coverage | Material omissions                                                                   |
 | -------------- | -----------------------------------------: | ------------------------------------------------------------------------------------ |
 | Admin          |                                      15/15 | None; narrow exclusions (W10-18/19) listed below                                     |
@@ -169,9 +179,9 @@ exclusions below:
 | JWT            | Main `/token` and `/jwks` behavior present | None; `jwtClient` types N/A, serverOnly HTTP exposed as methods                      |
 | OAuth Provider | All protocol + 17 helper endpoints present | None; JAR/JARM rejected per D17, narrow exclusions (W10-07/08/10/13/14) listed below |
 
-All 17 OAuth Provider helper paths from v1.7.5 are registered
-(`rotateClientSecret` OperationID corrected to upstream key; 12 already had
-internal handlers, 5 admin/resource paths are new):
+All 17 OAuth Provider helper paths from v1.7.5 are out of scope for v1
+(see [`SCOPE.md`](./SCOPE.md)); none is registered. List retained for
+reference only (historical text below superseded):
 
 - `/admin/oauth2/create-client`
 - `/admin/oauth2/resources`
@@ -198,6 +208,10 @@ policy is now enforced at issuance for registered resources; unregistered
 identifiers intentionally retain the legacy allow-list path.
 
 ### Social providers
+
+Out of scope for v1 by decision (see [`SCOPE.md`](./SCOPE.md)): none of the
+36 upstream providers has a Go counterpart in this tree. Text below is
+historical and superseded.
 
 All 36 v1.7.5 core providers are implemented: Apple, Atlassian, Cloudflare,
 Cognito, Discord, Dropbox, Facebook, Figma, GitHub, GitLab, Google, Hugging
@@ -422,7 +436,7 @@ PostgreSQL `go test -p 1 -count=1 ./...` across all 17 packages.
 
 This ledger targets Better Auth **1.7.5** at `vendor/better-auth` commit `5468e6bfcdff799848537cf5ad06ebab15aad9dd`.
 
-Machine-readable data: [`parity_ledger.json`](./parity_ledger.json) (73 upstream test files, 2046 describe/it/test blocks with per-case names). Drift guards: `auth/parity_ledger_test.go` (`TestParityLedger_*`) pin the version/commit, the 30-path core route catalog, the 17-path OAuth helper catalog, the 36-provider catalog, the explicit marker set (14 pending at Wave 5, 0 at Wave-10 closure — 7 wired, 7 converted to `excluded(W10-XX)` markers), and every `AUTH-*-ID` referenced here against `plan.md`.
+Machine-readable data: [`parity_ledger.json`](./parity_ledger.json) (13 upstream test files, 495 describe/it/test blocks with per-case names, v1 core-only per [`SCOPE.md`](./SCOPE.md)). Drift guards: `auth/parity_ledger_test.go` (`TestParityLedger_*`) pin the version/commit, the 23-path core route catalog, the v1-excluded OAuth helper (0) and provider (0) catalogs, the explicit marker set (14 pending at Wave 5, 0 at Wave-10 closure — 7 wired, 7 converted to `excluded(W10-XX)` markers), and every `AUTH-*-ID` referenced here against `plan.md`.
 
 Dispositions: **ported** (exact upstream case reproduced), **covered-equivalently** (behavior exercised by a differently structured Go test), **not-applicable** (with reason), **open** (no verified coverage). The default is **open**: nothing below is marked covered without a named Go test.
 
@@ -435,30 +449,29 @@ Dispositions: **ported** (exact upstream case reproduced), **covered-equivalentl
 | `api/`, `api/routes/`                                    | `api/`, core route files                                                                |
 | `cookies/`                                               | `cookies/`                                                                              |
 | `crypto/`                                                | `crypto/`, `@better-auth/utils` password/JOSE helpers                                   |
-| `oauth2/`                                                | `oauth2/`, `state/`                                                                     |
-| `social-providers/`                                      | core social providers (no pinned unit tests; provider tests live under `packages/core`) |
-| `plugins/admin/`                                         | `plugins/admin/`                                                                        |
-| `plugins/jwt/`                                           | `plugins/jwt/`                                                                          |
-| `plugins/organization/`                                  | `plugins/organization/`                                                                 |
-| `plugins/oauthprovider/`                                 | `packages/oauth-provider/src/`                                                          |
 | `types/`                                                 | public option/model/error types (owned by AUTH-R5-02; read-only here)                   |
 | `cmd/generate-schema/`                                   | `cli/`, `get-migration.ts`                                                              |
 
-### Core route catalog (30 paths)
+V1-excluded (no Go counterpart, see [`SCOPE.md`](./SCOPE.md)): `oauth2/`,
+`social-providers/`, `plugins/admin/`, `plugins/jwt/`,
+`plugins/organization/`, `plugins/oauthprovider/`.
 
-All paths are registered under the base path (`/api/auth` by default). `/callback/{provider}` is the Huma spelling of upstream `/callback/:id`.
+### Core route catalog (23 paths, v1)
 
-`/sign-up/email`, `/sign-in/email`, `/sign-out`, `/sign-in/social`, `/callback/{provider}`, `/ok`, `/error`, `/get-session`, `/list-sessions`, `/revoke-session`, `/request-password-reset`, `/reset-password`, `/reset-password/{token}`, `/change-password`, `/send-verification-email`, `/verify-email`, `/list-accounts`, `/update-user`, `/change-email`, `/delete-user`, `/delete-user/callback`, `/account-info`, `/link-social`, `/unlink-account`, `/get-access-token`, `/refresh-token`, `/verify-password`, `/revoke-sessions`, `/revoke-other-sessions`, `/update-session`
+All paths are registered under the base path (`/api/auth` by default).
 
-### OAuth Provider helper catalog (17 paths)
+`/sign-up/email`, `/sign-in/email`, `/sign-out`, `/ok`, `/error`, `/get-session`, `/list-sessions`, `/revoke-session`, `/request-password-reset`, `/reset-password`, `/reset-password/{token}`, `/change-password`, `/send-verification-email`, `/verify-email`, `/list-accounts`, `/update-user`, `/change-email`, `/delete-user`, `/delete-user/callback`, `/verify-password`, `/revoke-sessions`, `/revoke-other-sessions`, `/update-session`
 
-Upstream spells params `:identifier`/`:client_id`; Huma spells them `{identifier}`/`{client_id}`. `rotateClientSecret` uses the upstream OperationID key.
+### OAuth Provider helper catalog (0 paths — v1-excluded)
 
-`/admin/oauth2/create-client`, `/admin/oauth2/resources`, `/admin/oauth2/resources/{identifier}`, `/admin/oauth2/resources/{identifier}/clients/{client_id}`, `/admin/oauth2/update-client`, `/oauth2/client/rotate-secret`, `/oauth2/create-client`, `/oauth2/delete-client`, `/oauth2/delete-consent`, `/oauth2/get-client`, `/oauth2/get-clients`, `/oauth2/get-consent`, `/oauth2/get-consents`, `/oauth2/public-client`, `/oauth2/public-client-prelogin`, `/oauth2/update-client`, `/oauth2/update-consent`
+V1 registers no OAuth helper paths (see [`SCOPE.md`](./SCOPE.md)). Upstream
+v1.7.5 spells params `:identifier`/`:client_id`; retained for reference:
+(none).
 
-### Social provider catalog (36)
+### Social provider catalog (0 — v1-excluded)
 
-`apple`, `atlassian`, `cloudflare`, `cognito`, `discord`, `dropbox`, `facebook`, `figma`, `github`, `gitlab`, `google`, `huggingface`, `kakao`, `kick`, `line`, `linear`, `linkedin`, `microsoft`, `naver`, `notion`, `paybin`, `paypal`, `polar`, `railway`, `reddit`, `roblox`, `salesforce`, `slack`, `spotify`, `tiktok`, `twitch`, `twitter`, `vercel`, `vk`, `wechat`, `zoom`
+V1 ships no social providers (see [`SCOPE.md`](./SCOPE.md)). Upstream v1.7.5
+has 36; retained for reference: (none).
 
 ### Explicit `Runtime: pending` markers (0 — closed Wave 10)
 
@@ -473,7 +486,11 @@ new `Runtime: pending` marker fails the ledger tests by design.
 
 Reconciliation of every marker against real consumers is owned by AUTH-R5-02; this ledger only pins the count and distribution.
 
-### Upstream test disposition (73 files)
+### Upstream test disposition (13 files, v1 core-only)
+
+V1 tracks only the core email/password + session surface (see
+[`SCOPE.md`](./SCOPE.md)). Plugin, OAuth-provider, and oauth2-social test
+files are v1-excluded and removed from this table (previously 73 files).
 
 | Upstream test file                                                | Cases | Disposition    | Wave       | Covered cases | Go owner                                                       |
 | ----------------------------------------------------------------- | ----: | -------------- | ---------- | ------------: | -------------------------------------------------------------- |
@@ -490,72 +507,11 @@ Reconciliation of every marker against real consumers is owned by AUTH-R5-02; th
 | `ba/cookies/cookies.test.ts`                                      |   118 | partial        | AUTH-C7-01 |             1 | `cookies.go`, `attributes.go` (+1)                             |
 | `ba/crypto/password.test.ts`                                      |    14 | partial        | AUTH-C7-02 |             5 | `password.go`                                                  |
 | `ba/crypto/secret-rotation.test.ts`                               |    46 | partial        | AUTH-F6-03 |             5 | `symmetric.go`, `token.go` (+1)                                |
-| `ba/oauth2/account-key.test.ts`                                   |     6 | partial        | AUTH-C7-03 |             0 | `provider.go`, `index.go`                                      |
-| `ba/oauth2/link-account.test.ts`                                  |    57 | partial        | AUTH-C7-03 |             0 | `social.go`, `state.go`                                        |
-| `ba/oauth2/state.test.ts`                                         |     7 | partial        | AUTH-C7-03 |             5 | `state.go`, `state_context.go`                                 |
-| `ba/oauth2/utils.test.ts`                                         |    16 | partial        | AUTH-C7-03 |             0 | `overrides.go`, `extras.go` (+1)                               |
-| `ba/plugins/admin/admin-username.test.ts`                         |     6 | partial        | AUTH-P8-01 |             0 | `admin.go`                                                     |
-| `ba/plugins/admin/admin.test.ts`                                  |   101 | partial        | AUTH-P8-01 |             1 | `admin.go`                                                     |
-| `ba/plugins/jwt/jwt.test.ts`                                      |    50 | partial        | AUTH-P8-02 |             0 | `index.go`                                                     |
-| `ba/plugins/jwt/multi-alg.test.ts`                                |    30 | partial        | AUTH-P8-02 |             0 | `index.go`, `jwt.go`                                           |
-| `ba/plugins/jwt/rotation.test.ts`                                 |     3 | partial        | AUTH-P8-02 |             2 | `index.go`                                                     |
-| `ba/plugins/jwt/sign-overrides.test.ts`                           |    13 | partial        | AUTH-P8-02 |             0 | `index.go`                                                     |
-| `ba/plugins/organization/client.test.ts`                          |     3 | not-applicable | —          |             0 | —                                                              |
-| `ba/plugins/organization/organization-client-declaration.test.ts` |     3 | not-applicable | —          |             0 | —                                                              |
-| `ba/plugins/organization/organization-hook.test.ts`               |     5 | partial        | AUTH-P8-03 |             0 | `organization.go`                                              |
-| `ba/plugins/organization/organization.test.ts`                    |   117 | partial        | AUTH-P8-03 |             0 | `organization.go`                                              |
-| `ba/plugins/organization/routes/crud-access-control.test.ts`      |    26 | partial        | AUTH-P8-03 |             0 | `organization.go`                                              |
-| `ba/plugins/organization/routes/crud-invites.test.ts`             |    19 | partial        | AUTH-P8-03 |             0 | `organization.go`                                              |
-| `ba/plugins/organization/routes/crud-members.test.ts`             |    28 | partial        | AUTH-P8-03 |             0 | `organization.go`                                              |
-| `ba/plugins/organization/routes/crud-org.test.ts`                 |    31 | partial        | AUTH-P8-03 |             0 | `organization.go`                                              |
-| `ba/plugins/organization/team.test.ts`                            |    59 | partial        | AUTH-P8-03 |             0 | `organization.go`                                              |
-| `op/authorize-loopback.test.ts`                                   |     5 | partial        | AUTH-O9-01 |             0 | `authorize.go`                                                 |
-| `op/authorize.test.ts`                                            |    56 | partial        | AUTH-O9-01 |             0 | `authorize.go`, `claims_request.go`                            |
-| `op/backchannel-logout.test.ts`                                   |    15 | partial        | AUTH-O9-04 |             0 | `logout.go`                                                    |
-| `op/claim-authority.integration.test.ts`                          |    19 | open           | AUTH-O9-02 |             0 | `token.go`, `resource.go`                                      |
-| `op/claims.test.ts`                                               |     7 | partial        | AUTH-O9-01 |             0 | `claims_request.go`                                            |
-| `op/client-jwks.test.ts`                                          |     4 | partial        | AUTH-O9-02 |             0 | `client.go`, `private_key_jwt.go`                              |
-| `op/client-resource.test.ts`                                      |     1 | partial        | AUTH-O9-03 |             0 | `crud.go`, `resources.go`                                      |
-| `op/device-code.test.ts`                                          |    52 | open           | AUTH-O9-04 |             0 | —                                                              |
-| `op/extensions.test.ts`                                           |    32 | open           | AUTH-O9-04 |             0 | —                                                              |
-| `op/introspect.test.ts`                                           |    25 | partial        | AUTH-O9-02 |             0 | `resource.go`                                                  |
-| `op/logout.test.ts`                                               |    33 | partial        | AUTH-O9-04 |             0 | `logout.go`                                                    |
-| `op/metadata.test.ts`                                             |    29 | partial        | AUTH-O9-04 |             0 | `metadata.go`                                                  |
-| `op/no-store.test.ts`                                             |     5 | open           | AUTH-O9-01 |             0 | `authorize.go`                                                 |
-| `op/oauth-endpoint.integration.test.ts`                           |    28 | open           | AUTH-O9-02 |             0 | `token.go`                                                     |
-| `op/oauth-endpoint.test.ts`                                       |    13 | partial        | AUTH-O9-02 |             0 | `token.go`, `oauthprovider.go`                                 |
-| `op/oauth.test.ts`                                                |    51 | partial        | AUTH-P8-04 |             0 | `oauthprovider.go`                                             |
-| `op/oauthClient/endpoints-privileges.test.ts`                     |    25 | partial        | AUTH-O9-03 |             0 | `crud.go`                                                      |
-| `op/oauthClient/endpoints.test.ts`                                |    24 | partial        | AUTH-O9-03 |             0 | `crud.go`                                                      |
-| `op/oauthConsent/endpoints.test.ts`                               |     8 | partial        | AUTH-O9-03 |             0 | `crud.go`                                                      |
-| `op/oauthResource/endpoints.test.ts`                              |    31 | partial        | AUTH-O9-03 |             0 | `resources.go`, `crud.go`                                      |
-| `op/oidc-rs256-profile.test.ts`                                   |     2 | open           | AUTH-O9-02 |             0 | `token.go`                                                     |
-| `op/pairwise.test.ts`                                             |    22 | open           | AUTH-O9-01 |             0 | `authorize.go`                                                 |
-| `op/pkce-optional.test.ts`                                        |    22 | open           | AUTH-O9-01 |             0 | `authorize.go`                                                 |
-| `op/private-key-jwt-e2e.test.ts`                                  |     3 | open           | AUTH-O9-02 |             0 | `client.go`, `private_key_jwt.go`                              |
-| `op/private-key-jwt.test.ts`                                      |    36 | partial        | AUTH-O9-02 |             0 | `client.go`, `private_key_jwt.go`                              |
-| `op/public-types.test.ts`                                         |     2 | not-applicable | —          |             0 | —                                                              |
-| `op/register.test.ts`                                             |    77 | partial        | AUTH-O9-03 |             0 | `register.go`                                                  |
-| `op/resource-binding.test.ts`                                     |     6 | partial        | AUTH-O9-04 |             0 | `resource.go`, `resources.go`                                  |
-| `op/resource-challenge.test.ts`                                   |    13 | partial        | AUTH-O9-03 |             0 | `resources.go`                                                 |
-| `op/resource-discovery.test.ts`                                   |    31 | partial        | AUTH-O9-04 |             0 | `metadata.go`, `resources.go`                                  |
-| `op/resources-e2e.test.ts`                                        |    37 | open           | AUTH-O9-03 |             0 | `resources.go`, `crud.go`                                      |
-| `op/resources.test.ts`                                            |    16 | partial        | AUTH-O9-03 |             0 | `resources.go`                                                 |
-| `op/revoke.test.ts`                                               |    13 | partial        | AUTH-O9-02 |             0 | `resource.go`, `token.go`                                      |
-| `op/schema.test.ts`                                               |     6 | partial        | AUTH-O9-03 |             0 | `oauthprovider.go`                                             |
-| `op/signed-query.test.ts`                                         |     4 | open           | AUTH-O9-01 |             0 | —                                                              |
-| `op/token.test.ts`                                                |   111 | partial        | AUTH-O9-02 |             0 | `token.go`, `rotation_dpop.go`                                 |
-| `op/types/zod.test.ts`                                            |    28 | open           | AUTH-O9-03 |             0 | `resource.go`, `metadata.go` (+1)                              |
-| `op/userinfo.test.ts`                                             |    19 | partial        | AUTH-O9-04 |             0 | `resource.go`                                                  |
-| `op/utils/query-serialization.test.ts`                            |    22 | open           | AUTH-O9-01 |             0 | —                                                              |
-| `op/utils/timestamps.test.ts`                                     |     8 | open           | AUTH-O9-01 |             0 | —                                                              |
-| `op/validation-flow.test.ts`                                      |    30 | open           | AUTH-O9-02 |             0 | `token.go`, `authorize.go`                                     |
 
-Per-case names, verified `covered` mappings (26 entries with named Go tests), and `notApplicableReason` values live in `parity_ledger.json`. Summary:
+Per-case names, verified `covered` mappings, and `notApplicableReason` values live in `parity_ledger.json`. Summary:
 
-- **not-applicable (3 files):** `organization/client.test.ts` and `organization-client-declaration.test.ts` are client-only (`src/client/` is an intentional exclusion); `oauth-provider/public-types.test.ts` holds compile-time `expectTypeOf` assertions with no runtime behavior (the Go API surface is compiler-checked instead).
-- **open OAuth Provider files with no Go counterpart:** `device-code.test.ts`, `extensions.test.ts` (generic extension contract; AUTH-O9-04 decides implement vs exclude), `signed-query.test.ts`, `utils/query-serialization.test.ts`, `utils/timestamps.test.ts` (no Go helper counterpart; AUTH-O9-01), `pairwise.test.ts`, `pkce-optional.test.ts`, `no-store.test.ts` (AUTH-O9-01), `types/zod.test.ts` (TS-only schemas, but URL-acceptance behavior is normative; AUTH-O9-03), `validation-flow.test.ts` (AUTH-O9-02).
-- **open integration e2e:** `claim-authority.integration.test.ts`, `oauth-endpoint.integration.test.ts`, `private-key-jwt-e2e.test.ts`, `resources-e2e.test.ts`, `oidc-rs256-profile.test.ts` run through the TS `getTestInstance`/`createAuthClient` harness (framework integration intentionally excluded); the server behavior they cover is open under AUTH-O9-02/03/04.
+- **v1-excluded (60 files, not tracked):** all `plugins/*`, `oauth-provider/*`,
+  and `oauth2/*` social test files. Not missing — out of scope per `SCOPE.md`.
 - **open core route file:** `error.test.ts` (3 XSS-sanitization cases; AUTH-C7-04).
 - Everything else is **partial**: named happy-path/behavior coverage exists (see `covered` in the manifest), and the remainder of each file is **open** under its wave.
 
@@ -1161,8 +1117,8 @@ porting.
 | ID                   | Finding                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Upstream reference                                                                 | Go                                                                                                                                                                             | Recommended follow-up                                                                                                            |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
 | `AUTH-AUDIT-TEST-01` | `GAP`: the case-level ledger is stale relative to the newer closure suites — `plugins/jwt/jwt_p8_02_closure_test.go`, `plugins/admin/admin_p8_closure_test.go`, `plugins/organization/organization_closure_test.go`, and the O9 OAuth files claim case-by-case closure while `parity_ledger.json` still marks their files `partial`; `error.test.ts` is `open` in the ledger although `api/routes/error_test.go` covers its cases                                                                                                                                                                                                                                                                                         | `parity_ledger.json` (73 files)                                                    | `GO/plugins/jwt/jwt_p8_02_closure_test.go`, `GO/plugins/admin/admin_p8_closure_test.go`, `GO/plugins/organization/organization_closure_test.go`, `GO/api/routes/error_test.go` | Reconcile the closure suites into `parity_ledger.json` and fix the stale rows                                                    |
-| `AUTH-AUDIT-TEST-02` | `GAP`: 15 upstream files are **open** with no verified Go counterpart (314 cases) — `claim-authority.integration`, `device-code`, `extensions`, `no-store`, `oauth-endpoint.integration`, `oidc-rs256-profile`, `pairwise`, `pkce-optional`, `private-key-jwt-e2e`, `resources-e2e`, `signed-query`, `types/zod`, `utils/query-serialization`, `utils/timestamps`, `validation-flow` (all under `OAP/src/`)                                                                                                                                                                                                                                                                                                               | `OAP/src/*.test.ts` (see the [parity ledger](#upstream-test-disposition-73-files)) | (mostly absent; focused smoke only)                                                                                                                                            | Close each file or record an explicit per-feature exclusion (device grant, signed query, query-serialization/timestamps helpers) |
-| `AUTH-AUDIT-TEST-03` | `GAP`: 55 upstream files remain `partial`, so their unlisted cases are missing — core routes (account 53, cookie-cache fallback 11, email-verification 29, password 21, session-api 85, sign-in 30, sign-out 10, sign-up 40, update-user 35), cookies (118), password (14), secret-rotation (46), account-key (6), link-account (57), OAuth utils (16), admin (101+6), JWT (50/30/3/13), organization (117/26/19/28/31/59/5), OAuth Provider token (111) and related matrices                                                                                                                                                                                                                                             | see [Upstream test disposition](#upstream-test-disposition-73-files)               | `GO/**` (mappings in `parity_ledger.json`)                                                                                                                                     | Track per-file case closure alongside each implementation gap above                                                              |
+| `AUTH-AUDIT-TEST-02` | `GAP`: 15 upstream files are **open** with no verified Go counterpart (314 cases) — `claim-authority.integration`, `device-code`, `extensions`, `no-store`, `oauth-endpoint.integration`, `oidc-rs256-profile`, `pairwise`, `pkce-optional`, `private-key-jwt-e2e`, `resources-e2e`, `signed-query`, `types/zod`, `utils/query-serialization`, `utils/timestamps`, `validation-flow` (all under `OAP/src/`)                                                                                                                                                                                                                                                                                                               | `OAP/src/*.test.ts` (see the [parity ledger](#upstream-test-disposition-13-files-v1-core-only))) | (mostly absent; focused smoke only)                                                                                                                                            | Close each file or record an explicit per-feature exclusion (device grant, signed query, query-serialization/timestamps helpers) |
+| `AUTH-AUDIT-TEST-03` | `GAP`: 55 upstream files remain `partial`, so their unlisted cases are missing — core routes (account 53, cookie-cache fallback 11, email-verification 29, password 21, session-api 85, sign-in 30, sign-out 10, sign-up 40, update-user 35), cookies (118), password (14), secret-rotation (46), account-key (6), link-account (57), OAuth utils (16), admin (101+6), JWT (50/30/3/13), organization (117/26/19/28/31/59/5), OAuth Provider token (111) and related matrices                                                                                                                                                                                                                                             | see [Upstream test disposition](#upstream-test-disposition-13-files-v1-core-only))               | `GO/**` (mappings in `parity_ledger.json`)                                                                                                                                     | Track per-file case closure alongside each implementation gap above                                                              |
 | `AUTH-AUDIT-TEST-04` | `EXCLUSION`/`ADAPTATION`: 3 files not-applicable (organization client ×2, `op/public-types.test.ts`), 11 `adapters/bun` test files excluded as adapter tests, and Go-only race/fuzz/stress/fixture/harness suites are test additions, not missing upstream ports. Reference-doc status: [`SOURCE_LAYOUT_TASK_LIST.md`](./SOURCE_LAYOUT_TASK_LIST.md) completion checklist still has the first two items open ("every Go runtime file classified", "every TS runtime file mapped"), and [`SOURCE_LAYOUT_MOVE_LIST.md`](./SOURCE_LAYOUT_MOVE_LIST.md) records four remaining layout limitations (org flat route files, API rate-limiter/dispatch facades, `oauth2/link-account.go` placeholder, root consolidation pending) | `BA/src/client/**`, framework integrations (N/A)                                   | `GO/testutil/*`, `GO/adapters/bun/*_test.go`                                                                                                                                   | Check off or explicitly defer the two open checklist items after `AUTH-AUDIT-OAUTH2-06` and the facade boundaries settle         |
 
 ### Explicit unresolved-gap checklist

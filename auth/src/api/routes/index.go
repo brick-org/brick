@@ -43,10 +43,14 @@ package routes
 //	                         RevokeOtherSessions (revokeOtherSessions),
 //	                         UpdateSession (updateSession)
 //	sign-in.go:              SignInEmail (signInEmail)
-//	sign-out.go:             SignOut (signOut)
+///	sign-out.go:             SignOut (signOut)
 //	sign-up.go:              SignUpEmail (signUpWithEmailAndPassword)
-//	social.go:               SignInSocial (signInSocial),
-//	                         CallbackOAuth (oauthCallback, oauthCallbackPost)
+//
+//	V1 SCOPE (auth/SCOPE.md): social auth is explicitly out of scope.
+//	There is no `social.go` in this tree; `SignInSocial`/`CallbackOAuth`
+//	(`/sign-in/social`, `/callback/{provider}`) are not registered and must
+//	stay absent until v1 scope changes. The stale catalog line below is kept
+//	for archaeology only and does not describe a present file:
 //
 // Intentional Go splits (same package, no import impact). Consolidation
 // toward the single-file TS owners was evaluated and deliberately deferred:
@@ -67,7 +71,8 @@ package routes
 //     `cookie-cache.ts`). `session-extra.go` -> `session.ts` (revoke
 //     variants) and `update-session.ts` (`UpdateSession`).
 //   - `social.go` -> `sign-in.ts` (`SignInSocial`) + `callback.ts`
-//     (`CallbackOAuth` GET+POST).
+//     (`CallbackOAuth` GET+POST). V1-EXCLUDED (auth/SCOPE.md): no such file
+//     in tree; do not re-add without a scope change.
 //   - `delete-user-callback.go` -> `callback.ts` side (`DeleteUserCallback`)
 //     alongside `update-user.ts` ownership of `DeleteUser`.
 //   - `hooks.go` -> `src/api/dispatch.go` + `src/api/to-auth-endpoints.go`

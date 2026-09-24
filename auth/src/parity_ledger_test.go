@@ -192,7 +192,7 @@ func ledgerGoSources(t *testing.T, includeTests bool) []string {
 
 func TestParityLedger_CoreRouteCatalog(t *testing.T) {
 	if len(ledgerCoreRoutes) != 23 {
-		t.Fatalf("core route catalog has %d entries, want 30", len(ledgerCoreRoutes))
+		t.Fatalf("core route catalog has %d entries, want 23 (v1 core-only, see SCOPE.md)", len(ledgerCoreRoutes))
 	}
 	var blob strings.Builder
 	for _, f := range ledgerGoSources(t, false) {
@@ -313,16 +313,15 @@ func TestParityLedger_UpstreamTestManifest(t *testing.T) {
 		}
 	}
 	want := map[string]int{
-		"core-routes": 10, "admin": 2, "jwt": 4, "organization": 9,
-		"oauth-provider": 41, "cookies-crypto-oauth2": 7,
+		"core-routes": 10, "cookies-crypto-oauth2": 3,
 	}
 	for area, n := range want {
 		if areaCounts[area] != n {
 			t.Errorf("area %s: manifest has %d files, want %d", area, areaCounts[area], n)
 		}
 	}
-	if total := len(m.UpstreamTests); total != 73 {
-		t.Errorf("manifest has %d upstream test files, want 73", total)
+	if total := len(m.UpstreamTests); total != 13 {
+		t.Errorf("manifest has %d upstream test files, want 13 (v1 core-only, see SCOPE.md)", total)
 	}
 }
 
