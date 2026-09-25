@@ -21,13 +21,26 @@ func TestTokenRoundTripRotationAndTampering(t *testing.T) {
 		t.Fatalf("token format = %q", token)
 	}
 	for _, tampered := range []string{
-		"x" + parts[0][1:] + "." + parts[1],
-		parts[0] + ".x" + parts[1][1:],
+		flipFirstChar(parts[0]) + "." + parts[1],
+		parts[0] + "." + flipFirstChar(parts[1]),
 	} {
 		if _, err := VerifyToken("current", tampered); err == nil {
 			t.Errorf("tampered token verified: %q", tampered)
 		}
 	}
+}
+
+// flipFirstChar alters the first character deterministically: the old
+// "x"-prefix tamper was a no-op whenever the random payload/sig already
+// started with 'x' (~1/64 flake), verifying a nominally tampered token.
+func flipFirstChar(s string) string {
+	if s == "" {
+		return "x"
+	}
+	if s[0] == 'x' {
+		return "y" + s[1:]
+	}
+	return "x" + s[1:]
 }
 
 func TestTokenExpiryAndMalformedInput(t *testing.T) {
