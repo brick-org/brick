@@ -9,7 +9,14 @@ import (
 	"strings"
 
 	auth "github.com/brick-org/brick/auth/src"
+	jwtplugin "github.com/brick-org/brick/auth/src/plugins/jwt"
 )
+
+func init() {
+	auth.RegisterPluginSchema("jwt", func() auth.PluginSchemaProvider {
+		return jwtplugin.New(jwtplugin.Options{})
+	})
+}
 
 type fieldDef struct {
 	GoName     string
@@ -39,7 +46,7 @@ func main() {
 	pkg := flag.String("package", "main", "package name for the generated Go file")
 	prefix := flag.String("prefix", "Auth", "prefix for generated struct names")
 	migrateFunc := flag.String("migrate-func", "AuthModels", "name of generated migration helper")
-	pluginsFlag := flag.String("plugins", "", "comma-separated registered plugin schema IDs to include (core-only: built-ins removed)")
+	pluginsFlag := flag.String("plugins", "", "comma-separated registered plugin schema IDs to include")
 	orgTeams := flag.Bool("org-teams", false, "include org team tables and session.activeTeamId")
 	modelNames := flag.String("model-names", "", "comma-separated logical=physical model renames, e.g. user=app_users")
 	fieldNames := flag.String("field-names", "", "comma-separated model.field=column renames, e.g. user.email=email_address")

@@ -1,7 +1,9 @@
 # Adding a plugin
 
-Core stays core: plugins live outside `auth/src`, implement `types.Plugin`,
-and are passed via `Options.Plugins`. No core file changes needed.
+Feature plugins live in their own packages under `auth/src/plugins/`, implement
+`types.Plugin`, and are passed via `Options.Plugins`. Keep plugin behavior in
+the plugin package; core changes are needed only when the shared extension
+surface is insufficient.
 
 ## 1. Skeleton
 
