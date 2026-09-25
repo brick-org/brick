@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/brick-org/brick/auth/src/types"
 )
 
 // F4 tri-state + stale-cleanup tests (PARITY_V2 P04-GAP-1, P05-GAP-1).
@@ -14,15 +16,18 @@ import (
 // cookie-cache-fallback.test.ts:91-136).
 
 func TestF4_UpdateAgeTriState(t *testing.T) {
-	if got := sessionUpdateAgeFromPtr(nil); got != 24*time.Hour {
+	// P12 dedup: pins the canonical (SessionOptions).UpdateAgeDuration
+	// tri-state directly (same assertions as the removed route-layer
+	// duplicate, no weakening).
+	if got := (types.SessionOptions{}).UpdateAgeDuration(); got != 24*time.Hour {
 		t.Fatalf("nil UpdateAge = %v, want 24h default", got)
 	}
 	zero := 0
-	if got := sessionUpdateAgeFromPtr(&zero); got != 0 {
+	if got := (types.SessionOptions{UpdateAge: &zero}).UpdateAgeDuration(); got != 0 {
 		t.Fatalf("explicit 0 UpdateAge = %v, want 0 (always-refresh)", got)
 	}
 	v := 60
-	if got := sessionUpdateAgeFromPtr(&v); got != 60*time.Second {
+	if got := (types.SessionOptions{UpdateAge: &v}).UpdateAgeDuration(); got != 60*time.Second {
 		t.Fatalf("UpdateAge 60 = %v, want 60s", got)
 	}
 }

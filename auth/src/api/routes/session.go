@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/brick-org/brick/auth/src/api/state"
 	"github.com/brick-org/brick/auth/src/cookies"
 	"github.com/brick-org/brick/auth/src/types"
 	"github.com/danielgtaylor/huma/v2"
@@ -174,10 +175,18 @@ func resolveGetSession(ctx context.Context, opts types.Options, req getSessionRe
 	}
 	if !req.query.DisableCookieCache {
 		if cached, ok := cachedSessionFromRequestFull(ctx, req.cookieHeader, opts.AllSecrets(), req.token, opts); ok {
+			// shouldSkipSessionRefresh gates the cookie-cache refresh
+			// (upstream session.ts:201-204). The c701 helper itself is
+			// owned by another agent; this session.go call site suppresses
+			// the refresh so database and cookie data cannot diverge.
+			var refreshCookies []http.Cookie
+			if !state.GetShouldSkipSessionRefresh(ctx) {
+				refreshCookies = maybeRefreshCookieCacheWithContext(ctx, opts, headers, req.token, cached, now, req.dontRememberMe)
+			}
 			return &getSessionResult{
 				session: cached.Session,
 				user:    cached.User,
-				cookies: maybeRefreshCookieCacheWithContext(ctx, opts, headers, req.token, cached, now, req.dontRememberMe),
+				cookies: refreshCookies,
 			}, nil
 		}
 		if cachePresent && cacheEnabled {
@@ -196,7 +205,17 @@ func resolveGetSession(ctx context.Context, opts types.Options, req getSessionRe
 		// when the session read fails; fallback.test.ts:91-136). Callers
 		// surface res.cookies even when err != nil (see GetSession huma
 		// header append and GetSessionFromRequest cookie return).
-		failed := &getSessionResult{cookies: staleCleanup}
+		// G4: on EXPIRED/invalid session_token failures also emit the
+		// expired session_token cleanup alongside the session_data cleanup
+		// (upstream deleteSessionCookie clears both; session.ts:291,380).
+		// DB row deletion already happened in the loader; this only clears
+		// the browser copy. User-missing/DB errors keep the token: the
+		// token itself is valid there.
+		failedCookies := staleCleanup
+		if req.token != "" && (errors.Is(err, errSessionExpired) || errors.Is(err, errUnauthorized)) {
+			failedCookies = append([]http.Cookie{expiredSessionTokenCleanupCookie(ctx, opts, headers)}, failedCookies...)
+		}
+		failed := &getSessionResult{cookies: failedCookies}
 		switch {
 		case errors.Is(err, errSessionExpired):
 			return failed, sessionRouteError(types.ErrSessionExpired)
@@ -632,7 +651,12 @@ func loadDatabaseSessionWithRefresh(ctx context.Context, opts types.Options, tok
 	now := time.Now().UTC()
 	var refreshed, needsRefresh bool
 	if cfg.readOnly {
-		needsRefresh = sessionRefreshDue(sessionRow, opts, cfg.disableRefresh, now)
+		// shouldSkipSessionRefresh suppresses the reported refresh need as
+		// well as the write (upstream session.ts:342-344 gating the
+		// refresh path; deferred GET reports via needsRefresh).
+		if !state.GetShouldSkipSessionRefresh(ctx) {
+			needsRefresh = sessionRefreshDue(sessionRow, opts, cfg.disableRefresh, now)
+		}
 	} else {
 		var refreshedSession map[string]any
 		refreshedSession, refreshed = refreshSessionIfNeeded(ctx, opts, sessionRow, now, cfg)
@@ -675,7 +699,12 @@ func refreshSessionIfNeeded(ctx context.Context, opts types.Options, sessionRow 
 	// UpdateAge (upstream session.ts:339-341). The per-request
 	// ?disableRefresh knob and the dont_remember persistence marker skip it
 	// the same way (upstream session.ts:309): the session is still served,
-	// just never extended.
+	// just never extended. The server-side shouldSkipSessionRefresh flag
+	// (upstream session.ts:342-344) suppresses the write so database and
+	// cookie data cannot diverge within one request.
+	if state.GetShouldSkipSessionRefresh(ctx) {
+		return sessionRow, false
+	}
 	if opts.Session.DisableSessionRefresh || cfg.disableRefresh || cfg.dontRememberMe {
 		return sessionRow, false
 	}
@@ -711,25 +740,10 @@ func sessionExpiresAt(row map[string]any) time.Time {
 	return time.Time{}
 }
 
-// sessionUpdateAgeFromPtr implements the upstream updateAge tri-state
-// (session.ts:324-344; update-session.ts; session-api.test.ts:252-273):
-// nil (unset) => 24h default, explicit 0 => always-refresh (0 duration),
-// >0 => seconds. Mirrors (SessionOptions).UpdateAgeDuration in types/;
-// kept as the route-layer unit pin for the same contract.
-func sessionUpdateAgeFromPtr(updateAge *int) time.Duration {
-	if updateAge == nil {
-		return 24 * time.Hour
-	}
-	if *updateAge == 0 {
-		return 0
-	}
-	return time.Duration(*updateAge) * time.Second
-}
-
 func sessionUpdateAge(opts types.SessionOptions) time.Duration {
-	// types/ now carries UpdateAge *int (F9); the canonical tri-state lives
-	// in (SessionOptions).UpdateAgeDuration. sessionUpdateAgeFromPtr above
-	// pins the identical contract at the route layer (F4 unit pin).
+	// Canonical tri-state lives in (SessionOptions).UpdateAgeDuration
+	// (types/; F9): nil => 24h default, explicit 0 => always-refresh,
+	// >0 => seconds (upstream session.ts:324-344).
 	return opts.UpdateAgeDuration()
 }
 
@@ -776,6 +790,27 @@ func issueSessionCookie(opts types.Options, headers CookieRequestHeaders, token 
 
 func expiredSessionCookie(opts types.Options, headers CookieRequestHeaders) http.Cookie {
 	cfg := resolveSessionCookieConfig(opts, headers)
+	return http.Cookie{
+		Name:     cfg.Name,
+		Value:    "",
+		Path:     cfg.Path,
+		Domain:   cfg.Domain,
+		HttpOnly: cfg.HTTPOnly,
+		SameSite: cfg.SameSite,
+		Secure:   cfg.Secure,
+		MaxAge:   -1,
+		Expires:  time.Unix(0, 0).UTC(),
+	}
+}
+
+// expiredSessionTokenCleanupCookie builds the request-aware expired
+// session_token cleanup emitted alongside the session_data cleanup on
+// EXPIRED/invalid get-session failures (G4; upstream deleteSessionCookie
+// clears both, session.ts:291,380). Request-aware naming/attributes mirror
+// the issuance path via resolveSessionCookieConfigWithContext (owned by
+// session-c701.go; this session.go call site only consumes it).
+func expiredSessionTokenCleanupCookie(ctx context.Context, opts types.Options, headers CookieRequestHeaders) http.Cookie {
+	cfg := resolveSessionCookieConfigWithContext(ctx, opts, headers)
 	return http.Cookie{
 		Name:     cfg.Name,
 		Value:    "",
@@ -917,6 +952,15 @@ func newSessionCookies(authOpts types.Options, headers CookieRequestHeaders, tok
 // strategy-aware cache cookie when enabled. The frozen newSessionCookies
 // wrapper preserves the persistent form for the sibling-owned issuance paths
 // (account, social, email-verification), which do not thread remember-me.
+//
+// Cookie-cache writes chunk oversize values via cookies.BuildChunkedCookies
+// (upstream chunkCookie on write, session-store.ts:84-131 wired through
+// index.ts:245-250): values fitting the budget stay single under the bare
+// name, larger values split into "<name>.<i>" chunks. A value exceeding
+// MaxCookieChunks warns-and-skips (Logf warn, serve authoritative with no
+// cache) instead of failing the issuance. The context-aware issuance in
+// session-c701.go is owned by another agent; this session.go site covers the
+// static issuance legs.
 func issueSessionCookies(authOpts types.Options, headers CookieRequestHeaders, token string, session types.Session, user types.User, opts types.SessionOptions, now time.Time, dontRememberMe bool) ([]http.Cookie, error) {
 	sessionCookie, err := issueSessionCookie(authOpts, headers, token, session.ExpiresAt, dontRememberMe)
 	if err != nil {
@@ -935,7 +979,30 @@ func issueSessionCookies(authOpts types.Options, headers CookieRequestHeaders, t
 		if err != nil {
 			return nil, err
 		}
-		cookiesOut = append(cookiesOut, cacheCookie)
+		attrs := cookies.Attributes{
+			Path:       cacheCookie.Path,
+			Domain:     cacheCookie.Domain,
+			Secure:     cacheCookie.Secure,
+			HttpOnly:   cacheCookie.HttpOnly,
+			SameSite:   cacheCookie.SameSite,
+			MaxAge:     cacheCookie.MaxAge,
+			MaxAgeSet:  true,
+			Expires:    cacheCookie.Expires,
+			ExpiresSet: !cacheCookie.Expires.IsZero(),
+		}
+		if attrs.Path == "" {
+			attrs.Path = "/"
+		}
+		chunked, cerr := cookies.BuildChunkedCookies(cacheCookie.Name, cacheCookie.Value, attrs)
+		if cerr != nil {
+			Logf(authOpts, "warn", "session_data too large to store even after chunking; skipping cookie cache")
+		} else {
+			for _, c := range chunked {
+				if c != nil {
+					cookiesOut = append(cookiesOut, *c)
+				}
+			}
+		}
 	}
 	return cookiesOut, nil
 }
@@ -1225,8 +1292,13 @@ func normalizeCookieCacheVersion(version string) string {
 //     store, so the knob is honored literally instead: Enabled refreshes,
 //     unset serves the cache as-is until it expires.
 //   - The per-request ?disableRefresh knob does NOT gate this path upstream
-//     (only the server-side shouldSkipSessionRefresh flag does, which has no
-//     Go equivalent); ShouldRefresh is the per-session gate here.
+//     (only the server-side shouldSkipSessionRefresh flag does, consulted at
+//     the session.go call sites with request context — resolveGetSession
+//     fast-path — and in refreshSessionIfNeeded for the DB write; the
+//     context-aware c701 helper is owned by another agent); ShouldRefresh is
+//     the per-session gate here. This ctx-free static helper keeps its
+//     signature for existing callers/tests and does not consult the flag
+//     itself.
 //   - For dontRememberMe sessions the session_token cookie is re-issued
 //     without a persistent lifetime and the cache window is capped at 60s,
 //     mirroring upstream's cleared maxAge (session.ts:217-230).
@@ -2229,9 +2301,13 @@ func loadSecondarySessionWithRefresh(ctx context.Context, opts types.Options, to
 	}
 	if cfg.readOnly {
 		sessionRow, userRow := sessionToRow(cached.Session), userToRow(cached.User)
-		return sessionRow, userRow, false, sessionRefreshDue(sessionRow, opts, cfg.disableRefresh, now), nil
+		var needsRefresh bool
+		if !state.GetShouldSkipSessionRefresh(ctx) {
+			needsRefresh = sessionRefreshDue(sessionRow, opts, cfg.disableRefresh, now)
+		}
+		return sessionRow, userRow, false, needsRefresh, nil
 	}
-	if opts.Session.DisableSessionRefresh || cfg.disableRefresh || cfg.dontRememberMe {
+	if state.GetShouldSkipSessionRefresh(ctx) || opts.Session.DisableSessionRefresh || cfg.disableRefresh || cfg.dontRememberMe {
 		return sessionToRow(cached.Session), userToRow(cached.User), false, false, nil
 	}
 	expiresIn := opts.Session.ExpiresInDuration()
