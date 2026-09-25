@@ -1161,7 +1161,7 @@
           "goTest": "TestTriageV1_ParseCookiesPaddedSignedValues"
         },
         {
-          "case": "parseCookies tolerates mixed `;`, `; `, and `;\\t` separators",
+          "case": "parseCookies tolerates mixed `;`, `; `, and `;\\\\t` separators",
           "goTest": "TestTriageV1_ParseCookiesMixedSeparators (tab leg)"
         },
         {
@@ -1181,7 +1181,7 @@
           "goTest": "TestTriageV1_ParseCookiesRejectCRLFEntries"
         }
       ],
-      "notes": "Full 118-case triage done: 72 cited (34 recorded + 38 to pre-existing suites), 7 ported (triage_v1_cookies), 17 excluded (chunk writes x5, JWKS x4, route-legs x4, social x2, JS-interop x2), 1 FEATURE-GAP open (G1 post-signature payload-schema validation)."
+      "notes": "Full triage done (118 ledger blocks = 97 it-headings + 21 describe containers; 115 runtime-expanded its): 72 cited (34 recorded + 38 to pre-existing suites), 7 ported (triage_v1_cookies), 17 excluded (chunk writes x5, JWKS x4, route-legs x4, social x2, JS-interop x2), 1 FEATURE-GAP open (G1 post-signature payload-schema validation)."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/crypto/password.test.ts",
