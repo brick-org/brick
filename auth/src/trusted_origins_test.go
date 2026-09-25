@@ -149,13 +149,24 @@ func TestOriginMiddleware_UntrustedOriginWithCookie(t *testing.T) {
 	}
 }
 
-// --- Cycle 9: middleware allows request without cookie (server-to-server) ---
+// --- Cycle 9: origin-bearing requests without cookie follow upstream ---
+// Upstream validateFormCsrf (origin-check.ts, pinned 5468e6bf) validates a
+// present Origin/Referer even without cookies; only requests with no origin
+// at all (server-to-server) keep the permissive fallback.
 
-func TestOriginMiddleware_NoCookieAllowed(t *testing.T) {
+func TestOriginMiddleware_NoCookieUntrustedOriginBlocked(t *testing.T) {
 	srv := newOriginTestServer(t, []string{"https://trusted.com"}, "http://localhost", auth.AdvancedOptions{})
 	status := postWithOriginAndCookie(t, srv.URL+"/api/auth/sign-in/email", "https://evil.com", "")
+	if status != http.StatusForbidden {
+		t.Fatalf("untrusted origin without cookie must return 403 per upstream validateFormCsrf, got %d", status)
+	}
+}
+
+func TestOriginMiddleware_NoCookieNoOriginAllowed(t *testing.T) {
+	srv := newOriginTestServer(t, []string{"https://trusted.com"}, "http://localhost", auth.AdvancedOptions{})
+	status := postWithOriginAndCookie(t, srv.URL+"/api/auth/sign-in/email", "", "")
 	if status == http.StatusForbidden {
-		t.Fatalf("request without cookie must not be blocked by origin check, got %d", status)
+		t.Fatalf("request without cookie or origin (server-to-server) must not be blocked by origin check, got %d", status)
 	}
 }
 
