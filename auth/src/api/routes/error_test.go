@@ -109,6 +109,7 @@ func TestErrorPageProductionRedirect(t *testing.T) {
 	}
 	// Customization disables the production bounce: the page renders.
 	custom := types.Options{}
+	custom.OnAPIError.CustomizeDefaultErrorPage = &types.DefaultErrorPageOptions{}
 	custom.OnAPIError.CustomizeDefaultErrorPage.Colors.Primary = "#123456"
 	api2 := newErrorTestAPI(t, custom)
 	resp2 := api2.Get("/api/auth/error?error=access_denied")
@@ -120,7 +121,8 @@ func TestErrorPageProductionRedirect(t *testing.T) {
 // Configurable rendering: colors, fonts, sizes, and decoration toggles.
 func TestErrorPageCustomRendering(t *testing.T) {
 	opts := types.Options{}
-	p := &opts.OnAPIError.CustomizeDefaultErrorPage
+	opts.OnAPIError.CustomizeDefaultErrorPage = &types.DefaultErrorPageOptions{}
+	p := opts.OnAPIError.CustomizeDefaultErrorPage
 	p.Colors.Background = "#111111"
 	p.Colors.Primary = "#123456"
 	p.Colors.TitleBorder = "#654321"
@@ -141,6 +143,7 @@ func TestErrorPageCustomRendering(t *testing.T) {
 	}
 	// Decoration toggles remove their markup.
 	off := types.Options{}
+	off.OnAPIError.CustomizeDefaultErrorPage = &types.DefaultErrorPageOptions{}
 	off.OnAPIError.CustomizeDefaultErrorPage.DisableCornerDecorations = true
 	off.OnAPIError.CustomizeDefaultErrorPage.DisableBackgroundGrid = true
 	off.OnAPIError.CustomizeDefaultErrorPage.DisableTitleBorder = true

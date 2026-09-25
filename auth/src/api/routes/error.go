@@ -66,12 +66,16 @@ func Error(api huma.API, basePath string, opts types.Options) {
 			return
 		}
 
-		if os.Getenv("NODE_ENV") == "production" && opts.OnAPIError.CustomizeDefaultErrorPage == (types.DefaultErrorPageOptions{}) {
+		if os.Getenv("NODE_ENV") == "production" && opts.OnAPIError.CustomizeDefaultErrorPage == nil {
 			redirect(ctx, "/?"+params.Encode())
 			return
 		}
 
-		body := renderDefaultErrorPage(opts.OnAPIError.CustomizeDefaultErrorPage, safeCode, safeDescription)
+		var custom types.DefaultErrorPageOptions
+		if opts.OnAPIError.CustomizeDefaultErrorPage != nil {
+			custom = *opts.OnAPIError.CustomizeDefaultErrorPage
+		}
+		body := renderDefaultErrorPage(custom, safeCode, safeDescription)
 		ctx.SetHeader("Content-Type", "text/html")
 		ctx.SetStatus(http.StatusOK)
 		_, _ = ctx.BodyWriter().Write([]byte(body))
@@ -85,7 +89,14 @@ func redirect(ctx huma.Context, location string) {
 
 // mergeErrorParams appends the safe error parameters to a base URL,
 // preserving existing query parameters and fragments (upstream
-// appendQueryParams).
+// appendQueryParams in core/src/utils/url.ts:84-87: raw query text is
+// retained verbatim, new params concatenated with &).
+//
+// Default path (base carries no error/error_description keys) uses the
+// historical parse+Set+Encode form and stays byte-identical. When the base
+// already carries such keys, the existing RawQuery is preserved verbatim
+// (duplicates/encoding/order) and the encoded params are concatenated,
+// mirroring upstream raw-append instead of collapsing via q.Set.
 func mergeErrorParams(base string, params url.Values) string {
 	u, err := url.Parse(base)
 	if err != nil {
@@ -94,6 +105,20 @@ func mergeErrorParams(base string, params url.Values) string {
 			sep = "&"
 		}
 		return base + sep + params.Encode()
+	}
+	enc := params.Encode()
+	if enc == "" {
+		return base
+	}
+	if pre := u.Query(); pre.Has("error") || pre.Has("error_description") {
+		if u.RawQuery == "" {
+			u.RawQuery = enc
+		} else if strings.HasSuffix(u.RawQuery, "&") {
+			u.RawQuery += enc
+		} else {
+			u.RawQuery += "&" + enc
+		}
+		return u.String()
 	}
 	q := u.Query()
 	for k, vs := range params {

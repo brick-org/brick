@@ -406,8 +406,11 @@ type APIErrorOptions struct {
 	// URL) and auth/api/routes/password_extra.go:93.
 	ErrorURL string
 	// CustomizeDefaultErrorPage themes the built-in error page.
+	// Nil (unset) means upstream undefined: production bounces to /;
+	// non-nil (even empty) renders. Pointer preserves the
+	// !customizeDefaultErrorPage distinction (upstream error.ts:430).
 	// Runtime: wired:auth/api/routes/error.go:38.
-	CustomizeDefaultErrorPage DefaultErrorPageOptions
+	CustomizeDefaultErrorPage *DefaultErrorPageOptions
 }
 
 // ChangeEmailOptions mirrors better-auth's user.changeEmail config block

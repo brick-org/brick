@@ -79,7 +79,8 @@ func TestF3ErrorPageDefaultSnapshot(t *testing.T) {
 // take effect in the rendered HTML.
 func TestF3ErrorPageCustomizedSnapshot(t *testing.T) {
 	opts := types.Options{}
-	p := &opts.OnAPIError.CustomizeDefaultErrorPage
+	opts.OnAPIError.CustomizeDefaultErrorPage = &types.DefaultErrorPageOptions{}
+	p := opts.OnAPIError.CustomizeDefaultErrorPage
 	p.Colors.Background = "#0b0b0b"
 	p.Colors.Foreground = "#f0f0f0"
 	p.Colors.Primary = "#123456"
@@ -127,6 +128,7 @@ func TestF3ErrorPageCustomizedSnapshot(t *testing.T) {
 // Decoration toggles remove their markup (upstream error.ts:124-155,168-218,225).
 func TestF3ErrorPageDecorationToggles(t *testing.T) {
 	opts := types.Options{}
+	opts.OnAPIError.CustomizeDefaultErrorPage = &types.DefaultErrorPageOptions{}
 	opts.OnAPIError.CustomizeDefaultErrorPage.DisableCornerDecorations = true
 	opts.OnAPIError.CustomizeDefaultErrorPage.DisableBackgroundGrid = true
 	opts.OnAPIError.CustomizeDefaultErrorPage.DisableTitleBorder = true
