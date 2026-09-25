@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/brick-org/brick/auth/src/crypto"
+	"github.com/brick-org/brick/auth/src/db"
 	"github.com/brick-org/brick/auth/src/types"
 	"github.com/danielgtaylor/huma/v2"
 )
@@ -556,58 +557,56 @@ func consumeResetPasswordToken(ctx context.Context, opts types.Options, token st
 		option := resolveVerificationStoreOption(identifier, opts.Verification.StoreIdentifier)
 		stored, err := processVerificationIdentifier(identifier, option)
 		if err == nil {
+			// Atomic consume via the adapter race gate
+			// (db.ConsumeOneWithFallback: ConsumeOne fast path, id-pinned
+			// FindOne+Delete fallback). Dual-key iteration preserves the
+			// stored+plain fallback: the first consumed row wins.
+			candidates := []string{stored}
+			if verificationStoreUsesPlainFallback(option) && stored != identifier {
+				candidates = append(candidates, identifier)
+			}
+			var row map[string]any
+			for _, candidate := range candidates {
+				consumed, cerr := db.ConsumeOneWithFallback(ctx, opts.DB, "verification", []types.Where{
+					{Field: "identifier", Value: candidate},
+				})
+				if cerr != nil {
+					// Fail-safe: a consume error behaves like a miss and
+					// falls through to the legacy check below, which rejects
+					// the random single-use token format (matches the old
+					// FindOne-error behavior exactly).
+					row = nil
+					break
+				}
+				if consumed != nil {
+					row = consumed
+					break
+				}
+			}
 			var value string
 			consumed := false
-			// The transaction commits on a nil return (rolling back nothing on
-			// errResetTokenNotFound, which writes nothing) so the consuming
-			// delete — including expired-row cleanup — always persists.
-			// The transaction result is intentionally unobserved: success is
-			// carried by the consumed flag (unconsumed falls through to the
-			// legacy check, which rejects), and cleanup deletes commit with
-			// the transaction. Fail-safe by construction.
-			_ = opts.DB.Transaction(ctx, func(tx types.Adapter) error {
-				row, err := tx.FindOne(ctx, "verification", []types.Where{
-					{Field: "identifier", Value: stored},
-				}, nil)
-				if (err != nil || row == nil) && verificationStoreUsesPlainFallback(option) && stored != identifier {
-					row, err = tx.FindOne(ctx, "verification", []types.Where{
-						{Field: "identifier", Value: identifier},
-					}, nil)
-				}
-				if err != nil || row == nil {
-					return errResetTokenNotFound
-				}
+			if row != nil {
 				expiresAt, ok := timeField(row, "expires_at", "expiresAt")
-				if !ok || !isVerificationLive(expiresAt) {
-					// Return nil so the expired-row cleanup commits; the
-					// caller still falls through to the legacy check below,
-					// which rejects the random single-use token format.
-					_ = tx.Delete(ctx, "verification", []types.Where{
-						{Field: "identifier", Value: stored},
-					})
-					if verificationStoreUsesPlainFallback(option) && stored != identifier {
-						_ = tx.Delete(ctx, "verification", []types.Where{
-							{Field: "identifier", Value: identifier},
-						})
+				if ok && isVerificationLive(expiresAt) {
+					if v, _ := row["value"].(string); v != "" {
+						value = v
 					}
-					return nil
+					consumed = true
 				}
-				if v, _ := row["value"].(string); v != "" {
-					value = v
-				}
-				if err := tx.Delete(ctx, "verification", []types.Where{
-					{Field: "identifier", Value: stored},
-				}); err != nil {
-					return err
-				}
-				if verificationStoreUsesPlainFallback(option) && stored != identifier {
-					_ = tx.Delete(ctx, "verification", []types.Where{
-						{Field: "identifier", Value: identifier},
+				// Expired-row cleanup: the consumed row is already burned by
+				// the helper; defensively remove the sibling key (at most one
+				// location ever holds the row).
+				for _, candidate := range candidates {
+					_ = opts.DB.Delete(ctx, "verification", []types.Where{
+						{Field: "identifier", Value: candidate},
 					})
 				}
-				consumed = true
-				return nil
-			})
+				if !consumed {
+					// Expired or empty: the caller falls through to the legacy
+					// check below, which rejects the random single-use token.
+					row = nil
+				}
+			}
 			if consumed {
 				if opts.SecondaryStorage != nil {
 					_ = deleteSecondaryVerification(opts, identifier)

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/brick-org/brick/auth/src/crypto"
+	"github.com/brick-org/brick/auth/src/db"
 	"github.com/brick-org/brick/auth/src/types"
 	"github.com/danielgtaylor/huma/v2"
 )
@@ -961,46 +962,45 @@ func consumeDeleteAccountToken(ctx context.Context, opts types.Options, token st
 		if err != nil {
 			return "", err
 		}
-		// The transaction commits the consuming delete — including
-		// expired-row cleanup — so concurrent callbacks with the same token
-		// can only delete the account once.
-		// The transaction result is intentionally unobserved: success is
-		// carried by the consumed flag (unconsumed returns the not-found
-		// error below). Fail-safe by construction.
-		_ = opts.DB.Transaction(ctx, func(tx types.Adapter) error {
-			row, err := tx.FindOne(ctx, "verification", []types.Where{
-				{Field: "identifier", Value: stored},
-			}, nil)
-			if err != nil || row == nil {
-				if verificationStoreUsesPlainFallback(option) && stored != identifier {
-					row, err = tx.FindOne(ctx, "verification", []types.Where{
-						{Field: "identifier", Value: identifier},
-					}, nil)
-				}
-				if err != nil || row == nil {
-					return errDeleteTokenNotFound
-				}
+		// Atomic consume via the adapter race gate
+		// (db.ConsumeOneWithFallback): the first concurrent caller wins and
+		// every racer gets an error; a wrong-owner token is still burned
+		// (ownership is checked by the caller after this returns).
+		candidates := []string{stored}
+		if verificationStoreUsesPlainFallback(option) && stored != identifier {
+			candidates = append(candidates, identifier)
+		}
+		var row map[string]any
+		for _, candidate := range candidates {
+			consumed, cerr := db.ConsumeOneWithFallback(ctx, opts.DB, "verification", []types.Where{
+				{Field: "identifier", Value: candidate},
+			})
+			if cerr != nil {
+				return "", cerr
 			}
-			expiresAt, _ := row["expiresAt"].(time.Time)
-			live := !expiresAt.IsZero() && !time.Now().UTC().After(expiresAt)
-			if v, _ := row["value"].(string); v != "" && live {
-				userID = v
+			if consumed != nil {
+				row = consumed
+				break
 			}
-			if err := tx.Delete(ctx, "verification", []types.Where{
-				{Field: "identifier", Value: stored},
-			}); err != nil {
-				return err
-			}
-			if verificationStoreUsesPlainFallback(option) && stored != identifier {
-				_ = tx.Delete(ctx, "verification", []types.Where{
-					{Field: "identifier", Value: identifier},
-				})
-			}
-			if userID != "" {
-				consumed = true
-			}
-			return nil
-		})
+		}
+		if row == nil {
+			return "", errDeleteTokenNotFound
+		}
+		// Defensively remove the sibling key (at most one location ever
+		// holds the row; the consumed row is already burned).
+		for _, candidate := range candidates {
+			_ = opts.DB.Delete(ctx, "verification", []types.Where{
+				{Field: "identifier", Value: candidate},
+			})
+		}
+		expiresAt, _ := row["expiresAt"].(time.Time)
+		live := !expiresAt.IsZero() && !time.Now().UTC().After(expiresAt)
+		if v, _ := row["value"].(string); v != "" && live {
+			userID = v
+		}
+		if userID != "" {
+			consumed = true
+		}
 	}
 	if opts.SecondaryStorage != nil && consumed {
 		_ = deleteSecondaryVerification(opts, identifier)
