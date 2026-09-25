@@ -11,13 +11,7 @@ import (
 	authdb "github.com/brick-org/brick/auth/src/db"
 )
 
-// contractMemoryAdapter is a minimal in-memory authdb.Adapter that follows
-// the documented contract (snake_case physical keys, logical select
-// projection, Update (nil,nil) on no match / empty where, finite
-// DeleteMany/UpdateMany counts). It serves as the executable contract that
-// real adapters (including the Bun adapter) must satisfy; the Bun adapter's
-// unavoidably DB-bound paths (SQL generation, RETURNING) are covered by
-// integration tests requiring DATABASE_URL.
+// contractMemoryAdapter is a minimal in-memory authdb.Adapter following the documented contract.
 type contractMemoryAdapter struct {
 	tables map[string][]map[string]any
 }
@@ -85,8 +79,6 @@ func contractMatches(row map[string]any, where []authdb.Where) bool {
 	if len(where) == 0 {
 		return true
 	}
-	// AND-group first, OR-group second, mirroring the SQL adapters'
-	// (AND-group) AND (OR-group) emission.
 	ands := []authdb.Where{}
 	ors := []authdb.Where{}
 	for _, w := range where {
@@ -202,8 +194,6 @@ func contractMatches(row map[string]any, where []authdb.Where) bool {
 	return false
 }
 
-// contractCheckWhere mirrors the factory/SQL validation: in/not_in values
-// must be slices/arrays.
 func contractCheckWhere(where []authdb.Where) error {
 	for _, w := range where {
 		if w.Operator == authdb.OpIn || w.Operator == authdb.OpNotIn {
@@ -223,7 +213,6 @@ func isSliceContractValue(v any) bool {
 	return kind == reflect.Slice || kind == reflect.Array
 }
 
-// contractToFloat coerces numeric values for comparison predicates.
 func contractToFloat(v any) (float64, bool) {
 	switch n := v.(type) {
 	case nil:
@@ -511,12 +500,10 @@ func TestContract_UpdateNilOnNoMatch(t *testing.T) {
 	if _, err := m.Create(ctx, "user", map[string]any{"id": "1", "name": "Al"}, nil); err != nil {
 		t.Fatal(err)
 	}
-	// No match → (nil, nil), no error.
 	row, err := m.Update(ctx, "user", []authdb.Where{{Field: "id", Value: "missing"}}, map[string]any{"name": "X"})
 	if err != nil || row != nil {
 		t.Fatalf("Update no match must be (nil,nil), got %v %v", row, err)
 	}
-	// Empty where → (nil, nil) without touching the database.
 	row, err = m.Update(ctx, "user", nil, map[string]any{"name": "X"})
 	if err != nil || row != nil {
 		t.Fatalf("Update empty where must be (nil,nil), got %v %v", row, err)

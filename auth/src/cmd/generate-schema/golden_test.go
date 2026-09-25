@@ -1,17 +1,6 @@
 package main
 
-// Dialect-specific DDL golden fixtures.
-//
-// The canonical schema below exercises every dialect branch in
-// ddlColumnType/ddlDefault/quoteIdent: FK chains (ordering), compound
-// unique indexes (deferred), boolean/number/bigint/date/json mappings,
-// static defaults, timestamp func defaults, bounded strings, and
-// per-dialect quoting. TestGoldenFixtures asserts byte-exact equality
-// with testdata/golden_<dialect>.sql; the fixtures mirror the upstream
-// compileMigrations output for the same logical schema.
-//
-// To regenerate after an intentional DDL change:
-// GOLDEN_UPDATE=1 go test -run TestGoldenFixtures ./cmd/generate-schema/
+// Dialect-specific DDL golden fixtures mirroring upstream compileMigrations output.
 
 import (
 	"os"
@@ -22,9 +11,6 @@ import (
 	auth "github.com/brick-org/brick/auth/src"
 )
 
-// canonicalGoldenSchema is the fixed logical schema behind every golden
-// fixture: user <- session/member (FK), organization <- member (FK) with
-// a compound unique member index.
 func canonicalGoldenSchema() auth.PluginSchema {
 	optional := false
 	return auth.PluginSchema{
@@ -119,17 +105,13 @@ func TestGoldenFixtures(t *testing.T) {
 	}
 }
 
-// TestGoldenFixturesFKOrdering pins the execution order contract: FK
-// targets before dependents, every CREATE TABLE before every CREATE
-// INDEX (upstream deferredIndexes).
+// TestGoldenFixturesFKOrdering: FK targets before dependents, tables before indexes (upstream deferredIndexes).
 func TestGoldenFixturesFKOrdering(t *testing.T) {
 	plan, err := BuildMigrationPlan(canonicalGoldenSchema(), auth.AdapterConfig{}, DialectSQLite, "string")
 	if err != nil {
 		t.Fatalf("plan must build: %v", err)
 	}
 	script := plan.Script()
-	// Core tables emit first in declaration order, then plugin tables in
-	// dependency order: every FK target precedes its dependents.
 	order := []string{`"app_users"`, `"sessions"`, `"organizations"`, `"members"`}
 	for i := 1; i < len(order); i++ {
 		if strings.Index(script, order[i-1]) > strings.Index(script, order[i]) {

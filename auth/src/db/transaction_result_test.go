@@ -6,11 +6,7 @@ import (
 	"testing"
 )
 
-// Port of upstream createAsIsTransaction / generic transaction contract
-// (vendor/.../core/src/db/adapter/factory.ts:46-48,
-// vendor/.../core/src/db/adapter/index.ts:506-509):
-// transaction callbacks return generic R, and stores without a real
-// transaction run the callback directly (sequential fallback).
+// Port of upstream createAsIsTransaction contract (factory.ts:46-48, index.ts:506-509): generic R, sequential fallback.
 
 func TestTransactionResult_ReturnsCallbackValue(t *testing.T) {
 	ctx := context.Background()
@@ -43,8 +39,6 @@ func TestTransactionResult_PropagatesCallbackError(t *testing.T) {
 
 func TestTransactionResult_SequentialFallbackWithoutBreakingAdapter(t *testing.T) {
 	ctx := context.Background()
-	// Adapter with no real transaction support (nil-DB style): the helper
-	// must still run the callback directly and return its value.
 	m := &seqAdapter{tables: map[string][]map[string]any{}, noTx: true}
 	got, err := TransactionResult(ctx, m, func(tx Adapter) (int, error) {
 		if _, err := tx.Create(ctx, "widget", map[string]any{"id": "s1"}, nil); err != nil {
@@ -57,8 +51,6 @@ func TestTransactionResult_SequentialFallbackWithoutBreakingAdapter(t *testing.T
 	}
 }
 
-// seqAdapter is a minimal Adapter whose Transaction always falls back to
-// sequential execution (mirroring createAsIsTransaction).
 type seqAdapter struct {
 	tables map[string][]map[string]any
 	noTx   bool
@@ -185,6 +177,5 @@ func (m *seqAdapter) IncrementOne(_ context.Context, model string, where []Where
 	return nil, nil
 }
 func (m *seqAdapter) Transaction(_ context.Context, fn func(Adapter) error) error {
-	// Sequential fallback: run directly (upstream createAsIsTransaction).
 	return fn(m)
 }

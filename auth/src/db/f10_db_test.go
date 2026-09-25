@@ -1,9 +1,6 @@
 package db
 
-// F10 (PARITY_V3 gap 14 core subset): reserveVerificationValue, typed
-// duplicate-key errors, and ConsumeOne-with-fallback for the verification
-// consume paths. Tests-first: this file FAILS pre-fix (symbols do not exist
-// yet) and gates the implementation in adapter-base.go / with-hooks.go.
+// F10 (PARITY_V3 gap 14 core subset): reserveVerificationValue, typed duplicate-key errors, ConsumeOne fallback.
 
 import (
 	"context"
@@ -16,9 +13,6 @@ import (
 )
 
 func TestF10_VerificationReservationID_Deterministic(t *testing.T) {
-	// Upstream: base64url-nopad(SHA-256("reserve:" + identifier))
-	// (internal-adapter.ts reserveVerificationValue). Vector computed from
-	// the pinned algorithm: SHA-256 over UTF-8 bytes, unpadded base64url.
 	const want = "BPk08ihEN5h8SOKGkEOM1LNCordg96ZsMmdCyzdqND4"
 	if got := VerificationReservationID("reserve:once"); got != want {
 		t.Fatalf("VerificationReservationID(reserve:once) = %q, want %q", got, want)
@@ -83,9 +77,6 @@ func TestF10_DuplicateKeyError_Mapping(t *testing.T) {
 	}
 }
 
-// f10FakeAdapter is a minimal in-memory Adapter for reserve/consume tests.
-// Create enforces primary-key uniqueness with a sqlite-flavored duplicate
-// error so the portable re-read path is exercised without a live database.
 type f10FakeAdapter struct {
 	mu                 sync.Mutex
 	rows               map[string]map[string]any
@@ -225,7 +216,6 @@ func TestF10_ReserveVerificationValue_RoundTrip(t *testing.T) {
 	if err != nil || !first {
 		t.Fatalf("first reserve = %v, %v; want true, nil", first, err)
 	}
-	// The row is findable under the deterministic PK with the first value.
 	id := VerificationReservationID("reserve:once")
 	row, err := a.FindOne(ctx, "verification", eqID(id), nil)
 	if err != nil || row == nil {
@@ -235,7 +225,6 @@ func TestF10_ReserveVerificationValue_RoundTrip(t *testing.T) {
 		t.Fatalf("reserved row must carry the first write: %v", row)
 	}
 
-	// A replay loses: first-writer-wins, original value preserved.
 	second, err := ReserveVerificationValue(ctx, a, "reserve:once", "reserve:once", "jti-2-replay", expires)
 	if err != nil || second {
 		t.Fatalf("replay reserve = %v, %v; want false, nil", second, err)
@@ -250,7 +239,6 @@ func TestF10_ReserveVerificationValue_MapsRealFailure(t *testing.T) {
 	ctx := context.Background()
 	expires := time.Now().UTC().Add(time.Hour)
 
-	// Unrelated store failure with no row: the error propagates, untyped.
 	broken := newF10FakeAdapter()
 	broken.createErr = errors.New("connection refused")
 	ok, err := ReserveVerificationValue(ctx, broken, "reserve:x", "reserve:x", "v", expires)
@@ -261,7 +249,6 @@ func TestF10_ReserveVerificationValue_MapsRealFailure(t *testing.T) {
 		t.Fatalf("unrelated failure must not be typed duplicate: %v", err)
 	}
 
-	// Constraint-flavored failure with no row (missed re-read): typed.
 	phantom := newF10FakeAdapter()
 	phantom.createErr = errors.New(`ERROR: duplicate key value violates unique constraint "v" (SQLSTATE 23505)`)
 	ok, err = ReserveVerificationValue(ctx, phantom, "reserve:y", "reserve:y", "v", expires)
@@ -301,7 +288,6 @@ func TestF10_ConsumeOneWithFallback_UnsupportedFallsBack(t *testing.T) {
 	if err != nil || first == nil || first["value"] != "u9" {
 		t.Fatalf("fallback consume must return the row: %v %v", first, err)
 	}
-	// The fallback pins the exact row by id: second consume misses.
 	second, err := ConsumeOneWithFallback(ctx, a, "verification", []Where{{Field: "identifier", Value: "tok"}})
 	if err != nil || second != nil {
 		t.Fatalf("consumed row must be gone: %v %v", second, err)

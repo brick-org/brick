@@ -7,16 +7,7 @@ import (
 	authdb "github.com/brick-org/brick/auth/src/db"
 )
 
-// runAdapterContractSuite exercises the shared authdb.Adapter contract
-// (CRUD, projection, single-row guards, bulk counts, atomics, operators)
-// against any adapter implementation. All assertions use portable semantics
-// that hold for the in-memory reference, SQLite, and PostgreSQL; dialect or
-// capability-specific behavior (type revival, RETURNING fallbacks, joins)
-// lives in the dedicated integration tests.
-//
-// Callers seed model "widget" with string fields id/name/role plus numeric
-// age; adapters under test must accept those fields (strict adapters should
-// register them).
+// runAdapterContractSuite exercises the shared authdb.Adapter contract (CRUD, projection, guards, counts, atomics).
 func runAdapterContractSuite(t *testing.T, name string, adapter authdb.Adapter) {
 	t.Helper()
 	ctx := context.Background()
@@ -222,10 +213,6 @@ func runAdapterContractSuite(t *testing.T, name string, adapter authdb.Adapter) 
 
 	t.Run(name+"/IncrementOne", func(t *testing.T) {
 		clean(t)
-		// Seed an explicit counter: native single-statement increments
-		// compute `field = field + delta` in SQL, where NULL + delta stays
-		// NULL on every dialect (matching the kysely/drizzle native path;
-		// only the compare-and-swap fallback starts null counters at 0).
 		if _, err := adapter.Create(ctx, "widget", map[string]any{"id": "i1", "name": "ctr", "role": "member", "age": 1}, nil); err != nil {
 			t.Fatal(err)
 		}
@@ -283,9 +270,6 @@ func runAdapterContractSuite(t *testing.T, name string, adapter authdb.Adapter) 
 		if err != nil || hit == nil || hit["id"] != "w1" {
 			t.Fatalf("insensitive eq: %v %v", hit, err)
 		}
-		// OR predicates group separately from AND predicates: upstream
-		// emits (AND-group) AND (OR-group), so a lone AND plus two ORs
-		// matches only rows satisfying both groups.
 		or, err := adapter.FindMany(ctx, "widget", []authdb.Where{
 			{Field: "role", Value: "member"},
 			{Field: "id", Value: "w1", Connector: "OR"},
@@ -294,7 +278,6 @@ func runAdapterContractSuite(t *testing.T, name string, adapter authdb.Adapter) 
 		if err != nil || len(or) != 1 || or[0]["id"] != "w1" {
 			t.Fatalf("AND/OR grouping: %v %v", or, err)
 		}
-		// A pure OR group matches either side.
 		or, err = adapter.FindMany(ctx, "widget", []authdb.Where{
 			{Field: "id", Value: "w1", Connector: "OR"},
 			{Field: "id", Value: "w2", Connector: "OR"},

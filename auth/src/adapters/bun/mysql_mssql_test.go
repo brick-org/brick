@@ -11,50 +11,6 @@ import (
 )
 
 // AUTH-D6-01 live MySQL/MSSQL contract runs + MSSQL persisted-row exclusion.
-// AUTH-V10-03 live-vs-wire matrix recertification (2026-09-21):
-//
-// LIVE STATUS: neither dialect runs live from Go here. go.mod declares only
-// pgdriver + modernc sqlite; no mysql/mssql driver exists, and adding a
-// module dependency is out of scope (disclosure required). Environment
-// probes: mysql:8 pulls, boots, and answers `mysqladmin ping`
-// (docker -p 5434:3306); mcr.microsoft.com/mssql/server:2022-latest pulls
-// but does not start on this arm64 host (amd64-only image, entrypoint exec
-// fails), and no mssql driver exists either way. A forced-label SQLite run
-// is NOT live evidence, so the tests below pin wire conformance instead.
-//
-// WIRE EVIDENCE (all hermetic, all green):
-//   - Fallback cascades execute end to end on SQLite under the mysql/mssql
-//     labels: TestFallback_CreateCascade (knownID/unique/fullField/
-//     ambiguous→null/lenient), TestFallback_UpdateReselectsByNewValues,
-//     TestFallback_NullCounterStartsAtZero, TestFallback_MatchAllBulkWrites,
-//     TestFallback_SequentialTransaction.
-//   - SQL shapes: TestFallback_GeneratedSQL (mysql insert has no RETURNING;
-//     mssql offset carries ORDER BY), TestFallback_RawSQLShapes (consume/
-//     increment shapes, identifier escaping), TestFallback_CapabilitiesMatrix
-//     (supportsReturning false for mysql+mssql; date/bool/JSON matrix).
-//   - MSSQL OUTPUT exclusion: TestMSSQL_PersistedRowExclusion below.
-//   - Dialect DDL: cmd/generate-schema golden fixtures golden_mysql.sql +
-//     golden_mssql.sql (byte-exact planner output incl. backtick/bracket
-//     quoting, bounded varchar keys, MSSQL NULL-filtered unique indexes).
-//   - Matrix guard: TestWireConformance_MatrixCoversSkippedLive re-asserts
-//     every skipped live capability's wire property so the matrix cannot
-//     drift silently.
-//
-// Live runs (kept for servers with drivers; skipped here by design):
-//   MYSQL_DATABASE_URL='mysql://user:pass@tcp(localhost:3306)/auth_test' \
-//     GOWORK=off go test -count=1 ./adapters/bun/ -run TestMySQL_ -v
-//   MSSQL_DATABASE_URL='sqlserver://sa:Pass@word@localhost:1433?database=master' \
-//     GOWORK=off go test -count=1 ./adapters/bun/ -run TestMSSQL_ -v
-//
-// Docker examples:
-//   docker run -d --name auth-mysql -e MYSQL_ROOT_PASSWORD=pass \
-//     -e MYSQL_DATABASE=auth_test -p 3306:3306 mysql:8
-//   docker run -d --name auth-mssql -e ACCEPT_EULA=Y -e SA_PASSWORD='Pass@word' \
-//     -p 1433:1433 mcr.microsoft.com/mssql/server:2022-latest
-//
-// Without a live server the wire-conformance tests below (SQL shapes, DDL
-// goldens via cmd/generate-schema, fallback cascades against SQLite) are the
-// evidence; live runs are recorded in the D6 report, never gated in CI.
 
 func mysqlDSN(t *testing.T) string {
 	t.Helper()
@@ -74,41 +30,24 @@ func mssqlDSN(t *testing.T) string {
 	return dsn
 }
 
-// TestMySQL_ContractSuite runs the shared contract against live MySQL with a
-// unique table prefix per test so parallel package execution never shares
-// tables. INTENTIONALLY SKIPPED (AUTH-V10-03): go.mod declares no mysql
-// driver (pgdriver + modernc sqlite only) and adding a module dependency is
-// out of scope; wire conformance (TestWireConformance_MatrixCoversSkippedLive
-// + TestFallback_* mysql subtests + golden_mysql.sql) is the evidence.
+// TestMySQL_ContractSuite: live run INTENTIONALLY SKIPPED (AUTH-V10-03, no mysql driver in go.mod).
 func TestMySQL_ContractSuite(t *testing.T) {
 	dsn := mysqlDSN(t)
 	_ = dsn
 	t.Skip("live MySQL run requires a mysql driver in go.mod (absent by decision) + server; wire conformance covers shapes (see TestFallback_GeneratedSQL + cmd/generate-schema goldens)")
 }
 
-// TestMSSQL_ContractSuite runs the shared contract against live MSSQL with a
-// unique schema per test. INTENTIONALLY SKIPPED (AUTH-V10-03): go.mod
-// declares no mssql driver and the server image does not start on this
-// arm64 host; wire conformance (TestWireConformance_MatrixCoversSkippedLive
-// + TestMSSQL_PersistedRowExclusion) is the evidence.
+// TestMSSQL_ContractSuite: live run INTENTIONALLY SKIPPED (AUTH-V10-03, no mssql driver in go.mod).
 func TestMSSQL_ContractSuite(t *testing.T) {
 	dsn := mssqlDSN(t)
 	_ = dsn
 	t.Skip("live MSSQL run requires an mssql driver in go.mod (absent by decision) + server; wire conformance covers shapes (see TestMSSQL_PersistedRowExclusion)")
 }
 
-// TestWireConformance_MatrixCoversSkippedLive pins the AUTH-V10-03
-// live-vs-wire matrix as executable assertions: every skipped live
-// capability has named wire evidence, and the decisive wire properties are
-// re-asserted here so the matrix cannot drift silently. A forced-label
-// SQLite run is documented as NOT live evidence; these assertions pin the
-// SQL/capability contract the labels guarantee.
+// TestWireConformance_MatrixCoversSkippedLive pins the AUTH-V10-03 skipped-live wire matrix.
 func TestWireConformance_MatrixCoversSkippedLive(t *testing.T) {
 	ctx := context.Background()
 
-	// Skipped live: MySQL + MSSQL contract CRUD (no drivers in go.mod).
-	// Wire: neither label may emit RETURNING or OUTPUT; inserts still
-	// persist and re-read (fallback cascade).
 	for _, dialect := range []string{"mysql", "mssql"} {
 		t.Run(dialect+"/noReturningNoOutput", func(t *testing.T) {
 			db := openSQLiteDB(t)
@@ -138,8 +77,6 @@ func TestWireConformance_MatrixCoversSkippedLive(t *testing.T) {
 		})
 	}
 
-	// Skipped live: MSSQL OFFSET paging. Wire: every offset query carries
-	// ORDER BY (SQL Server requires it).
 	t.Run("mssql/offsetRequiresOrderBy", func(t *testing.T) {
 		db := openSQLiteDB(t)
 		hook := &captureHook{}
@@ -159,9 +96,6 @@ func TestWireConformance_MatrixCoversSkippedLive(t *testing.T) {
 		}
 	})
 
-	// Skipped live: LIKE portability on both labels. Wire: sensitive path is
-	// portable LIKE (never ILIKE off postgres); insensitive path is
-	// LOWER() LIKE (never ILIKE).
 	for _, dialect := range []string{"mysql", "mssql"} {
 		t.Run(dialect+"/likePortability", func(t *testing.T) {
 			a := testAdapter(authdb.Config{}, dialect)
@@ -176,9 +110,6 @@ func TestWireConformance_MatrixCoversSkippedLive(t *testing.T) {
 		})
 	}
 
-	// Skipped live: atomic counters on both labels. Wire: the
-	// compare-and-swap fallback converges (null counters start at 0) and
-	// the capability matrix stays conservative.
 	t.Run("fallback/casConverges", func(t *testing.T) {
 		for _, dialect := range []string{"mysql", "mssql"} {
 			a := sqliteAdapter(t, dialect, Options{Models: widgetRegistry()})
@@ -200,9 +131,6 @@ func TestWireConformance_MatrixCoversSkippedLive(t *testing.T) {
 		}
 	})
 
-	// Skipped live: MSSQL OUTPUT inserted (intentional exclusion, see
-	// TestMSSQL_PersistedRowExclusion). Wire: update-then-reselect still
-	// targets the updated row without OUTPUT.
 	t.Run("mssql/updateReselectWithoutOutput", func(t *testing.T) {
 		a := sqliteAdapter(t, "mssql", Options{Models: widgetRegistry()})
 		if _, err := a.Create(ctx, "widget", map[string]any{"id": "r1", "name": "old"}, nil); err != nil {
@@ -226,25 +154,13 @@ func mustResolveWire(t *testing.T, a *Adapter, w authdb.Where) (string, string, 
 	return op, col, val
 }
 
-// TestMSSQL_PersistedRowExclusion registers the exact intentional exclusion:
-// upstream kysely uses OUTPUT inserted (outputAll("inserted")) for MSSQL
-// creates/updates/deletes/increments
-// (vendor/.../kysely-adapter/src/kysely-adapter.ts:287-288,841-852,966-968),
-// while this adapter uses the portable fallback cascade (insert + re-read by
-// id / unique column / full-field match, update-then-reselect,
-// snapshot-guarded CAS) and never emits OUTPUT.
-//
-// The fallback still returns the persisted row (generated IDs, defaults,
-// trigger values) or (nil, nil) when unidentifiable, matching upstream's
-// warn-and-null. This test pins the exclusion: supportsReturning is false
-// for mssql, no generated SQL contains OUTPUT, and the cascade returns rows.
+// TestMSSQL_PersistedRowExclusion: MSSQL never emits OUTPUT (upstream kysely outputAll); fallback cascade returns rows.
 func TestMSSQL_PersistedRowExclusion(t *testing.T) {
 	ctx := context.Background()
 	a := testAdapter(authdb.Config{}, "mssql")
 	if a.supportsReturning() {
 		t.Fatal("mssql must not use RETURNING (OUTPUT excluded by decision; fallback cascade instead)")
 	}
-	// No generated query may contain OUTPUT (the excluded upstream primitive).
 	db := openSQLiteDB(t)
 	hook := &captureHook{}
 	db.AddQueryHook(hook)
@@ -261,14 +177,12 @@ func TestMSSQL_PersistedRowExclusion(t *testing.T) {
 	if err != nil || row == nil || row["name"] != "persisted" {
 		t.Fatalf("fallback must return the persisted row: %v %v", row, err)
 	}
-	// Update-then-reselect still targets the updated row (no OUTPUT).
 	updated, err := mssql.Update(ctx, "widget",
 		[]authdb.Where{{Field: "name", Value: "persisted"}},
 		map[string]any{"name": "new"})
 	if err != nil || updated == nil || updated["name"] != "new" {
 		t.Fatalf("mssql update reselect: %v %v", updated, err)
 	}
-	// CAS increment still converges without native atomics.
 	ctr, err := mssql.IncrementOne(ctx, "widget", []authdb.Where{{Field: "id", Value: "m1"}}, map[string]int{"age": 2}, nil)
 	if err != nil {
 		t.Fatalf("mssql CAS increment: %v", err)

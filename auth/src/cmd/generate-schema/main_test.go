@@ -80,7 +80,6 @@ func TestBuildMigrationPlanSQLite(t *testing.T) {
 	if strings.Contains(script, "CURRENT_TIMESTAMP") {
 		t.Fatal("sqlite must not emit timestamp defaults")
 	}
-	// User table must precede the session table that references it.
 	if strings.Index(script, `"app_users"`) > strings.Index(script, `"sessions"`) {
 		t.Fatal("referenced tables must be created first")
 	}
@@ -108,8 +107,6 @@ func TestBuildMigrationPlanMySQLBounded(t *testing.T) {
 		t.Fatalf("plan must build: %v", err)
 	}
 	script := plan.Script()
-	// Single-column indexed email: safe length min(191 default, 3072/4/1) = 191,
-	// mirroring upstream getDatabaseIndexStringLength.
 	if !strings.Contains(script, "`email` varchar(191) NOT NULL UNIQUE") {
 		t.Fatalf("mysql indexed strings must be bounded:\n%s", script)
 	}
@@ -180,7 +177,6 @@ func TestBuildPluginsArbitraryRegistry(t *testing.T) {
 	if _, err := buildPlugins("no-such-plugin", false); err == nil {
 		t.Fatal("unknown plugin must fail")
 	}
-	// Removed built-ins stay rejected alongside registry entries.
 	if _, err = buildPlugins("test-gen-fake,admin", false); err == nil {
 		t.Fatal("removed built-in admin must fail")
 	}

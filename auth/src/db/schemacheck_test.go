@@ -6,9 +6,7 @@ import (
 	"testing"
 )
 
-// Port of vendor/.../core/src/db/schema-check.test.ts (Better Auth v1.7.5,
-// commit 5468e6bf): createSchemaCheck caching/invalidation, checksSchema gate,
-// and the adapter→check registry.
+// Port of schema-check.test.ts (Better Auth v1.7.5): check caching/invalidation, checksSchema gate, registry.
 
 func TestSchemaCheck_InvalidatesOnlyMigratedDatabase(t *testing.T) {
 	database := struct{ id int }{id: 1}

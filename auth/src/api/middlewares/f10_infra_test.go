@@ -3,13 +3,8 @@ package middlewares
 import "testing"
 
 // F10 origin/CSRF infra coverage (P09-GAP-1..4).
-//
-// Upstream: vendor/better-auth/packages/better-auth/src/api/middlewares/origin-check.ts
-// (validateOrigin origin||referer + null-Origin/sec-fetch-site inference,
-// shouldSkipOriginCheck array branch, "not GET/OPTIONS/HEAD" mutating set).
 
-// P09-GAP-4: upstream skips only GET/OPTIONS/HEAD (origin-check.ts:69-76), so
-// every other method (TRACE, PROPFIND, PURGE, custom verbs) is validated.
+// P09-GAP-4: upstream skips only GET/OPTIONS/HEAD (origin-check.ts:69-76); all other methods validate.
 func TestF10_IsMutatingMethod_MatchesUpstreamNotGetOptionsHead(t *testing.T) {
 	cases := []struct {
 		method string
@@ -39,8 +34,7 @@ func TestF10_IsMutatingMethod_MatchesUpstreamNotGetOptionsHead(t *testing.T) {
 	}
 }
 
-// OriginOrReferer wiring pin (P09-GAP-1): Origin wins, Referer is the
-// fallback (upstream `headers.get("origin") || headers.get("referer") || ""`).
+// OriginOrReferer wiring pin (P09-GAP-1): Origin wins, Referer is the fallback.
 func TestF10_OriginOrReferer_PrefersOriginFallsBack(t *testing.T) {
 	if got := OriginOrReferer("https://app.example", "https://ref.example/page"); got != "https://app.example" {
 		t.Fatalf("origin must win, got %q", got)
@@ -56,9 +50,7 @@ func TestF10_OriginOrReferer_PrefersOriginFallsBack(t *testing.T) {
 	}
 }
 
-// ShouldSkipOriginCheck slash-boundary pin (P09-GAP-3): skipping
-// "/public/data" must not also skip "/public/database" or
-// "/public/data-delete" (upstream origin-check.ts:36-44).
+// ShouldSkipOriginCheck slash-boundary pin (P09-GAP-3): skipping one path never skips prefix-siblings.
 func TestF10_ShouldSkipOriginCheck_SlashBoundary(t *testing.T) {
 	paths := []string{"/public/data"}
 	if !ShouldSkipOriginCheck(false, paths, "/public/data") {
@@ -84,10 +76,7 @@ func TestF10_ShouldSkipOriginCheck_SlashBoundary(t *testing.T) {
 	}
 }
 
-// ResolveOriginCandidate pin (P09-GAP-1): Origin wins, Referer backs up,
-// and `Origin: null` + `Sec-Fetch-Site: same-origin` infers the
-// request-target origin (upstream validateOrigin inferredOrigin,
-// origin-check.ts:253-269).
+// ResolveOriginCandidate pin (P09-GAP-1): Origin wins, Referer backs up, null-Origin infers request-target origin.
 func TestF10_ResolveOriginCandidate_NullInference(t *testing.T) {
 	if got := ResolveOriginCandidate("https://app.example", "https://ref.example/x", "", "http", "app.example"); got != "https://app.example" {
 		t.Fatalf("origin must win, got %q", got)
@@ -112,8 +101,7 @@ func TestF10_ResolveOriginCandidate_NullInference(t *testing.T) {
 	}
 }
 
-// Fetch-Metadata routing pins (P09-GAP-2, upstream validateFormCsrf,
-// origin-check.ts:316-375).
+// Fetch-Metadata routing pins (P09-GAP-2, upstream validateFormCsrf, origin-check.ts:316-375).
 func TestF10_FetchMetadataRouting(t *testing.T) {
 	if !HasFetchMetadata("same-origin", "", "") {
 		t.Fatal("site alone is metadata")
@@ -153,8 +141,7 @@ func TestF10_FetchMetadataRouting(t *testing.T) {
 	}
 }
 
-// NeedsOriginValidation evidence gate pin: browser evidence (origin +
-// cookies) is challenged; server-to-server (no cookies) passes through.
+// NeedsOriginValidation evidence gate pin: browser evidence (origin + cookies) is challenged.
 func TestF10_NeedsOriginValidation_EvidenceGate(t *testing.T) {
 	if !NeedsOriginValidation("https://app.example", "session=abc") {
 		t.Fatal("origin + cookie must need validation")

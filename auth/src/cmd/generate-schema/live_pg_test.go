@@ -14,19 +14,6 @@ import (
 )
 
 // AUTH-V10-03 live PostgreSQL migration coverage (generate-schema half).
-//
-// These tests build real migration plans (BuildMigrationPlan /
-// DiffMigrationPlan), apply every statement to live PostgreSQL under unique
-// table names, and introspect information_schema + pg_indexes to prove the
-// plans execute and produce the intended shape (PKs, uniques, FKs, bigint
-// rate-limit columns, plugin columns on core tables, deferred indexes).
-// They skip without DATABASE_URL so default runs stay hermetic; table-name
-// uniqueness keeps them safe under default parallel package execution
-// (`go test ./...`) — they never touch the shared integration tables
-// (users/sessions/accounts/verifications), which still require `-p 1`
-// (see adapters/bun/pg_live_matrix_test.go for the exact serial
-// requirement). The adapter-level half (plugin create/drop cycles,
-// rate-limit behavior, core apply+introspect) lives there.
 
 var livePGPlanSeq atomic.Uint64
 
@@ -44,9 +31,6 @@ func requireLivePG(t *testing.T) *sql.DB {
 	return db
 }
 
-// livePlanConfig clones schema (clearing TableSchema.ModelName overrides so
-// the mapping below wins everywhere) and maps every model to a unique
-// physical table under prefix.
 func livePlanConfig(t *testing.T, schema auth.PluginSchema, prefix string) (auth.PluginSchema, auth.AdapterConfig) {
 	t.Helper()
 	n := livePGPlanSeq.Add(1)
@@ -64,7 +48,6 @@ func livePlanConfig(t *testing.T, schema auth.PluginSchema, prefix string) (auth
 	return cloned, cfg
 }
 
-// liveDesiredSchema merges core + rate-limit schemas.
 func liveDesiredSchema(t *testing.T) auth.PluginSchema {
 	t.Helper()
 	return auth.MergeSchemas(auth.CoreSchema(), auth.RateLimitSchema())
@@ -132,9 +115,7 @@ func liveColumnTypes(t *testing.T, db *sql.DB, table string) map[string]string {
 	return out
 }
 
-// TestLivePG_FullPlanApplyAndIntrospect applies the fresh-install postgres
-// plan for the v1 core + rate-limit schemas and proves the resulting shape
-// (plugin schemas are v1-excluded per SCOPE.md and asserted nowhere here).
+// TestLivePG_FullPlanApplyAndIntrospect applies the fresh-install postgres plan and proves its shape.
 func TestLivePG_FullPlanApplyAndIntrospect(t *testing.T) {
 	db := requireLivePG(t)
 	ctx := context.Background()
@@ -155,7 +136,6 @@ func TestLivePG_FullPlanApplyAndIntrospect(t *testing.T) {
 
 	applyPlanStatements(t, db, plan.Script())
 
-	// Every planned table exists.
 	for _, want := range tables {
 		var n int
 		if err := db.QueryRowContext(ctx,
@@ -172,8 +152,6 @@ func TestLivePG_FullPlanApplyAndIntrospect(t *testing.T) {
 		byKey[key] = auth.PhysicalTableName(key, tbl, cfg)
 	}
 
-	// Core user/session columns (v1 scope: no admin/org plugin columns such
-	// as role/banned/impersonated_by/active_organization_id).
 	userCols := liveColumnTypes(t, db, byKey["user"])
 	for _, col := range []string{"id", "email", "name"} {
 		if _, ok := userCols[col]; !ok {
@@ -187,7 +165,6 @@ func TestLivePG_FullPlanApplyAndIntrospect(t *testing.T) {
 		}
 	}
 
-	// Rate-limit table: key/count/lastRequest with bigint last_request.
 	var rlTable string
 	for key, tbl := range schema {
 		joined := strings.ToLower(key + " " + auth.PhysicalTableName(key, tbl, cfg))
@@ -208,7 +185,6 @@ func TestLivePG_FullPlanApplyAndIntrospect(t *testing.T) {
 		t.Fatalf("last_request must be bigint, got %q", rlCols["last_request"])
 	}
 
-	// Primary keys on every table.
 	for _, tbl := range tables {
 		var n int
 		if err := db.QueryRowContext(ctx,
@@ -220,9 +196,6 @@ func TestLivePG_FullPlanApplyAndIntrospect(t *testing.T) {
 		}
 	}
 
-	// FK-safe ordering proof: the plan carries FK references and applied in
-	// order without error. Scope the FK count to our tables (the shared DB
-	// may hold others); at least the core userId chain must be enforced.
 	ourFKs := 0
 	for _, tbl := range tables {
 		var n int
@@ -236,7 +209,6 @@ func TestLivePG_FullPlanApplyAndIntrospect(t *testing.T) {
 		t.Fatal("full plan must enforce at least one FK (core userId chain)")
 	}
 
-	// Deferred indexes exist in pg_indexes for our tables.
 	indexed := 0
 	for _, tbl := range tables {
 		var n int
@@ -249,10 +221,7 @@ func TestLivePG_FullPlanApplyAndIntrospect(t *testing.T) {
 	t.Logf("applied %d tables, %d own FKs, %d indexes", len(tables), ourFKs, indexed)
 }
 
-// TestLivePG_DiffPlanAddsExtensionTables applies a core-only fresh plan,
-// then the incremental core->core+rate-limit diff (new tables only),
-// proving safe-startup migrations execute live without destructive
-// statements. (Plugin-table diffs are v1-excluded per SCOPE.md.)
+// TestLivePG_DiffPlanAddsExtensionTables applies the incremental core-to-core+rate-limit diff live.
 func TestLivePG_DiffPlanAddsExtensionTables(t *testing.T) {
 	db := requireLivePG(t)
 	ctx := context.Background()
@@ -269,7 +238,6 @@ func TestLivePG_DiffPlanAddsExtensionTables(t *testing.T) {
 		t.Fatalf("full schema must contain the core tables, have %v", keysOf(full))
 	}
 
-	// Same cfg for both plans so physical names align.
 	corePlan, err := BuildMigrationPlan(core, cfg, DialectPostgres, "string")
 	if err != nil {
 		t.Fatalf("core plan: %v", err)
@@ -292,7 +260,6 @@ func TestLivePG_DiffPlanAddsExtensionTables(t *testing.T) {
 	}
 	applyPlanStatements(t, db, diff.Script())
 
-	// Extension tables (rate-limit) exist after the diff apply.
 	pluginKeys := 0
 	for key, tbl := range full {
 		if coreKeys[key] {
@@ -314,8 +281,6 @@ func TestLivePG_DiffPlanAddsExtensionTables(t *testing.T) {
 	}
 	t.Logf("core tables + %d extension tables via incremental diff", pluginKeys)
 
-	// No plugin-column ALTERs in v1 scope: the diff must not reference
-	// admin/org columns.
 	for _, col := range []string{"role", "banned", "impersonated_by", "active_organization_id", "organizations", "members"} {
 		if strings.Contains(strings.ToLower(diff.Script()), col) {
 			t.Fatalf("v1 diff must not reference plugin surface %q", col)

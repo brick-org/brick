@@ -1,18 +1,6 @@
 package main
 
 // AUTH-V10-02 — adversarial and cross-language conformance (tests only).
-//
-// This file owns the generate-schema command's Wave 10 adversarial coverage:
-// migration-plan determinism under burst across all four dialects, and
-// hostile schema-JSON fuzzing through the plan builder.
-//
-// Upstream references (pinned Better Auth v1.7.5 at 5468e6bf):
-//   - packages/core/src/db/get-migration.ts (append-only migration planning,
-//     FK-safe ordering, unsafe-change refusal)
-//
-// Work limits pinned for this file: bursts are fixed at 8 racers × 4
-// dialects; fuzz schema documents are capped at 4KiB; larger inputs skip. No
-// production code is changed here.
 
 import (
 	"encoding/json"
@@ -22,9 +10,7 @@ import (
 	auth "github.com/brick-org/brick/auth/src"
 )
 
-// Migration planning under burst: concurrent BuildMigrationPlan calls across
-// all four dialects return byte-identical scripts on every iteration (stable
-// FK-safe ordering, no map-iteration leakage, no shared-state races).
+// Migration planning under burst: concurrent BuildMigrationPlan calls return byte-identical scripts.
 func TestWave10_MigrationPlanBurstDeterministic(t *testing.T) {
 	schema := testSchema()
 	cfg := testConfig()
@@ -68,10 +54,7 @@ func TestWave10_MigrationPlanBurstDeterministic(t *testing.T) {
 	}
 }
 
-// FuzzWave10_SchemaPlanJSON fuzzes hostile schema documents through the plan
-// builder: capped inputs never panic, and any produced plan is deterministic
-// (rebuilds agree). Errors are legitimate outcomes (unsafe-change refusal,
-// unknown types); panics and nondeterminism are not.
+// FuzzWave10_SchemaPlanJSON fuzzes hostile schema documents through the plan builder.
 func FuzzWave10_SchemaPlanJSON(f *testing.F) {
 	f.Add(`{"user":{"fields":{"name":{"type":"string"}}}}`)
 	f.Add(`{}`)

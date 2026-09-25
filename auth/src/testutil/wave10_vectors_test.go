@@ -1,16 +1,6 @@
 package testutil
 
 // AUTH-V10-02 — adversarial and cross-language conformance (tests only).
-//
-// Both-directions golden consumers for the Wave 10 shared vectors in
-// auth/src/testdata: redirect-trust decisions (wave10_redirects.json, shared
-// with any TypeScript trusted-origins reader) and DCR redirect-URI validity
-// shapes (wave10_registration.json, shared with the OAuth Provider
-// register.ts rules and consumed in full by
-// plugins/oauthprovider/wave10_stress_test.go).
-//
-// Provenance for both fixtures is recorded in auth/src/testdata/provenance.json.
-// All hermetic: no network.
 
 import (
 	"testing"
@@ -18,10 +8,7 @@ import (
 	"github.com/brick-org/brick/auth/src/types"
 )
 
-// TestWave10_RedirectVectors asserts every shared redirect-trust vector:
-// evil rows fail closed, safe rows verify, under the fixture's base URL and
-// trusted origins. A TypeScript reader implementing trusted-origins.ts must
-// agree cell by cell; the Go side is pinned here.
+// TestWave10_RedirectVectors asserts every shared redirect-trust vector against trusted-origins.ts.
 func TestWave10_RedirectVectors(t *testing.T) {
 	var doc struct {
 		BaseURL        string   `json:"base_url"`
@@ -50,7 +37,6 @@ func TestWave10_RedirectVectors(t *testing.T) {
 		if types.IsTrustedRedirect(tc.URL, opts, nil) {
 			t.Errorf("evil redirect %q (%q) trusted", tc.Name, tc.URL)
 		}
-		// Evil absolute URLs must not match any configured pattern either.
 		for _, p := range doc.TrustedOrigins {
 			if types.MatchesOriginPattern(tc.URL, p) {
 				t.Errorf("evil redirect %q (%q) matched pattern %q", tc.Name, tc.URL, p)
@@ -67,13 +53,7 @@ func TestWave10_RedirectVectors(t *testing.T) {
 	}
 }
 
-// TestWave10_RegistrationVectors pins the fixture's shape contract (every
-// row carries an explicit verdict per application type) and the fail-closed
-// core: forbidden schemes and fragment/credential URIs are invalid for both
-// types. Full per-vector validity is enforced by
-// plugins/oauthprovider/wave10_stress_test.go against
-// validateClientRedirectURI; this test keeps the fixture self-checking from
-// the hermetic suite.
+// TestWave10_RegistrationVectors pins the fixture shape contract and the fail-closed core.
 func TestWave10_RegistrationVectors(t *testing.T) {
 	var doc struct {
 		Cases []struct {
@@ -92,8 +72,6 @@ func TestWave10_RegistrationVectors(t *testing.T) {
 			t.Errorf("case missing name: %+v", tc)
 		}
 	}
-	// The matrix must exercise both directions: web accepts, native-only
-	// accepts, and dual rejects — plus the canonical web+https accept.
 	canonical, webAccepts, nativeOnly, dualReject := false, 0, 0, 0
 	for _, tc := range doc.Cases {
 		if tc.Name == "web https callback" && tc.WebOK && tc.NativeOK {

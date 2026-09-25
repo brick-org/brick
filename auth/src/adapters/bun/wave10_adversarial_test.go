@@ -1,20 +1,6 @@
 package bunadapter
 
 // AUTH-V10-02 — adversarial and cross-language conformance (tests only).
-//
-// This file owns the Bun adapter's Wave 10 adversarial coverage: hostile
-// where-clause bursts under concurrency and where-injection fuzzing with the
-// parameterization invariant.
-//
-// Upstream references (pinned Better Auth v1.7.5 at 5468e6bf):
-//   - packages/core/src/db/adapter/factory.ts (transformWhereClause: "Value
-//     must be an array" for in/not_in; empty where behaviors; operator
-//     vocabulary)
-//   - e2e/adapter/test/drizzle-adapter/adapter.drizzle.mixed-where.test.ts
-//     (AND/OR grouping semantics)
-//
-// Work limits pinned for this file: fuzz fields/values are capped at 512B;
-// larger inputs skip. No production code is changed here.
 
 import (
 	"strings"
@@ -24,9 +10,7 @@ import (
 	authdb "github.com/brick-org/brick/auth/src/db"
 )
 
-// Hostile where clauses under burst: every concurrent build either errors or
-// produces a parameterized fragment — hostile values never interpolate into
-// SQL text on any dialect, and concurrent builders never race.
+// Hostile where clauses under burst: builds either error or stay parameterized on every dialect.
 func TestWave10_WhereBurstHostile(t *testing.T) {
 	hostiles := [][]authdb.Where{
 		{{Field: "name", Operator: authdb.OpEq, Value: "INJECT') OR ('1'='1"}},
@@ -72,10 +56,7 @@ func TestWave10_WhereBurstHostile(t *testing.T) {
 	}
 }
 
-// FuzzWave10_WhereInjection fuzzes field/value pairs through the clause
-// builder on both offline dialects: scalar string values must travel via
-// args (exactly, or as the LIKE pattern for pattern operators), must never
-// appear quoted in SQL text, and builds must be deterministic.
+// FuzzWave10_WhereInjection fuzzes field/value pairs through the clause builder on both offline dialects.
 func FuzzWave10_WhereInjection(f *testing.F) {
 	f.Add("name", "needle", "eq")
 	f.Add("name", "a'b\"c; DROP TABLE x;--", "contains")

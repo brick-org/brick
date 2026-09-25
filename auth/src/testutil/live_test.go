@@ -1,9 +1,6 @@
 package testutil
 
-// Opt-in live smoke only. Skipped unless BRICK_AUTH_LIVE_SMOKE=1, so normal
-// CI (and `go test ./...`) never touches the network. When enabled it
-// performs best-effort HEAD requests against the documented provider
-// authorize endpoints and fails on transport errors or 5xx responses.
+// Opt-in live smoke only. Skipped unless BRICK_AUTH_LIVE_SMOKE=1; normal CI never touches the network.
 
 import (
 	"net/http"

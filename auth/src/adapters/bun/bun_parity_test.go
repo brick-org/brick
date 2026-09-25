@@ -70,8 +70,6 @@ func TestParity_DecodeRowReversesCustomFieldNames(t *testing.T) {
 	a := testAdapter(authdb.Config{
 		FieldNames: map[string]string{"user.email": "email_address"},
 	}, "pg")
-	// Physical custom column decodes to logical camelCase keys per contract
-	// (transformOutput key part).
 	decoded, err := a.decodeRow("user", map[string]any{"email_address": "a@b.c", "user_id": "u1"})
 	if err != nil {
 		t.Fatal(err)
@@ -135,12 +133,9 @@ func TestParity_ResolveWhereLikePortability(t *testing.T) {
 	pg := testAdapter(authdb.Config{}, "pg")
 	lite := testAdapter(authdb.Config{}, "sqlite")
 
-	// Upstream parity: LIKE on the default (sensitive) path on all dialects,
-	// including Postgres; ILIKE is pg-insensitive only.
 	if op, _, _ := mustResolve(t, pg, "user", authdb.Where{Field: "name", Operator: authdb.OpContains, Value: "ali"}); op != "LIKE ?" {
 		t.Fatalf("pg contains must be LIKE, got %q", op)
 	}
-	// Non-Postgres dialects use portable LIKE on the default path.
 	if op, _, val := mustResolve(t, lite, "user", authdb.Where{Field: "name", Operator: authdb.OpContains, Value: "ali"}); op != "LIKE ?" || val != "%ali%" {
 		t.Fatalf("sqlite contains must be LIKE, got %q %v", op, val)
 	}
@@ -150,7 +145,6 @@ func TestParity_ResolveWhereLikePortability(t *testing.T) {
 	if _, _, val := mustResolve(t, lite, "user", authdb.Where{Field: "name", Operator: authdb.OpEndsWith, Value: "ce"}); val != "%ce" {
 		t.Fatalf("ends_with pattern: %v", val)
 	}
-	// Insensitive mode: ILIKE on pg, LOWER() LIKE elsewhere.
 	if op, _, _ := mustResolve(t, pg, "user", authdb.Where{Field: "name", Operator: authdb.OpContains, Value: "ali", Mode: "insensitive"}); op != "ILIKE ?" {
 		t.Fatalf("pg insensitive must be ILIKE, got %q", op)
 	}

@@ -1,14 +1,6 @@
 package bunadapter
 
-// Wave 4 conformance: remaining upstream adapter where-clause cases, fuzz
-// targets, race tests, and malformed-input limits.
-//
-// Upstream reference (pinned v1.7.5):
-// packages/core/src/db/adapter/factory.ts (transformWhereClause: "Value
-// must be an array" for in/not_in; empty where behaviors; operator
-// vocabulary) and
-// e2e/adapter/test/drizzle-adapter/adapter.drizzle.mixed-where.test.ts
-// (AND/OR grouping semantics).
+// Wave 4 conformance: remaining upstream adapter where-clause cases, fuzz targets, race tests, limits.
 
 import (
 	"context"
@@ -28,10 +20,7 @@ func wave4OfflineAdapter(dialect string) *Adapter {
 	return a
 }
 
-// --- Ported upstream cases: where validation matrix ---
-
-// Upstream factory: in/not_in with a non-array value throws
-// ("Value must be an array").
+// Upstream factory: in/not_in with a non-array value throws ("Value must be an array").
 func TestWave4_WhereInRequiresArray(t *testing.T) {
 	a := wave4OfflineAdapter("sqlite")
 	for _, op := range []authdb.Operator{authdb.OpIn, authdb.OpNotIn} {
@@ -60,7 +49,6 @@ func TestWave4_WhereEmptyInSemantics(t *testing.T) {
 	if err != nil || clause != "1 = 1" {
 		t.Errorf("empty NOT IN = %q, %v; want \"1 = 1\"", clause, err)
 	}
-	// OR-grouped empties keep their group semantics.
 	clause, _, err = a.buildWhereClause("widget", []authdb.Where{
 		{Field: "a", Operator: authdb.OpEq, Value: "1"},
 		{Field: "b", Operator: authdb.OpIn, Value: []string{}, Connector: "OR"},
@@ -70,8 +58,7 @@ func TestWave4_WhereEmptyInSemantics(t *testing.T) {
 	}
 }
 
-// Upstream mixed-where: AND predicates group together, OR predicates group
-// together, joined as (AND-group) AND (OR-group).
+// Upstream mixed-where: AND and OR predicates group separately, joined as (AND-group) AND (OR-group).
 func TestWave4_WhereMixedGrouping(t *testing.T) {
 	a := wave4OfflineAdapter("sqlite")
 	clause, args, err := a.buildWhereClause("widget", []authdb.Where{
@@ -89,14 +76,12 @@ func TestWave4_WhereMixedGrouping(t *testing.T) {
 	if len(args) != 8 {
 		t.Errorf("args = %d, want 8 (values travel as placeholders)", len(args))
 	}
-	// Empty where builds nothing.
 	if clause, args, err := a.buildWhereClause("widget", nil, "findMany"); err != nil || clause != "" || args != nil {
 		t.Errorf("empty where = %q %v %v", clause, args, err)
 	}
 }
 
-// Upstream operator vocabulary: every documented operator builds a
-// parameterized fragment; values never interpolate into SQL text.
+// Upstream operator vocabulary: every documented operator builds a parameterized fragment.
 func TestWave4_WhereOperatorVocabulary(t *testing.T) {
 	a := wave4OfflineAdapter("sqlite")
 	marker := "INJECT') OR ('1'='1"
@@ -132,7 +117,6 @@ func TestWave4_WhereOperatorVocabulary(t *testing.T) {
 			t.Errorf("%q: value interpolated into SQL text: %q", c.op, clause)
 		}
 	}
-	// nil equality maps to IS NULL / IS NOT NULL.
 	clause, _, _ := a.buildWhereClause("widget", []authdb.Where{{Field: "name", Operator: authdb.OpEq, Value: nil}}, "findMany")
 	if clause != "? IS NULL" {
 		t.Errorf("nil eq = %q", clause)
@@ -143,11 +127,8 @@ func TestWave4_WhereOperatorVocabulary(t *testing.T) {
 	}
 }
 
-// --- Malformed-input limits ---
-
 func TestWave4_WhereMalformedInputLimits(t *testing.T) {
 	a := wave4OfflineAdapter("sqlite")
-	// 10k predicates terminate.
 	big := make([]authdb.Where, 0, 10000)
 	for i := 0; i < 10000; i++ {
 		big = append(big, authdb.Where{Field: "name", Operator: authdb.OpEq, Value: "v"})
@@ -155,9 +136,6 @@ func TestWave4_WhereMalformedInputLimits(t *testing.T) {
 	if _, args, err := a.buildWhereClause("widget", big, "findMany"); err != nil || len(args) != 20000 {
 		t.Errorf("10k predicates: %v %d", err, len(args))
 	}
-	// Hostile model identifiers fail closed at the execution entry points
-	// (tableName validation runs before any DB touch, so even a nil-DB
-	// adapter surfaces InvalidIdentifierError); values stay parameterized.
 	huge := strings.Repeat("x", 1<<20) + `"; DROP TABLE widgets;--`
 	var idErr *authdb.InvalidIdentifierError
 	_, findErr := a.FindOne(context.Background(), huge, []authdb.Where{{Field: "name", Value: "v"}}, nil)
@@ -172,7 +150,6 @@ func TestWave4_WhereMalformedInputLimits(t *testing.T) {
 	if strings.Contains(clause, bigValue) {
 		t.Error("1MB value interpolated into SQL text")
 	}
-	// Hostile identifier characters fail closed.
 	for _, field := range []string{"a\" OR \"1\"=\"1", "a; DROP TABLE widgets;--", "a\nb", "a\x00b", "sch.tab.col", ""} {
 		_, _, err := a.buildWhereClause("widget", []authdb.Where{{Field: field, Value: "v"}}, "findMany")
 		if field == "" && err == nil {
@@ -181,8 +158,6 @@ func TestWave4_WhereMalformedInputLimits(t *testing.T) {
 		_ = err
 	}
 }
-
-// --- Race tests ---
 
 func TestWave4_WhereBuilderConcurrentUse(t *testing.T) {
 	a := wave4OfflineAdapter("sqlite")
@@ -207,8 +182,7 @@ func TestWave4_WhereBuilderConcurrentUse(t *testing.T) {
 	wg.Wait()
 }
 
-// Concurrent reads against one shared SQLite adapter exercise the query
-// path (not just the builder) under -race.
+// Concurrent reads against one shared SQLite adapter exercise the query path under -race.
 func TestWave4_SQLiteConcurrentReads(t *testing.T) {
 	a := sqliteAdapter(t, "sqlite", Options{Models: widgetRegistry()})
 	ctx := context.Background()
@@ -251,8 +225,6 @@ func itoaWave4Bun(i int) string {
 	return string(b[p:])
 }
 
-// --- Fuzz target: adapter where-clause building ---
-
 func FuzzBuildWhereClause(f *testing.F) {
 	f.Add("widget", "name", "eq", "AND", "sensitive", "needle")
 	f.Add("widget", "age", "gte", "OR", "insensitive", "42")
@@ -277,16 +249,6 @@ func FuzzBuildWhereClause(f *testing.F) {
 			if err != nil {
 				continue
 			}
-			// Core security invariant: user values travel via placeholders,
-			// never interpolated into SQL text. Scalar string values must
-			// appear in args exactly, or as the LIKE pattern for pattern
-			// operators (see likePattern).
-			//
-			// NOTE: a naive strings.Contains(clause, value) check is
-			// unsound — the clause template itself contains spaces and
-			// punctuation (fuzz corpus e8bc7ab68b8e3cb5: value " " in
-			// "? = ?"). Membership in args is the sound property; a
-			// quoted appearance in the clause text is the sound negative.
 			if op != "in" && op != "not_in" {
 				want := value
 				switch op {
@@ -314,7 +276,6 @@ func FuzzBuildWhereClause(f *testing.F) {
 			if clause != "" && len(args) == 0 {
 				t.Fatalf("[%s] non-empty clause with no args: %q", dialect, clause)
 			}
-			// Determinism: rebuild and compare.
 			clause2, args2, err2 := a.buildWhereClause(model, where, "findMany")
 			if (err2 == nil) != (err == nil) || clause2 != clause || len(args2) != len(args) {
 				t.Fatalf("[%s] nondeterministic build for %+v", dialect, where)
@@ -322,8 +283,6 @@ func FuzzBuildWhereClause(f *testing.F) {
 		}
 	})
 }
-
-// --- Nil-DB guards: offline adapters must error, never panic ---
 
 func TestWave4_NilDBQueryOpsError(t *testing.T) {
 	t.Parallel()

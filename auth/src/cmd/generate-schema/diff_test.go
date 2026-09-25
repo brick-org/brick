@@ -1,9 +1,6 @@
 package main
 
-// Tests for current-vs-desired migration diffing (diff.go), porting the
-// unsafe-change and ALTER-path behavior of upstream get-migration.ts
-// (get-migration.test.ts, get-migration-unsafe-change.test.ts) to the
-// offline planner.
+// Tests for current-vs-desired migration diffing (diff.go), porting upstream get-migration.ts behavior.
 
 import (
 	"os"
@@ -76,7 +73,6 @@ func TestDiffMigrationPlanRefusesRequiredColumnOnPopulatedTable(t *testing.T) {
 			"connectionIssuer": {Type: auth.FieldTypeString, Required: boolPtrMain(true)},
 		}},
 	}
-	// Nil populated map assumes populated (conservative offline default).
 	plan, err := DiffMigrationPlan(current, desired, testConfig(), DialectSQLite, "string", nil)
 	if err != nil {
 		t.Fatalf("diff must build: %v", err)
@@ -92,11 +88,9 @@ func TestDiffMigrationPlanRefusesRequiredColumnOnPopulatedTable(t *testing.T) {
 	} else if _, ok := err.(*auth.UnsafeMigrationError); !ok {
 		t.Fatalf("refusal must be UnsafeMigrationError: %T", err)
 	}
-	// The statements still compile for inspection (generate spirit).
 	if script := plan.Script(); !strings.Contains(strings.ToLower(script), `add column "connection_issuer" text not null`) {
 		t.Fatalf("unsafe plan still compiles statements:\n%s", script)
 	}
-	// Static defaults stay safe on populated tables.
 	withDefault := auth.PluginSchema{
 		"directoryUser": {Fields: map[string]auth.FieldAttribute{
 			"externalId":       {Type: auth.FieldTypeString},
@@ -159,7 +153,6 @@ func TestDiffMigrationPlanMSSQLNullableUniqueFiltered(t *testing.T) {
 		t.Fatalf("diff must build: %v", err)
 	}
 	script := plan.Script()
-	// NULL-filtered unique indexes are MSSQL-only (upstream ALTER path).
 	if !strings.Contains(script, `create unique index [ms_code_uidx] on [ms] ([code]) where [code] is not null`) {
 		t.Fatalf("mssql nullable unique must filter NULLs:\n%s", script)
 	}
@@ -219,8 +212,6 @@ func TestDiffMigrationPlanIndexConflict(t *testing.T) {
 			"b": {Type: auth.FieldTypeString},
 		}, Indexes: []auth.TableIndex{{Fields: []string{"a", "b"}, Name: "m_ab_uidx", Unique: true}}},
 	}
-	// Same name, different definition: a plain BetterAuthError-style
-	// refusal, never an UnsafeMigrationError.
 	_, err := DiffMigrationPlan(current, desired, testConfig(), DialectSQLite, "string", nil)
 	if err == nil || !strings.Contains(err.Error(), `database index "m_ab_uidx" on table "ms" does not match`) {
 		t.Fatalf("conflicting index must error: %v", err)
@@ -278,8 +269,6 @@ func TestLoadSnapshotFile(t *testing.T) {
 	if !populated["app_users"] || populated["sessions"] {
 		t.Fatalf("rowCounts map to populated: %v", populated)
 	}
-	// Explicit empty populated list means no populated tables (differs
-	// from an absent key, which assumes populated).
 	emptyPath := filepath.Join(dir, "empty.json")
 	if err := os.WriteFile(emptyPath, []byte(`{"tables": {}, "populated": []}`), 0o644); err != nil {
 		t.Fatal(err)

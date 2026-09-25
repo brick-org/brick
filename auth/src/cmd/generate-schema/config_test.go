@@ -1,7 +1,6 @@
 package main
 
-// Tests for the arbitrary plugin configuration surface (config.go):
-// plugin specs, JSON table conversion, extended builders, config files.
+// Tests for the arbitrary plugin configuration surface (config.go): specs, JSON tables, builders, files.
 
 import (
 	"os"

@@ -1,12 +1,6 @@
 package db
 
-// Wave 4 conformance: adapter-vocabulary parity, fuzz targets, race tests,
-// and malformed-input limits for the framework-agnostic DB contract.
-//
-// Upstream reference (pinned v1.7.5):
-// packages/core/src/db/adapter/index.ts (whereOperators vocabulary) and
-// factory.ts (connector/mode/direction normalization, identifier trust
-// boundary).
+// Wave 4 conformance: adapter-vocabulary parity, fuzz targets, race tests, malformed-input limits.
 
 import (
 	"regexp"
@@ -14,8 +8,6 @@ import (
 	"sync"
 	"testing"
 )
-
-// --- Ported upstream cases: operator vocabulary ---
 
 // Upstream whereOperators 1:1 vocabulary.
 func TestWave4_OperatorVocabulary(t *testing.T) {
@@ -35,7 +27,6 @@ func TestWave4_OperatorVocabulary(t *testing.T) {
 			t.Errorf("operator[%d] = %q, want %q", i, ported[i], upstream[i])
 		}
 	}
-	// Short aliases match the same values.
 	aliases := map[Operator]Operator{
 		Eq: OpEq, Ne: OpNe, Lt: OpLt, Lte: OpLte, Gt: OpGt, Gte: OpGte,
 		In: OpIn, NotIn: OpNotIn, Contains: OpContains,
@@ -51,9 +42,7 @@ func TestWave4_OperatorVocabulary(t *testing.T) {
 	}
 }
 
-// Upstream normalization: unknown/empty connector/mode/direction values
-// silently take defaults (AND/sensitive/asc); only the documented token
-// (case-insensitive) selects the alternative.
+// Upstream normalization: unknown/empty connector/mode/direction values silently take defaults.
 func TestWave4_NormalizeMatrix(t *testing.T) {
 	for _, s := range []string{"OR", "or", "Or", " oR "} {
 		_ = s
@@ -82,7 +71,6 @@ func TestWave4_NormalizeMatrix(t *testing.T) {
 			t.Errorf("direction %q must normalize to asc", s)
 		}
 	}
-	// IsValid is strict: only the exact tokens validate.
 	if !Connector(ConnectorOR).IsValid() || !Connector("and").IsValid() || Connector("").IsValid() || Connector("XOR").IsValid() {
 		t.Error("Connector.IsValid matrix wrong")
 	}
@@ -94,8 +82,7 @@ func TestWave4_NormalizeMatrix(t *testing.T) {
 	}
 }
 
-// Identifier trust boundary: optional single schema qualifier, strict
-// charset; hostile inputs rejected.
+// Identifier trust boundary: optional single schema qualifier, strict charset; hostile inputs rejected.
 func TestWave4_ValidateIdentifierMatrix(t *testing.T) {
 	valid := []string{"a", "_x", "abc123", "sch.tab", "_._", "A_Z_09"}
 	for _, name := range valid {
@@ -115,15 +102,7 @@ func TestWave4_ValidateIdentifierMatrix(t *testing.T) {
 	}
 }
 
-// --- Cross-language golden vectors ---
-//
-// TS-shaped fixtures as static data (no network): the where-operator and
-// normalization vocabulary above is transcribed from
-// packages/core/src/db/adapter/index.ts and factory.ts, so any conforming
-// implementation in either language must agree cell by cell.
-
 func TestWave4_JoinOptionGolden(t *testing.T) {
-	// Upstream join fallback default: 100 rows when no per-join limit.
 	var unset JoinModelOption
 	if unset.JoinLimit() != DefaultFindManyLimit {
 		t.Errorf("default join limit = %d", unset.JoinLimit())
@@ -142,10 +121,7 @@ func TestWave4_JoinOptionGolden(t *testing.T) {
 	}
 }
 
-// --- Malformed-input limits ---
-
 func TestWave4_DBContractLimits(t *testing.T) {
-	// 1MB connector/mode/direction strings normalize without allocation blowup.
 	huge := strings.Repeat("O", 1<<20)
 	if NormalizeConnector(huge) != ConnectorAND {
 		t.Error("1MB connector must normalize to AND")
@@ -156,22 +132,17 @@ func TestWave4_DBContractLimits(t *testing.T) {
 	if NormalizeSortDirection(huge) != SortDirectionAsc {
 		t.Error("1MB direction must normalize to asc")
 	}
-	// 1MB identifiers reject promptly.
 	if err := ValidateIdentifier(huge + "!"); err == nil {
 		t.Error("1MB hostile identifier must reject")
 	}
 	if err := ValidateIdentifier(huge); err != nil {
 		t.Errorf("1MB clean identifier must pass: %v", err)
 	}
-	// Config mapping is a silent pass-through (documented): unknown entries
-	// never error.
 	cfg := Config{}
 	if cfg.ModelName("user") != "user" || cfg.FieldName("user", "email") != "email" {
 		t.Error("empty config must pass through")
 	}
 }
-
-// --- Race tests ---
 
 func TestWave4_DBContractConcurrentUse(t *testing.T) {
 	var wg sync.WaitGroup
@@ -192,12 +163,8 @@ func TestWave4_DBContractConcurrentUse(t *testing.T) {
 	wg.Wait()
 }
 
-// --- Fuzz targets ---
-
 var wave4IdentPart = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
-// referenceValidateIdentifier is an independent regexp-based oracle for the
-// identifier trust boundary (one or two dot-separated parts).
 func referenceValidateIdentifier(name string) bool {
 	parts := strings.Split(name, ".")
 	if len(parts) < 1 || len(parts) > 2 {
@@ -221,7 +188,6 @@ func FuzzValidateIdentifier(f *testing.F) {
 	}
 	f.Fuzz(func(t *testing.T, name string) {
 		got := ValidateIdentifier(name)
-		// Differential check against the regexp oracle.
 		if want := referenceValidateIdentifier(name); (got == nil) != want {
 			t.Fatalf("ValidateIdentifier(%q) = %v, oracle = %v", name, got, want)
 		}
@@ -245,7 +211,6 @@ func FuzzNormalizeHelpers(f *testing.F) {
 		if d != SortDirectionAsc && d != SortDirectionDesc {
 			t.Fatalf("direction out of vocabulary: %q", d)
 		}
-		// Case-insensitivity contract: the documented tokens match in any case.
 		if strings.EqualFold(s, "OR") && c != ConnectorOR {
 			t.Fatalf("case-insensitive OR failed for %q", s)
 		}

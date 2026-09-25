@@ -1,8 +1,6 @@
 package main
 
-// End-to-end compile checks of generated output: Go models must parse as
-// valid Go, and SQLite plans must execute against a real database
-// (foreign keys, unique indexes, defaults, incremental ALTERs).
+// End-to-end compile checks of generated output: Go models parse, SQLite plans execute.
 
 import (
 	"database/sql"
@@ -60,7 +58,6 @@ func TestGeneratedModelsParse(t *testing.T) {
 				}
 			}
 		}
-		// 4 model structs + index struct = 5 types; migrate + indexes = 2 funcs.
 		if structs != 5 {
 			t.Fatalf("%s: type decls = %d, want 5", tc.name, structs)
 		}
@@ -68,7 +65,6 @@ func TestGeneratedModelsParse(t *testing.T) {
 			t.Fatalf("%s: migrate funcs = %d, want 2", tc.name, funcs)
 		}
 		decls := len(file.Decls)
-		// 4 structs + 2 funcs + 1 index-struct + imports = 8 top-level decls.
 		if decls != 8 {
 			t.Fatalf("%s: top-level decls = %d, want 8", tc.name, decls)
 		}
@@ -78,7 +74,6 @@ func TestGeneratedModelsParse(t *testing.T) {
 		if !strings.Contains(string(formatted), "func "+tc.migrateFunc+"Indexes() []"+tc.migrateFunc+"Index") {
 			t.Fatalf("%s: indexes func missing", tc.name)
 		}
-		// Every non-relation field carries a bun tag with its column.
 		for _, col := range []string{`bun:"email`, `bun:"user_id`, `bun:"organization_id`} {
 			if !strings.Contains(string(formatted), col) {
 				t.Fatalf("%s: column %s missing from models", tc.name, col)
@@ -92,7 +87,6 @@ func TestGoldenSQLiteExecutes(t *testing.T) {
 	execScript(t, db, mustReadGolden(t, "golden_sqlite.sql"))
 	assertTestTables(t, db, []string{"app_users", "sessions", "organizations", "members"})
 
-	// Static defaults backfill on omitted inserts.
 	execTest(t, db, `INSERT INTO "app_users" ("id", "name", "email", "created_at", "updated_at") VALUES ('u1', 'Ada', 'ada@example.com', '2020-01-01', '2020-01-01')`)
 	execTest(t, db, `INSERT INTO "organizations" ("id", "name", "slug", "created_at") VALUES ('o1', 'Acme', 'acme', '2020-01-01')`)
 	execTest(t, db, `INSERT INTO "members" ("id", "organization_id", "user_id") VALUES ('m1', 'o1', 'u1')`)
@@ -106,24 +100,20 @@ func TestGoldenSQLiteExecutes(t *testing.T) {
 		t.Fatalf("seats default must backfill 5, got %q", got)
 	}
 
-	// Unique enforcement.
 	if _, err := db.Exec(`INSERT INTO "app_users" ("id", "name", "email", "created_at", "updated_at") VALUES ('u2', 'Bo', 'ada@example.com', '2020-01-01', '2020-01-01')`); err == nil {
 		t.Fatal("duplicate email must fail")
 	}
-	// Compound unique enforcement.
 	execTest(t, db, `INSERT INTO "app_users" ("id", "name", "email", "created_at", "updated_at") VALUES ('u2', 'Bo', 'bo@example.com', '2020-01-01', '2020-01-01')`)
 	execTest(t, db, `INSERT INTO "members" ("id", "organization_id", "user_id", "role") VALUES ('m2', 'o1', 'u2', 'admin')`)
 	if _, err := db.Exec(`INSERT INTO "members" ("id", "organization_id", "user_id") VALUES ('m3', 'o1', 'u1')`); err == nil {
 		t.Fatal("duplicate member pair must fail")
 	}
-	// Foreign keys.
 	if _, err := db.Exec(`INSERT INTO "members" ("id", "organization_id", "user_id") VALUES ('mx', 'nope', 'u1')`); err == nil {
 		t.Fatal("dangling organization FK must fail")
 	}
 	if _, err := db.Exec(`INSERT INTO "sessions" ("id", "token", "expires_at", "user_id") VALUES ('s9', 'tok', '2030-01-01', 'ghost')`); err == nil {
 		t.Fatal("dangling session FK must fail")
 	}
-	// Plain index presence.
 	if got := queryTestString(t, db, `SELECT COUNT(*) FROM sqlite_master WHERE "type" = 'index' AND "name" = 'sessions_user_id_idx'`); got != "1" {
 		t.Fatalf("deferred plain index must exist, count = %q", got)
 	}
@@ -162,7 +152,6 @@ func TestDiffAlterExecutesOnSQLite(t *testing.T) {
 		t.Fatalf("nullable/defaulted adds must be safe: %v", plan.UnsafeChanges)
 	}
 	execScript(t, db, plan.Script())
-	// New table exists with its FK; added columns backfill.
 	assertTestTables(t, db, []string{"users", "sessions"})
 	if got := queryTestString(t, db, `SELECT "role" FROM "users" WHERE "id" = 'u1'`); got != "member" {
 		t.Fatalf("added static default must backfill, got %q", got)
@@ -224,7 +213,6 @@ func execScript(t *testing.T, db *sql.DB, script string) {
 		if trimmed == "" {
 			continue
 		}
-		// Skip banner comments.
 		lines := strings.Split(trimmed, "\n")
 		kept := lines[:0]
 		for _, line := range lines {

@@ -15,16 +15,6 @@ import (
 )
 
 // AUTH-D6-01 PostgreSQL isolation.
-//
-// Every live PG test uses a unique table (widgets_d6_<seq>) via
-// Config.ModelNames, so default parallel package execution (`go test ./...`)
-// never shares tables and `-p 1` keeps working. Tables are dropped on
-// cleanup. Without DATABASE_URL all live tests skip so default runs stay
-// hermetic.
-//
-// Live run:
-//   DATABASE_URL=postgres://user:pass@localhost:5432/auth_test?sslmode=disable \
-//     GOWORK=off go test -count=1 ./adapters/bun/ -run TestPostgres_ -v
 
 var pgTableSeq atomic.Uint64
 
@@ -76,24 +66,20 @@ func pgIsolatedWidgetsStrict(t *testing.T, db *bun.DB) authdb.Adapter {
 	return NewWithDialectOptions(db, db, cfg, "pg", Options{Models: widgetRegistry()})
 }
 
-// TestPostgres_ContractSuite runs the shared adapter contract against live
-// PostgreSQL in an isolated table when DATABASE_URL is set; it skips
-// otherwise so default runs stay hermetic.
+// TestPostgres_ContractSuite runs the shared adapter contract against live PostgreSQL in an isolated table.
 func TestPostgres_ContractSuite(t *testing.T) {
 	db := requirePostgres(t)
 	adapter, _ := pgIsolatedWidgets(t, db)
 	runAdapterContractSuite(t, "pg", adapter)
 }
 
-// TestPostgres_ContractSuiteStrict runs the contract with a registered model
-// registry (strict validation + transforms) in its own isolated table.
+// TestPostgres_ContractSuiteStrict runs the contract with a registered model registry in its own isolated table.
 func TestPostgres_ContractSuiteStrict(t *testing.T) {
 	db := requirePostgres(t)
 	runAdapterContractSuite(t, "pg-strict", pgIsolatedWidgetsStrict(t, db))
 }
 
-// TestPostgres_IsolationParallel proves per-table isolation: two tables hold
-// the same IDs without interfering, safe under parallel execution.
+// TestPostgres_IsolationParallel proves per-table isolation under parallel execution.
 func TestPostgres_IsolationParallel(t *testing.T) {
 	db := requirePostgres(t)
 	a, _ := pgIsolatedWidgets(t, db)

@@ -1,8 +1,6 @@
 package bunadapter
 
-// F10 (PARITY_V3 gap 14 core subset), bun side: reserve round-trip against a
-// live SQLite database, typed duplicate errors from the real driver, and
-// consume-once through ConsumeOneWithFallback. Tests-first: FAILS pre-fix.
+// F10 (PARITY_V3 gap 14 core subset), bun side: reserve round-trip, typed duplicate errors, consume-once.
 
 import (
 	"context"
@@ -12,15 +10,10 @@ import (
 	authdb "github.com/brick-org/brick/auth/src/db"
 )
 
-// f10VerificationsSchema mirrors the Verification model (models.go) in the
-// sqlite physical shape (dates/bools as TEXT/INTEGER, like sqliteSchema).
 const f10VerificationsSchema = `
 CREATE TABLE IF NOT EXISTS "verifications" ("id" TEXT PRIMARY KEY, "identifier" TEXT NOT NULL, "value" TEXT NOT NULL, "expires_at" TEXT NOT NULL, "created_at" TEXT NOT NULL, "updated_at" TEXT NOT NULL);
 `
 
-// f10VerificationAdapter opens an isolated in-memory SQLite database with the
-// shared test schema plus the verifications table, returning an adapter with
-// the default core registry (strict, factory-equivalent transforms).
 func f10VerificationAdapter(t *testing.T) authdb.Adapter {
 	t.Helper()
 	db := openSQLiteDB(t)
@@ -46,7 +39,6 @@ func TestF10_Bun_ReserveRoundTrip(t *testing.T) {
 	if err != nil || second {
 		t.Fatalf("replay reserve = %v, %v; want false, nil", second, err)
 	}
-	// The winner row is findable under the deterministic PK with its value.
 	id := authdb.VerificationReservationID("reserve:once")
 	row, err := a.FindOne(ctx, "verification", []authdb.Where{{Field: "id", Value: id}}, nil)
 	if err != nil || row == nil {
@@ -62,7 +54,6 @@ func TestF10_Bun_DuplicateIsTyped(t *testing.T) {
 	a := f10VerificationAdapter(t)
 	now := time.Now().UTC().Truncate(time.Second)
 
-	// Primary-key duplicate on the verifications table.
 	base := map[string]any{
 		"id": "dup-pk", "identifier": "tok", "value": "v",
 		"expiresAt": now, "createdAt": now, "updatedAt": now,
@@ -79,7 +70,6 @@ func TestF10_Bun_DuplicateIsTyped(t *testing.T) {
 		t.Fatalf("duplicate PK must be a typed DuplicateKey error: %v", err)
 	}
 
-	// Unique secondary column duplicate (users.email) is typed too.
 	user := map[string]any{
 		"id": "u-dup", "name": "Dup", "email": "dup@x.y",
 		"createdAt": now, "updatedAt": now,

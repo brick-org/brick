@@ -1,18 +1,6 @@
 package db
 
 // AUTH-V10-02 — adversarial and cross-language conformance (tests only).
-//
-// This file owns the db package's Wave 10 adversarial coverage: identifier
-// validation bursts, strict reference-agreement fuzzing, and normalization
-// bursts.
-//
-// Upstream references (pinned Better Auth v1.7.5 at 5468e6bf):
-//   - packages/core/src/db/adapter/index.ts (whereOperators vocabulary)
-//   - packages/core/src/db/adapter/factory.ts (connector/mode/direction
-//     normalization, identifier trust boundary)
-//
-// Work limits pinned for this file: fuzz identifiers are capped at 512B;
-// larger inputs skip. No production code is changed here.
 
 import (
 	"strings"
@@ -20,9 +8,7 @@ import (
 	"testing"
 )
 
-// Identifier validation under burst: the trust boundary never races and
-// hostile identifiers (injection, traversal, control bytes, megabyte scale)
-// keep rejecting while clean identifiers keep passing.
+// Identifier validation under burst: hostile identifiers keep rejecting, clean ones keep passing.
 func TestWave10_ValidateIdentifierBurst(t *testing.T) {
 	valid := []string{"user", "session", "sch.tab", "_x", "abc123", "A_Z_09"}
 	invalid := []string{
@@ -49,7 +35,6 @@ func TestWave10_ValidateIdentifierBurst(t *testing.T) {
 						return
 					}
 				}
-				// Normalizers stay total and deterministic under burst.
 				_ = NormalizeConnector("OR")
 				_ = NormalizeWhereMode("insensitive")
 				_ = NormalizeSortDirection("desc")
@@ -63,9 +48,7 @@ func TestWave10_ValidateIdentifierBurst(t *testing.T) {
 	}
 }
 
-// FuzzWave10_ValidateIdentifierStrict fuzzes the identifier trust boundary
-// against the test-local reference predicate: the implementation must agree
-// with the reference on every capped input, and must never panic.
+// FuzzWave10_ValidateIdentifierStrict fuzzes the identifier trust boundary against the reference predicate.
 func FuzzWave10_ValidateIdentifierStrict(f *testing.F) {
 	f.Add("user")
 	f.Add("sch.tab")

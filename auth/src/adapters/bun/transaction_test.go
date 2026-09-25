@@ -8,14 +8,7 @@ import (
 	authdb "github.com/brick-org/brick/auth/src/db"
 )
 
-// AUTH-D6-01: generic transaction result, sequential fallback, nested
-// transactions, and post-commit error propagation through the bun adapter.
-//
-// Upstream: transaction <R>(callback) => Promise<R> with sequential fallback
-// when config.transaction is false (factory.ts:46-48, index.ts:506-509).
-// HookedAdapter post-commit behavior is owned by the auth root; here we pin
-// the bun side: result capture, error propagation, savepoint nesting, and
-// sequential fallback for offline adapters.
+// AUTH-D6-01: generic transaction result, sequential fallback, nested transactions, post-commit errors.
 
 func TestBun_TransactionResultCapturesValue(t *testing.T) {
 	ctx := context.Background()
@@ -54,8 +47,6 @@ func TestBun_TransactionResultPropagatesErrorAndRollsBack(t *testing.T) {
 
 func TestBun_SequentialFallbackReturnsValue(t *testing.T) {
 	ctx := context.Background()
-	// Offline adapter (nil DB): sequential fallback runs the callback
-	// directly (upstream createAsIsTransaction) and still returns its value.
 	a := NewWithDialect(nil, nil, authdb.Config{}, "pg")
 	got, err := authdb.TransactionResult(ctx, a, func(tx authdb.Adapter) (int, error) {
 		return 7, nil
@@ -68,8 +59,6 @@ func TestBun_SequentialFallbackReturnsValue(t *testing.T) {
 func TestBun_NestedTransactionSavepointAndPostCommit(t *testing.T) {
 	ctx := context.Background()
 	a := sqliteAdapter(t, "sqlite", Options{})
-	// Nested failure rolls back to the savepoint only; outer + successful
-	// inner persist (savepoint semantics, no nested-transaction error).
 	err := a.Transaction(ctx, func(tx authdb.Adapter) error {
 		if _, err := tx.Create(ctx, "widget", map[string]any{"id": "n-outer"}, nil); err != nil {
 			return err

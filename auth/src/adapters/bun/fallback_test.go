@@ -9,10 +9,7 @@ import (
 	"github.com/uptrace/bun"
 )
 
-// The non-RETURNING fallback paths (MySQL/MSSQL labels) execute against
-// in-memory SQLite here: the fallback SQL is portable enough to run, which
-// proves the cascade logic end to end, while the dialect-specific query
-// shapes are asserted as strings below and via the capture hook.
+// Non-RETURNING fallback paths (MySQL/MSSQL labels) execute end to end on SQLite here.
 
 func TestFallback_CreateCascade(t *testing.T) {
 	ctx := context.Background()
@@ -29,7 +26,6 @@ func TestFallback_CreateCascade(t *testing.T) {
 		})
 		t.Run(dialect+"/uniqueColumn", func(t *testing.T) {
 			a := sqliteAdapter(t, dialect, Options{Models: profileRegistry()})
-			// No id: the unique email column identifies the inserted row.
 			row, err := a.Create(ctx, "profile", map[string]any{"email": "u@x.y", "score": 9.5}, nil)
 			if err != nil {
 				t.Fatal(err)
@@ -40,8 +36,6 @@ func TestFallback_CreateCascade(t *testing.T) {
 		})
 		t.Run(dialect+"/fullFieldMatch", func(t *testing.T) {
 			a := sqliteAdapter(t, dialect, Options{Models: widgetRegistry()})
-			// No id and no unique registry columns: the full-field match
-			// identifies the single inserted row.
 			row, err := a.Create(ctx, "widget", map[string]any{"name": "solo", "role": "member"}, nil)
 			if err != nil {
 				t.Fatal(err)
@@ -57,8 +51,6 @@ func TestFallback_CreateCascade(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			// Two identical rows make the full-field match ambiguous, so
-			// the third insert resolves to null (upstream warn-and-null).
 			row, err := a.Create(ctx, "widget", map[string]any{"name": "dup", "role": "member"}, nil)
 			if err != nil {
 				t.Fatal(err)
@@ -87,8 +79,6 @@ func TestFallback_UpdateReselectsByNewValues(t *testing.T) {
 		if _, err := a.Create(ctx, "widget", map[string]any{"id": "r1", "name": "old", "role": "member"}, nil); err != nil {
 			t.Fatal(err)
 		}
-		// The predicate selects by the stale value; the post-update read
-		// must use the new value (kysely/drizzle reselect approach).
 		updated, err := a.Update(ctx, "widget",
 			[]authdb.Where{{Field: "name", Value: "old"}},
 			map[string]any{"name": "new"})
@@ -103,8 +93,6 @@ func TestFallback_UpdateReselectsByNewValues(t *testing.T) {
 
 func TestFallback_NullCounterStartsAtZero(t *testing.T) {
 	ctx := context.Background()
-	// The compare-and-swap fallback (non-RETURNING dialects) starts null
-	// counters at 0, mirroring the factory atomic fallback.
 	for _, dialect := range []string{"mysql", "mssql"} {
 		a := sqliteAdapter(t, dialect, Options{Models: widgetRegistry()})
 		if _, err := a.Create(ctx, "widget", map[string]any{"id": "z1", "name": "ctr"}, nil); err != nil {
@@ -149,7 +137,6 @@ func TestFallback_RawSQLShapes(t *testing.T) {
 	if got := incrementOneReturningQuery("mssql", "users", setList, clause); got != ulite {
 		t.Fatalf("mssql increment must use the rowid shape: %q", got)
 	}
-	// Identifiers with quotes are doubled, never raw.
 	if got := quoteIdent(`a"b`); got != `"a""b"` {
 		t.Fatalf("quoteIdent must escape quotes: %q", got)
 	}
@@ -185,7 +172,6 @@ func TestFallback_CapabilitiesMatrix(t *testing.T) {
 			t.Fatalf("Capabilities(%q) must identify the adapter: %+v", d, got)
 		}
 	}
-	// Explicit capabilities override the dialect defaults.
 	custom := authdb.Capabilities{SupportsJSON: true, SupportsDates: true, SupportsBooleans: true}
 	a := NewWithDialectOptions(nil, nil, authdb.Config{}, "sqlite", Options{Capabilities: &custom})
 	if got := a.(authdb.CapabilityReporter).Capabilities(); !got.SupportsJSON {
@@ -276,8 +262,6 @@ func TestFallback_MatchAllBulkWrites(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// Empty-where bulk writes are match-all (bun builders reject WHERE-less
-	// statements, so these compile to raw unqualified writes).
 	n, err := a.UpdateMany(ctx, "widget", nil, map[string]any{"role": "admin"})
 	if err != nil || n != 2 {
 		t.Fatalf("match-all UpdateMany = %d, %v; want 2", n, err)
@@ -294,8 +278,6 @@ func TestFallback_MatchAllBulkWrites(t *testing.T) {
 
 func TestFallback_SequentialTransaction(t *testing.T) {
 	ctx := context.Background()
-	// Offline adapters (nil database) run the callback directly and
-	// non-atomically, mirroring upstream's sequential fallback.
 	a := NewWithDialect(nil, nil, authdb.Config{}, "pg")
 	called := false
 	if err := a.Transaction(ctx, func(tx authdb.Adapter) error {
@@ -318,7 +300,6 @@ func TestFallback_InvalidWhereError(t *testing.T) {
 	}
 }
 
-// captureHook records generated SQL for generation assertions.
 type captureHook struct {
 	queries []string
 }

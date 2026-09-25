@@ -45,9 +45,6 @@ func profileRegistry() map[string]ModelDef {
 	}}}
 }
 
-// openSQLiteDB opens an isolated in-memory SQLite database with the shared
-// test schema. Each call gets a fresh database (the DSN embeds a unique
-// name) so tests never share state.
 var sqliteDBSeq = 0
 
 func openSQLiteDB(t *testing.T) *bun.DB {
@@ -105,9 +102,6 @@ func trimSpace(s string) string {
 	return s
 }
 
-// sqliteAdapter builds an adapter over a fresh in-memory database with an
-// explicit dialect label (forcing "mysql"/"mssql" exercises the
-// non-RETURNING fallback paths against SQLite syntax).
 func sqliteAdapter(t *testing.T, dialect string, opts Options) authdb.Adapter {
 	t.Helper()
 	db := openSQLiteDB(t)
@@ -139,8 +133,6 @@ func TestContractSuite_Memory(t *testing.T) {
 func TestSQLite_CreateReturnsPersistedRow(t *testing.T) {
 	ctx := context.Background()
 	a := sqliteAdapter(t, "sqlite", Options{})
-	// DB-side defaults and triggers must survive: the row comes back from
-	// RETURNING *, not from the input echo.
 	row, err := a.Create(ctx, "thing", map[string]any{"id": "t1"}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -164,12 +156,9 @@ func TestSQLite_RegistryDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// emailVerified defaults to false via the registry (porting
-	// withApplyDefault); the value round-trips through the 0/1 encoding.
 	if row["emailVerified"] != false {
 		t.Fatalf("registry default must apply: %v", row)
 	}
-	// Registry-less create still inserts explicit values untouched.
 	plain := sqliteAdapter(t, "sqlite", Options{})
 	if _, err := plain.Create(ctx, "user", map[string]any{
 		"id": "u2", "name": "Bo", "email": "b@c.d", "emailVerified": true,
@@ -200,7 +189,6 @@ func TestSQLite_TransformsRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Stored encoding on a store without native JSON/date/boolean support.
 	raw := rawPhysicalRow(t, db, "profiles", "p1")
 	if raw["active"] != int64(1) {
 		t.Fatalf("boolean must store as 1: %#v", raw["active"])
@@ -214,7 +202,6 @@ func TestSQLite_TransformsRoundTrip(t *testing.T) {
 	if _, ok := raw["seen_at"].(string); !ok {
 		t.Fatalf("dates must store as strings: %#v", raw["seen_at"])
 	}
-	// Revival on read.
 	if created["active"] != true {
 		t.Fatalf("boolean must revive: %v", created)
 	}
@@ -256,17 +243,14 @@ func TestSQLite_WhereCoercion(t *testing.T) {
 	if _, err := a.Create(ctx, "profile", map[string]any{"id": "w1", "active": true, "score": 2.0}, nil); err != nil {
 		t.Fatal(err)
 	}
-	// Boolean fields accept "true"/"false" strings (factory where coercion).
 	hit, err := a.FindOne(ctx, "profile", []authdb.Where{{Field: "active", Value: "true"}}, []string{"id"})
 	if err != nil || hit == nil || hit["id"] != "w1" {
 		t.Fatalf("boolean string coercion: %v %v", hit, err)
 	}
-	// Number fields accept numeric strings.
 	hit, err = a.FindOne(ctx, "profile", []authdb.Where{{Field: "score", Value: "2"}}, []string{"id"})
 	if err != nil || hit == nil || hit["id"] != "w1" {
 		t.Fatalf("number string coercion: %v %v", hit, err)
 	}
-	// Date fields accept time.Time on stores without native dates.
 	hit, err = a.FindOne(ctx, "profile", []authdb.Where{{Field: "id", Value: "w1"}}, []string{"seenAt"})
 	if err != nil {
 		t.Fatal(err)
@@ -295,7 +279,6 @@ func TestSQLite_StrictErrors(t *testing.T) {
 	if _, err := a.Create(ctx, "profile", map[string]any{"id": "x", "seenAt": "not-a-date"}, nil); !isInvalidValue(err) {
 		t.Fatalf("unparseable date must error: %v", err)
 	}
-	// Lenient adapters keep the historical silent-eq normalization.
 	plain := sqliteAdapter(t, "sqlite", Options{})
 	if _, err := plain.FindMany(ctx, "profile", []authdb.Where{{Field: "id", Operator: "bogus", Value: "x"}}, 0, 0, nil, nil); err != nil {
 		t.Fatalf("lenient adapters normalize unknown operators: %v", err)
@@ -346,10 +329,6 @@ func TestSQLite_CustomTransforms(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Factory ordering per field: default, field input, capability
-	// coercions, hook on write; field output, capability revival, hook on
-	// read. The id field's hook entries may interleave anywhere (map
-	// order), so assert the email subsequence only.
 	var emailOrder []string
 	for _, step := range order {
 		if strings.HasSuffix(step, ":email") || step == "field-in" || step == "field-out" {
@@ -385,8 +364,6 @@ func TestSQLite_OnUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// onUpdate refreshes updatedAt even though the payload omits it
-	// (factory transformInput update behavior).
 	afterAt, ok := after["updatedAt"].(time.Time)
 	if !ok {
 		t.Fatalf("updatedAt must revive after update: %v", after)
@@ -406,7 +383,6 @@ func TestSQLite_SavepointNestedTransaction(t *testing.T) {
 		if _, err := tx.Create(ctx, "widget", map[string]any{"id": "outer", "name": "o"}, nil); err != nil {
 			return err
 		}
-		// A failing nested transaction rolls back to its savepoint only.
 		if err := tx.Transaction(ctx, func(ntx authdb.Adapter) error {
 			if _, err := ntx.Create(ctx, "widget", map[string]any{"id": "inner-bad", "name": "x"}, nil); err != nil {
 				return err
@@ -415,7 +391,6 @@ func TestSQLite_SavepointNestedTransaction(t *testing.T) {
 		}); err == nil {
 			t.Fatal("nested failure must propagate")
 		}
-		// A successful nested transaction persists within the outer one.
 		return tx.Transaction(ctx, func(ntx authdb.Adapter) error {
 			_, err := ntx.Create(ctx, "widget", map[string]any{"id": "inner-good", "name": "y"}, nil)
 			return err

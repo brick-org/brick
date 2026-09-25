@@ -11,73 +11,7 @@ import (
 	authdb "github.com/brick-org/brick/auth/src/db"
 )
 
-// AUTH-V10-03 live PostgreSQL matrix (adapters/bun half).
-//
-// LIVE (this file, requirePostgres skips without DATABASE_URL):
-//   - TestPostgres_PluginTablesCreateDropCycles: plugin-shaped tables
-//     (admin/org/oauthprovider/jwt column sets incl. FKs) created, exercised
-//     through the adapter, and dropped, each under a unique table name.
-//   - TestPostgres_RateLimitTableBehavior: rate-limit storage consume cycle
-//     (miss->create, hit->atomic increment, window reset) plus concurrent
-//     increments proving the atomic backend shape live.
-//   - TestPostgres_CoreMigrationApplyAndIntrospect: bun-model DDL applied to
-//     isolated tables, information_schema introspection, adapter smoke reads,
-//     drop.
-//   The generate-schema plan-level half (BuildMigrationPlan Script() applied
-//   statement-by-statement + introspected) lives in
-//   cmd/generate-schema/live_pg_test.go, which owns the planner.
-//
-// SERIAL REQUIREMENT (exact, verified 2026-09-21 against postgres:17):
-//   `DATABASE_URL=... GOWORK=off go test -p 1 -count=1 ./...` is green in all
-//   16 packages. Default parallel execution (`go test -count=1 ./...`) FAILS
-//   because the root + plugin integration harnesses share physical tables in
-//   one database and drop them on cleanup:
-//     auth_test.go migrate(): users/sessions/accounts/verifications
-//       (IfNotExists create, DropTable on cleanup)
-//     plugins/admin/admin_test.go migrate(): users/sessions/accounts/
-//       verifications (admin-augmented user/session shapes)
-//     plugins/jwt/jwt_test.go migrate(): users/sessions/accounts/
-//       verifications/jwks
-//     plugins/organization/organization_test.go migrate(): users/sessions/
-//       accounts/verifications/organization/member/invitation/team/...
-//     plugins/oauthprovider/oauthprovider_test.go migrate(): users/sessions/
-//       accounts/verifications/jwks/oauthClient/oauthConsent/...
-//   Observed parallel failures (packages racing create/drop on the same
-//   tables, plus cross-package row collisions on unique emails/tokens; the
-//   exact set varies run to run — two default-parallel runs observed
-//   different subsets, including plugins/jwt in the second):
-//     auth: TestAuthSessionRefresh_UsesSignedCookie,
-//       TestPluginSystem_HookMutatesData, TestNew_DatabaseHooksRunAfterPluginHooks,
-//       TestNew_DatabaseHooksWorkWithoutPlugins,
-//       TestNew_DatabaseHooksDeleteUserExposeDeletedRows
-//     plugins/admin: TestAdminPlugin_ListUsersRequiresConfiguredAdminRole
-//     plugins/oauthprovider: TestAdminResources_Authz, TestAdminResources_Validation,
-//       TestConsentFlow_LoginConsentCode, TestToken_AuthorizationCodePKCE
-//     plugins/organization: TestOrganizationPlugin_UpdateOrganization,
-//       TestOrganizationPlugin_HasPermission_DefaultRolesAndCrossOrganizationChecks,
-//       TestOrganizationPlugin_HasPermission_UsesConfiguredBuiltInRoles,
-//       TestOrganizationPlugin_GetFullOrganization,
-//       TestOrganizationPlugin_DeleteOrganization,
-//       TestOrganizationPlugin_InvalidUpdateCases,
-//       TestOrganizationPlugin_HooksCallbacksAndHiddenAdditionalFields
-//       (typical symptoms: sign-up 422 FAILED_TO_CREATE_USER from another
-//       package's rows, or missing-table errors mid-drop).
-//   Unaffected under parallel (pass in every observed run): adapters/bun
-//   (this file's tests included), api, api/routes, cmd/generate-schema,
-//   cookies, crypto, db, oauth2, social-providers, testutil, types.
-//   Only the bun widgets tables are parallel-safe (unique widgets_d6_<seq>
-//   per test via pgTableSeq). Fixing the shared harnesses (per-test schema or
-//   per-test database in every openDB/migrate helper) is out of scope for
-//   AUTH-V10-03; until then live runs MUST use `-p 1`.
-//
-// WIRE-ONLY (no live run possible here): MySQL and MSSQL. go.mod pins only
-// pgdriver + modernc sqlite; no mysql/mssql driver is declared, and adding a
-// module dependency is out of scope. Wire evidence lives in
-// mysql_mssql_test.go (TestWireConformance_MatrixCoversSkippedLive) and the
-// cmd/generate-schema golden fixtures. Environment probes 2026-09-21:
-// mysql:8 boots and answers `mysqladmin ping`; mcr.microsoft.com/mssql/server
-// :2022-latest does not start on this arm64 host (amd64-only image,
-// entrypoint exec fails).
+// AUTH-V10-03 live PostgreSQL matrix (adapters/bun half; skips without DATABASE_URL).
 
 func pgLiveUniqueTable(prefix string) string {
 	n := pgTableSeq.Add(1)
@@ -88,9 +22,7 @@ func pgLiveUniqueTable(prefix string) string {
 	return name
 }
 
-// TestPostgres_PluginTablesCreateDropCycles creates plugin-shaped tables
-// (admin/org/oauthprovider/jwt column sets, FKs included) under unique names
-// on live PG, runs adapter CRUD through them, then drops them.
+// TestPostgres_PluginTablesCreateDropCycles: plugin-shaped tables round-trip on live PG.
 func TestPostgres_PluginTablesCreateDropCycles(t *testing.T) {
 	db := requirePostgres(t)
 	ctx := context.Background()
@@ -104,18 +36,12 @@ func TestPostgres_PluginTablesCreateDropCycles(t *testing.T) {
 	jwks := pgLiveUniqueTable("v10m_jwks")
 
 	stmts := []string{
-		// Admin-augmented core shapes: role/ban columns on users,
-		// impersonated_by on sessions. Native PG types mirror the
-		// generate-schema postgres DDL (boolean/timestamptz).
 		fmt.Sprintf(`CREATE TABLE %s ("id" TEXT PRIMARY KEY, "name" TEXT NOT NULL, "email" TEXT NOT NULL UNIQUE, "email_verified" BOOLEAN NOT NULL DEFAULT FALSE, "image" TEXT, "role" TEXT NOT NULL DEFAULT 'user', "banned" BOOLEAN NOT NULL DEFAULT FALSE, "ban_reason" TEXT, "ban_expires" TIMESTAMPTZ, "created_at" TIMESTAMPTZ NOT NULL, "updated_at" TIMESTAMPTZ NOT NULL)`, quoteIdent(users)),
 		fmt.Sprintf(`CREATE TABLE %s ("id" TEXT PRIMARY KEY, "user_id" TEXT NOT NULL REFERENCES %s ("id") ON DELETE CASCADE, "token" TEXT NOT NULL UNIQUE, "expires_at" TIMESTAMPTZ NOT NULL, "impersonated_by" TEXT, "ip_address" TEXT, "user_agent" TEXT, "created_at" TIMESTAMPTZ NOT NULL, "updated_at" TIMESTAMPTZ NOT NULL)`, quoteIdent(sessions), quoteIdent(users)),
-		// Organization shapes with FK fan-out.
 		fmt.Sprintf(`CREATE TABLE %s ("id" TEXT PRIMARY KEY, "name" TEXT NOT NULL, "slug" TEXT NOT NULL UNIQUE, "created_at" TIMESTAMPTZ NOT NULL)`, quoteIdent(orgs)),
 		fmt.Sprintf(`CREATE TABLE %s ("id" TEXT PRIMARY KEY, "organization_id" TEXT NOT NULL REFERENCES %s ("id") ON DELETE CASCADE, "user_id" TEXT NOT NULL REFERENCES %s ("id") ON DELETE CASCADE, "role" TEXT NOT NULL DEFAULT 'member', "created_at" TIMESTAMPTZ NOT NULL)`, quoteIdent(members), quoteIdent(orgs), quoteIdent(users)),
-		// OAuth provider shapes: client + refresh token chained by FK.
 		fmt.Sprintf(`CREATE TABLE %s ("id" TEXT PRIMARY KEY, "client_id" TEXT NOT NULL UNIQUE, "user_id" TEXT REFERENCES %s ("id") ON DELETE CASCADE, "created_at" TIMESTAMPTZ NOT NULL)`, quoteIdent(oauthClients), quoteIdent(users)),
 		fmt.Sprintf(`CREATE TABLE %s ("id" TEXT PRIMARY KEY, "token" TEXT NOT NULL UNIQUE, "client_id" TEXT NOT NULL REFERENCES %s ("client_id"), "user_id" TEXT NOT NULL REFERENCES %s ("id") ON DELETE CASCADE, "expires_at" TIMESTAMPTZ NOT NULL)`, quoteIdent(oauthRefresh), quoteIdent(oauthClients), quoteIdent(users)),
-		// JWT jwks shape (alg/crv nullable per the live PG fix).
 		fmt.Sprintf(`CREATE TABLE %s ("id" TEXT PRIMARY KEY, "public_key" TEXT NOT NULL, "private_key" TEXT NOT NULL, "alg" TEXT, "crv" TEXT, "created_at" TIMESTAMPTZ NOT NULL, "expires_at" TIMESTAMPTZ)`, quoteIdent(jwks)),
 	}
 	for _, s := range stmts {
@@ -136,7 +62,6 @@ func TestPostgres_PluginTablesCreateDropCycles(t *testing.T) {
 		"jwks": jwks,
 	}}, Options{})
 
-	// Admin cycle: banned/role columns round-trip through the adapter.
 	now := time.Date(2026, 9, 21, 12, 0, 0, 0, time.UTC)
 	future := time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC)
 	adminRow, err := adapter.Create(ctx, "adminUser", map[string]any{
@@ -158,7 +83,6 @@ func TestPostgres_PluginTablesCreateDropCycles(t *testing.T) {
 		t.Fatalf("admin session create: %v", err)
 	}
 
-	// Org cycle: FK rejects dangling members, accepts chained rows.
 	if _, err := adapter.Create(ctx, "orgMember", map[string]any{
 		"id": "m-bad", "organizationId": "nope", "userId": "au1", "role": "member",
 		"createdAt": now,
@@ -181,7 +105,6 @@ func TestPostgres_PluginTablesCreateDropCycles(t *testing.T) {
 		t.Fatalf("member round-trip: %v %v", got, err)
 	}
 
-	// OAuth provider cycle: client -> refresh token chain.
 	if _, err := adapter.Create(ctx, "oauthClient", map[string]any{
 		"id": "c1", "clientId": "live-client-1", "userId": "au1", "createdAt": now,
 	}, nil); err != nil {
@@ -198,7 +121,6 @@ func TestPostgres_PluginTablesCreateDropCycles(t *testing.T) {
 		t.Fatalf("oauth refresh count = %d, %v; want 1", n, err)
 	}
 
-	// JWT jwks cycle: nullable alg/crv.
 	jwksRow, err := adapter.Create(ctx, "jwks", map[string]any{
 		"id": "k1", "publicKey": "pub", "privateKey": "priv", "createdAt": now,
 	}, nil)
@@ -209,11 +131,6 @@ func TestPostgres_PluginTablesCreateDropCycles(t *testing.T) {
 		t.Fatalf("jwks round-trip: %v", jwksRow)
 	}
 
-	// Drop cycle: PostgreSQL DROP ... CASCADE removes the dependent FK
-	// constraint, not the child table itself (verified against postgres:17:
-	// the cascade notice names only the constraint). So after dropping the
-	// parent, the members table still exists but the dangling insert that
-	// failed above now succeeds; dropping the child explicitly removes it.
 	if _, err := db.NewRaw(fmt.Sprintf(`DROP TABLE %s CASCADE`, quoteIdent(orgs))).Exec(ctx); err != nil {
 		t.Fatalf("drop orgs cascade: %v", err)
 	}
@@ -235,11 +152,7 @@ func TestPostgres_PluginTablesCreateDropCycles(t *testing.T) {
 	}
 }
 
-// TestPostgres_RateLimitTableBehavior exercises the rate-limit storage shape
-// (key/count/lastRequest) against live PG: miss->create, hit->atomic
-// increment, window-expiry reset, and concurrent increments converging
-// without lost updates (the atomic-backend property the DB rate-limit
-// storage depends on).
+// TestPostgres_RateLimitTableBehavior exercises the rate-limit storage shape against live PG.
 func TestPostgres_RateLimitTableBehavior(t *testing.T) {
 	db := requirePostgres(t)
 	ctx := context.Background()
@@ -269,7 +182,6 @@ func TestPostgres_RateLimitTableBehavior(t *testing.T) {
 		}
 		last := int64(asFloat(row["lastRequest"]))
 		if nowMillis-last > windowMillis {
-			// Window expired: reset count and timestamp.
 			updated, err := adapter.Update(ctx, "rateLimit",
 				[]authdb.Where{{Field: "key", Value: key}},
 				map[string]any{"count": 1, "lastRequest": nowMillis})
@@ -299,13 +211,10 @@ func TestPostgres_RateLimitTableBehavior(t *testing.T) {
 	if ok, c := consume("k1", 4_000, 60_000, 3); ok || c != 4 {
 		t.Fatalf("over-max consume must be denied at 4, ok=%v c=%v", ok, c)
 	}
-	// Window expiry resets.
 	if ok, c := consume("k1", 200_000, 60_000, 3); !ok || c != 1 {
 		t.Fatalf("expired window must reset to 1, ok=%v c=%v", ok, c)
 	}
 
-	// Concurrent increments converge (16 goroutines x 10 = 160 on top of the
-	// reset count of 1).
 	if _, err := adapter.Create(ctx, "rateLimit", map[string]any{
 		"id": "rl-conc", "key": "conc", "count": 0, "lastRequest": 300_000,
 	}, nil); err != nil {
@@ -338,11 +247,7 @@ func TestPostgres_RateLimitTableBehavior(t *testing.T) {
 	}
 }
 
-// TestPostgres_ConsumeOneConcurrentSingleWinner proves exactly one concurrent
-// consumer wins a row on live PG (regression companion to the IncrementOne
-// coverage above): the ctid-guarded DELETE serializes writers on the row
-// lock, losers re-read the now-missing row and report (nil, nil) instead of
-// a second copy.
+// TestPostgres_ConsumeOneConcurrentSingleWinner proves exactly one concurrent consumer wins a row on live PG.
 func TestPostgres_ConsumeOneConcurrentSingleWinner(t *testing.T) {
 	db := requirePostgres(t)
 	ctx := context.Background()
@@ -397,16 +302,7 @@ func TestPostgres_ConsumeOneConcurrentSingleWinner(t *testing.T) {
 	}
 }
 
-// TestPostgres_CoreMigrationApplyAndIntrospect applies core-table DDL to
-// isolated tables on live PG (the same column sets bun's User/Session/
-// Account/Verification models declare), introspects information_schema
-// (columns, PKs, unique constraints), smoke-reads through the adapter, and
-// drops. It mirrors what the root/plugin migrate() helpers do, minus the
-// shared-table interference.
-//
-// NOTE: bun's CreateTableQuery.Table() does NOT rename the created table
-// (the model tag wins; only ModelTableExpr overrides), so isolated DDL here
-// is explicit raw SQL — the same shape the generate-schema planner emits.
+// TestPostgres_CoreMigrationApplyAndIntrospect applies core-table DDL to isolated tables on live PG.
 func TestPostgres_CoreMigrationApplyAndIntrospect(t *testing.T) {
 	db := requirePostgres(t)
 	ctx := context.Background()
@@ -431,7 +327,6 @@ func TestPostgres_CoreMigrationApplyAndIntrospect(t *testing.T) {
 		}
 	})
 
-	// Introspect: every table present with its PK and unique constraints.
 	for tbl, wantCols := range map[string][]string{
 		users:         {"id", "email", "email_verified", "name", "created_at", "updated_at"},
 		sessions:      {"id", "user_id", "token", "expires_at", "created_at", "updated_at"},
@@ -469,8 +364,6 @@ func TestPostgres_CoreMigrationApplyAndIntrospect(t *testing.T) {
 		}
 	}
 
-	// The migrated shape serves adapter traffic (booleans/timestamps use
-	// native PG types; the adapter's pg transforms carry them).
 	adapter := NewWithOptions(db, authdb.Config{ModelNames: map[string]string{
 		"user": users, "session": sessions, "account": accounts, "verification": verifications,
 	}}, Options{})

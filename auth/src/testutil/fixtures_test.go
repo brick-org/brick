@@ -1,10 +1,6 @@
 package testutil
 
 // Both-directions fixture tests for the wire formats in auth/src/testdata.
-// TS-write/Go-read loads each checked-in vector through the Go verifier;
-// Go-write/TS-read mints a fresh value with the Go helper and asserts the
-// exact wire shape a TypeScript reader expects. Malformed inputs fail
-// closed. All hermetic: no network.
 
 import (
 	"encoding/base64"
@@ -16,10 +12,6 @@ import (
 	"github.com/brick-org/brick/auth/src/cookies"
 	"github.com/brick-org/brick/auth/src/crypto"
 )
-
-// ---------------------------------------------------------------------------
-// Email HS256 JWT (email_jwt.json).
-// ---------------------------------------------------------------------------
 
 func TestFixture_EmailJWT_BothDirections(t *testing.T) {
 	var doc struct {
@@ -34,8 +26,6 @@ func TestFixture_EmailJWT_BothDirections(t *testing.T) {
 	}
 	MustLoad(t, "email_jwt.json", &doc)
 
-	// TS-write/Go-read: the checked-in token verifies and yields the
-	// lowercased email plus the preserved extra key.
 	got, err := crypto.VerifyEmailVerificationTokenAny([]string{"decoy", doc.Secret}, doc.Token)
 	if err != nil {
 		t.Fatalf("verify fixture token: %v", err)
@@ -56,8 +46,6 @@ func TestFixture_EmailJWT_BothDirections(t *testing.T) {
 		t.Errorf("payload exp must be numeric, got %T", doc.Payload["exp"])
 	}
 
-	// Go-write/TS-read: a freshly minted token has the exact shape a TS
-	// jwtVerify({algorithms: ["HS256"]}) reader expects.
 	fresh, err := crypto.CreateEmailVerificationToken(doc.Secret, "Fresh@Example.com", "", 3600, nil)
 	if err != nil {
 		t.Fatalf("mint: %v", err)
@@ -79,7 +67,6 @@ func TestFixture_EmailJWT_BothDirections(t *testing.T) {
 		t.Fatalf("fresh round trip = %+v, %v", back, err)
 	}
 
-	// Fail closed: tampered, wrong-secret, empty, and legacy-HMAC tokens.
 	if _, err := crypto.VerifyEmailVerificationToken(doc.Secret, doc.Token+"a"); err == nil {
 		t.Error("tampered token verified")
 	}
@@ -97,10 +84,6 @@ func TestFixture_EmailJWT_BothDirections(t *testing.T) {
 		t.Error("legacy HMAC token verified as JWT")
 	}
 }
-
-// ---------------------------------------------------------------------------
-// XChaCha envelope (xchacha.json).
-// ---------------------------------------------------------------------------
 
 func TestFixture_XChaCha_BothDirections(t *testing.T) {
 	var doc struct {
@@ -120,7 +103,6 @@ func TestFixture_XChaCha_BothDirections(t *testing.T) {
 		CurrentVersion: 2,
 		LegacySecret:   "auth-r5-04-xchacha-legacy",
 	}
-	// TS-write/Go-read: checked-in ciphertexts decrypt to the plaintext.
 	if back, err := crypto.SymmetricDecrypt(doc.Secret, doc.BareHex); err != nil || back != doc.Plaintext {
 		t.Fatalf("bare decrypt = %q, %v", back, err)
 	}
@@ -134,8 +116,6 @@ func TestFixture_XChaCha_BothDirections(t *testing.T) {
 		t.Errorf("envelope = %q, want $ba$2$ prefix", doc.Envelope)
 	}
 
-	// Go-write/TS-read: fresh payloads keep the wire contract (bare hex
-	// alphabet, versioned envelope).
 	freshBare, err := crypto.SymmetricEncrypt(doc.Secret, "fresh")
 	if err != nil {
 		t.Fatal(err)
@@ -152,7 +132,6 @@ func TestFixture_XChaCha_BothDirections(t *testing.T) {
 	if !strings.HasPrefix(freshEnv, "$ba$2$") {
 		t.Fatalf("fresh envelope = %q", freshEnv)
 	}
-	// Fail closed.
 	if _, err := crypto.SymmetricDecrypt("wrong", doc.BareHex); err == nil {
 		t.Error("wrong secret decrypted bare payload")
 	}
@@ -168,10 +147,6 @@ func TestFixture_XChaCha_BothDirections(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Session JWT cache (session_jwt.json).
-// ---------------------------------------------------------------------------
-
 func TestFixture_SessionJWT_BothDirections(t *testing.T) {
 	var doc struct {
 		Secret  string         `json:"secret"`
@@ -184,7 +159,6 @@ func TestFixture_SessionJWT_BothDirections(t *testing.T) {
 	}
 	MustLoad(t, "session_jwt.json", &doc)
 
-	// TS-write/Go-read: the checked-in token verifies under rotation.
 	got, expMillis, err := cookies.VerifySessionCacheJWT([]string{"rotated-secret", doc.Secret}, doc.Token)
 	if err != nil {
 		t.Fatalf("verify fixture: %v", err)
@@ -199,8 +173,6 @@ func TestFixture_SessionJWT_BothDirections(t *testing.T) {
 		t.Errorf("header alg = %v, want HS256", doc.Header["alg"])
 	}
 
-	// Go-write/TS-read: fresh tokens keep the HS256 compact shape with the
-	// session/user/version/iat/exp claims.
 	fresh, err := cookies.CreateSessionCacheJWT(doc.Secret, doc.Session, doc.User, "2", time.Hour)
 	if err != nil {
 		t.Fatal(err)
@@ -213,7 +185,6 @@ func TestFixture_SessionJWT_BothDirections(t *testing.T) {
 		t.Fatalf("fresh round trip = %+v, %v", back, err)
 	}
 
-	// Fail closed.
 	if _, _, err := cookies.VerifySessionCacheJWT([]string{"wrong"}, doc.Token); err == nil {
 		t.Error("wrong secret verified")
 	}
@@ -226,17 +197,12 @@ func TestFixture_SessionJWT_BothDirections(t *testing.T) {
 			t.Errorf("malformed %q verified", bad[:min(len(bad), 16)])
 		}
 	}
-	// none-alg confusion.
 	noneHeader := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none"}`))
 	noneToken := noneHeader + "." + strings.Split(doc.Token, ".")[1] + ".sig"
 	if _, _, err := cookies.VerifySessionCacheJWT([]string{doc.Secret}, noneToken); err == nil {
 		t.Error("none-alg token verified")
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Session JWE cache (session_jwe.json).
-// ---------------------------------------------------------------------------
 
 func TestFixture_SessionJWE_BothDirections(t *testing.T) {
 	var doc struct {
@@ -254,8 +220,6 @@ func TestFixture_SessionJWE_BothDirections(t *testing.T) {
 	}
 	MustLoad(t, "session_jwe.json", &doc)
 
-	// TS-write/Go-read: the checked-in JWE decrypts under rotation and the
-	// header pins dir/A256CBC-HS512 with the derived-key thumbprint kid.
 	got, expMillis, err := cookies.VerifySessionCacheJWE([]string{"rotated-secret", doc.Secret}, doc.Token)
 	if err != nil {
 		t.Fatalf("verify fixture: %v", err)
@@ -284,7 +248,6 @@ func TestFixture_SessionJWE_BothDirections(t *testing.T) {
 		t.Error("JWE must be 5-part compact serialization")
 	}
 
-	// Go-write/TS-read: fresh JWEs keep the protected-header contract.
 	fresh, err := cookies.CreateSessionCacheJWE(doc.Secret, doc.Session, doc.User, "8", time.Hour)
 	if err != nil {
 		t.Fatal(err)
@@ -294,7 +257,6 @@ func TestFixture_SessionJWE_BothDirections(t *testing.T) {
 		t.Fatalf("fresh round trip = %+v, %v", back, err)
 	}
 
-	// Fail closed: unknown kid, wrong secrets, tampered, garbage.
 	if _, _, err := cookies.VerifySessionCacheJWE([]string{"other-a", "other-b"}, doc.Token); err == nil {
 		t.Error("unknown kid decrypted")
 	}
@@ -308,10 +270,6 @@ func TestFixture_SessionJWE_BothDirections(t *testing.T) {
 		}
 	}
 }
-
-// ---------------------------------------------------------------------------
-// JWK/JWKS (jwk.json, jwks.json).
-// ---------------------------------------------------------------------------
 
 func TestFixture_JWK_BothDirections(t *testing.T) {
 	var jwkDoc struct {
@@ -333,7 +291,6 @@ func TestFixture_JWK_BothDirections(t *testing.T) {
 	}
 	keys := []crypto.PublicKey{{Kid: jwkDoc.Kid, Alg: jwkDoc.Alg, PublicJWKJSON: string(pubRaw)}}
 
-	// TS-write/Go-read: the checked-in token verifies with issuer/audience.
 	claims, err := crypto.VerifyJWT(jwkDoc.Token, keys, crypto.VerifyOptions{
 		Issuer: "https://auth.example.com", Audience: []string{"https://api.example.com"},
 	})
@@ -343,14 +300,12 @@ func TestFixture_JWK_BothDirections(t *testing.T) {
 	if claims["sub"] != "fixture-user-1" {
 		t.Errorf("sub = %v", claims["sub"])
 	}
-	// The JWKS set carries the same key with the kid injected.
 	if len(jwksDoc.Keys) != 1 || jwksDoc.Keys[0]["kid"] != jwkDoc.Kid {
 		t.Fatalf("jwks = %v", jwksDoc.Keys)
 	}
 	if jwksDoc.Keys[0]["kty"] != "OKP" || jwksDoc.Keys[0]["crv"] != "Ed25519" {
 		t.Errorf("jwks key type = %v", jwksDoc.Keys[0])
 	}
-	// BuildJWKS reproduces the checked-in set from the stored public key.
 	built, err := crypto.BuildJWKS(keys)
 	if err != nil {
 		t.Fatal(err)
@@ -360,7 +315,6 @@ func TestFixture_JWK_BothDirections(t *testing.T) {
 		t.Fatalf("BuildJWKS = %v", built)
 	}
 
-	// Fail closed: unknown kid, wrong audience, tampered token.
 	if _, err := crypto.VerifyJWT(jwkDoc.Token, []crypto.PublicKey{{Kid: "other", Alg: "EdDSA", PublicJWKJSON: string(pubRaw)}}, crypto.VerifyOptions{}); err == nil {
 		t.Error("unknown kid verified")
 	}
@@ -374,10 +328,6 @@ func TestFixture_JWK_BothDirections(t *testing.T) {
 		t.Error("garbage verified")
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Cookie Sign/Verify + chunk vectors (cookies.json).
-// ---------------------------------------------------------------------------
 
 func TestFixture_Cookies(t *testing.T) {
 	var doc struct {
@@ -394,7 +344,6 @@ func TestFixture_Cookies(t *testing.T) {
 	}
 	MustLoad(t, "cookies.json", &doc)
 
-	// Byte-exact Sign vectors shared with any conforming implementation.
 	for _, vec := range doc.SignVectors {
 		got, err := cookies.Sign(vec.Secret, vec.Value)
 		if err != nil {
@@ -413,13 +362,11 @@ func TestFixture_Cookies(t *testing.T) {
 			t.Errorf("VerifyAny rotation failed for %q", vec.Signed)
 		}
 	}
-	// Unsigned and stripped inputs fail closed.
 	for _, bad := range []string{"", "nosig", "a.", ".b"} {
 		if _, ok := cookies.Verify("s", bad); ok && bad != "a." && bad != ".b" {
 			t.Errorf("%q verified", bad)
 		}
 	}
-	// Chunk reassembly follows the <name>.<index> wire shape.
 	joined, ok := cookies.JoinChunkedCookies(doc.Chunk.Cookies, doc.Chunk.Name)
 	if !ok || joined != doc.Chunk.Want {
 		t.Fatalf("join = %q, %v; want %q", joined, ok, doc.Chunk.Want)
