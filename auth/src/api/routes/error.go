@@ -72,7 +72,7 @@ func Error(api huma.API, basePath string, opts types.Options) {
 		}
 
 		body := renderDefaultErrorPage(opts.OnAPIError.CustomizeDefaultErrorPage, safeCode, safeDescription)
-		ctx.SetHeader("Content-Type", "text/html; charset=utf-8")
+		ctx.SetHeader("Content-Type", "text/html")
 		ctx.SetStatus(http.StatusOK)
 		_, _ = ctx.BodyWriter().Write([]byte(body))
 	})
@@ -219,6 +219,10 @@ func renderDefaultErrorPage(custom types.DefaultErrorPageOptions, code, descript
 	primary := orErrorDefault(c.Primary, "black")
 	primaryFg := orErrorDefault(c.PrimaryForeground, "white")
 	background := orErrorDefault(c.Background, "white")
+	// bodyBackground mirrors the upstream body/grid-mask fallback
+	// (error.ts:36,148: custom?.colors?.background || "var(--background)"),
+	// which differs from the :root --background default ("white", error.ts:61).
+	bodyBackground := orErrorDefault(c.Background, "var(--background)")
 	foreground := orErrorDefault(c.Foreground, "oklch(0.271 0 0)")
 	border := orErrorDefault(c.Border, "oklch(0.89 0 0)")
 	destructive := orErrorDefault(c.Destructive, "oklch(0.55 0.15 25.723)")
@@ -265,7 +269,7 @@ func renderDefaultErrorPage(custom types.DefaultErrorPageOptions, code, descript
           display: flex;
           align-items: center;
           justify-content: center;
-          background: ` + background + `;
+          background: ` + bodyBackground + `;
           mask-image: radial-gradient(ellipse at center, transparent 20%, black);
           -webkit-mask-image: radial-gradient(ellipse at center, transparent 20%, black);
           pointer-events: none;
@@ -346,7 +350,7 @@ func renderDefaultErrorPage(custom types.DefaultErrorPageOptions, code, descript
       }
       body {
         font-family: ` + fontDefault + `;
-        background: ` + background + `;
+        background: ` + bodyBackground + `;
         color: var(--foreground);
         margin: 0;
       }
