@@ -749,9 +749,12 @@ func newSessionDataCookie(secret string, session types.Session, user types.User,
 	if err != nil {
 		return http.Cookie{}, err
 	}
-	// Strip schema-declared returned:false fields after version resolution
-	// (upstream setCookieCache order; shared helper with the context-aware
-	// issuance path in session-c701.go).
+	// Strip schema-declared returned:false fields after version resolution.
+	// Upstream setCookieCache filters first textually but resolves the
+	// version from the original unfiltered pair; Go resolves version first
+	// and filters after, which is the same data-flow (version always sees
+	// unfiltered inputs). Shared helper with the context-aware issuance
+	// path in session-c701.go.
 	session, user = filterCookieCacheSessionUser(session, user, fullOpts, opts)
 	maxAge := opts.CookieCacheMaxAgeDuration()
 	if dontRememberMe {
