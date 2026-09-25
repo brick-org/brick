@@ -14,7 +14,7 @@
 // Create/Update data keys, select entries, SortBy.Field) and maps them to
 // physical columns via Config.FieldNames (explicit overrides) with a
 // camelToSnake fallback. Custom FieldNames reverse to logical on reads
-// (transformOutput key part). See PARITY.md.
+// (transformOutput key part). See PARITY_V2.md.
 //
 // Upstream-divergence summary (see Adapter for per-method detail):
 //   - No join parameter on FindOne/FindMany (upstream JoinOption/JoinConfig).

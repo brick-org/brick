@@ -8,7 +8,7 @@ import (
 // Better Auth's generateRandomString alphabet (a-z, 0-9, A-Z, -_).
 // Note: upstream generateId uses alphanumeric only; GenerateID here uses the
 // generateRandomString alphabet and serves both IDs and tokens. The conflation
-// is documented in PARITY.md; use GenerateRandomString for token-oriented call
+// is documented in PARITY_V2.md; use GenerateRandomString for token-oriented call
 // sites when porting upstream behavior.
 const idAlphabet = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-_"
 

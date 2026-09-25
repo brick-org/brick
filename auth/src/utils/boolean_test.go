@@ -7,7 +7,7 @@ import (
 )
 
 func TestToBooleanAgainstPinnedTypeScriptFixtures(t *testing.T) {
-	data, err := os.ReadFile("../../transpiler/fixtures/boolean.json")
+	data, err := os.ReadFile("../testdata/boolean.json")
 	if err != nil {
 		t.Fatal(err)
 	}

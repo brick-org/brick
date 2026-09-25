@@ -82,7 +82,7 @@ func TestDecisions_D02_RandomIDAlphabet(t *testing.T) {
 	}
 	// The alphabet MUST contain -_ (this is the documented deviation from
 	// upstream alphanumeric generateId); dropping them would silently
-	// change IDs and break the PARITY.md claim.
+	// change IDs and break the PARITY_V2.md claim.
 	seen := map[rune]bool{}
 	for i := 0; i < 200; i++ {
 		for _, c := range crypto.GenerateID() {

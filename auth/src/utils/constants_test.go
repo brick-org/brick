@@ -7,7 +7,7 @@ import (
 )
 
 func TestDefaultSecretAgainstPinnedTypeScriptFixture(t *testing.T) {
-	data, err := os.ReadFile("../../transpiler/fixtures/constants.json")
+	data, err := os.ReadFile("../testdata/constants.json")
 	if err != nil {
 		t.Fatal(err)
 	}

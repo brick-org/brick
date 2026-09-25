@@ -495,7 +495,7 @@ func normalizeCreateFields(fields map[string]types.FieldAttribute) map[string]ty
 
 // flatUser serializes a types.User the way upstream parseUserOutput does:
 // additional fields merge flat onto the user object instead of nesting
-// under "additionalFields" (PARITY.md AUTH-AUDIT-TMODELS-02 prescribes
+// under "additionalFields" (PARITY_V2.md AUTH-AUDIT-TMODELS-02 prescribes
 // "flatten in the response serializer"). types.User keeps the nested Go
 // shape (types/ is frozen to this lane); only the JSON boundary flattens,
 // so `res.user.newField` reads hold and real-vs-synthetic key order is

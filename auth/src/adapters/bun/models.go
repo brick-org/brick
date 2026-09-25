@@ -12,7 +12,7 @@ import (
 // only (see vendor/better-auth/packages/core/src/db/get-tables.ts). They do
 // not model plugin tables/fields, additionalFields, custom ModelNames /
 // FieldNames, secondary-storage inclusion rules, or optional schema changes;
-// see auth/PARITY.md ("adapters/bun/models.go") for the tracked gaps. The
+// see auth/PARITY_V2.md ("adapters/bun/models.go") for the tracked gaps. The
 // live row-key contract (logical camelCase <-> physical snake_case mapping
 // and the stable snake_case shape returned to callers) is owned by the
 // Adapter in bun.go (encodeRow/decodeRow), not by these tags.

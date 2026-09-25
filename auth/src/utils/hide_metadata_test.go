@@ -8,7 +8,7 @@ import (
 )
 
 func TestHideMetadataAgainstPinnedTypeScriptFixture(t *testing.T) {
-	data, err := os.ReadFile("../../transpiler/fixtures/hide-metadata.json")
+	data, err := os.ReadFile("../testdata/hide-metadata.json")
 	if err != nil {
 		t.Fatal(err)
 	}

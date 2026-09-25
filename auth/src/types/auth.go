@@ -1132,7 +1132,7 @@ type DynamicBaseURLConfig struct {
 // init-options.ts:538-1841). Every field carries a Runtime marker naming
 // the owning runtime file; "wired" means BetterAuth/routes consume it,
 // "excluded(W10-XX)" names the intentional-exclusion registry entry in
-// PARITY.md. No field is silently ignored: the Wave-10 audit removed or
+// PARITY_V2.md. No field is silently ignored: the Wave-10 audit removed or
 // wired every pending marker.
 type Options struct {
 	// AppName identifies the application in auth UX contexts.

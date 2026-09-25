@@ -60,7 +60,7 @@ func ledgerAuthDir(t *testing.T) string {
 	// source tree lives below auth/src, while the parity ledger remains at the
 	// auth module root alongside go.mod.
 	for dir := wd; ; dir = filepath.Dir(dir) {
-		if _, err := os.Stat(filepath.Join(dir, "PARITY.md")); err == nil {
+		if _, err := os.Stat(filepath.Join(dir, "PARITY_V2.md")); err == nil {
 			return dir
 		}
 		parent := filepath.Dir(dir)
@@ -68,7 +68,7 @@ func ledgerAuthDir(t *testing.T) string {
 			break
 		}
 	}
-	t.Fatalf("PARITY.md not found from %s", wd)
+	t.Fatalf("PARITY_V2.md not found from %s", wd)
 	return ""
 }
 
@@ -141,10 +141,10 @@ func TestParityLedger_PinVersion(t *testing.T) {
 	if head := strings.TrimSpace(string(out)); head != ledgerPinnedCommit {
 		t.Fatalf("vendor/better-auth HEAD = %q, want %q", head, ledgerPinnedCommit)
 	}
-	parity := ledgerRead(t, filepath.Join(ledgerAuthDir(t), "PARITY.md"))
+	parity := ledgerRead(t, filepath.Join(ledgerAuthDir(t), "PARITY_V2.md"))
 	for _, want := range []string{ledgerPinnedVersion, ledgerPinnedCommit} {
 		if !strings.Contains(parity, want) {
-			t.Fatalf("PARITY.md missing pinned %q", want)
+			t.Fatalf("PARITY_V2.md missing pinned %q", want)
 		}
 	}
 	m := ledgerLoadManifest(t)
@@ -206,10 +206,10 @@ func TestParityLedger_CoreRouteCatalog(t *testing.T) {
 			t.Errorf("core route %q not registered in non-test Go sources", p)
 		}
 	}
-	parity := ledgerRead(t, filepath.Join(ledgerAuthDir(t), "PARITY.md"))
+	parity := ledgerRead(t, filepath.Join(ledgerAuthDir(t), "PARITY_V2.md"))
 	for _, p := range ledgerCoreRoutes {
 		if !strings.Contains(parity, p) {
-			t.Errorf("PARITY.md ledger missing core route %q", p)
+			t.Errorf("PARITY_V2.md ledger missing core route %q", p)
 		}
 	}
 }
@@ -247,9 +247,9 @@ func TestParityLedger_PendingMarkers(t *testing.T) {
 			t.Errorf("Runtime: pending in %s not recorded in manifest", file)
 		}
 	}
-	parity := ledgerRead(t, filepath.Join(ledgerAuthDir(t), "PARITY.md"))
+	parity := ledgerRead(t, filepath.Join(ledgerAuthDir(t), "PARITY_V2.md"))
 	if !strings.Contains(parity, "Runtime: pending") {
-		t.Fatal("PARITY.md ledger must record the Runtime: pending expectation")
+		t.Fatal("PARITY_V2.md ledger must record the Runtime: pending expectation")
 	}
 }
 
@@ -257,24 +257,28 @@ var ledgerIDRe = regexp.MustCompile(`AUTH-(?:R5|F6|S6|D6|C7|P8|O9|V10|P0|P1)-[0-
 
 func TestParityLedger_LedgerIDs(t *testing.T) {
 	authDir := ledgerAuthDir(t)
-	parity := ledgerRead(t, filepath.Join(authDir, "PARITY.md"))
-	plan := ledgerRead(t, filepath.Join(authDir, "plan.md"))
+	parity := ledgerRead(t, filepath.Join(authDir, "PARITY_V2.md"))
 	if !strings.Contains(parity, "AUTH-R5-01") {
-		t.Fatal("PARITY.md ledger must reference AUTH-R5-01")
+		t.Fatal("PARITY_V2.md ledger must reference AUTH-R5-01")
 	}
-	if !strings.Contains(plan, "AUTH-R5-01") {
-		t.Fatal("plan.md must define AUTH-R5-01")
+	// plan.md was removed in parity v2; referenced IDs must instead be
+	// defined in this file's own Ledger ID registry (no dangling IDs).
+	const marker = "## Ledger ID registry"
+	idx := strings.Index(parity, marker)
+	if idx < 0 {
+		t.Fatal("PARITY_V2.md missing ## Ledger ID registry section")
 	}
+	registry := parity[idx:]
 	ids := map[string]bool{}
 	for _, id := range ledgerIDRe.FindAllString(parity, -1) {
 		ids[id] = true
 	}
 	if len(ids) == 0 {
-		t.Fatal("no AUTH-*-IDs found in PARITY.md")
+		t.Fatal("no AUTH-*-IDs found in PARITY_V2.md")
 	}
 	for id := range ids {
-		if !strings.Contains(plan, id) {
-			t.Errorf("PARITY.md references %s which is not defined in plan.md", id)
+		if !strings.Contains(registry, id) {
+			t.Errorf("PARITY_V2.md references %s which is not defined in the Ledger ID registry", id)
 		}
 	}
 }
@@ -326,7 +330,7 @@ func TestParityLedger_UpstreamTestManifest(t *testing.T) {
 }
 
 func TestParityLedger_LedgerSectionPresent(t *testing.T) {
-	parity := ledgerRead(t, filepath.Join(ledgerAuthDir(t), "PARITY.md"))
+	parity := ledgerRead(t, filepath.Join(ledgerAuthDir(t), "PARITY_V2.md"))
 	for _, want := range []string{
 		"## Parity ledger (AUTH-R5-01)",
 		"parity_ledger.json",
@@ -334,7 +338,7 @@ func TestParityLedger_LedgerSectionPresent(t *testing.T) {
 		"Intentional exclusions",
 	} {
 		if !strings.Contains(parity, want) {
-			t.Errorf("PARITY.md missing %q", want)
+			t.Errorf("PARITY_V2.md missing %q", want)
 		}
 	}
 }
