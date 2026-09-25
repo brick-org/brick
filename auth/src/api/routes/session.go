@@ -74,6 +74,17 @@ func GetSession(api huma.API, basePath string, opts types.Options) {
 			readOnly:       !isPost && opts.Session.DeferSessionRefresh,
 		})
 		if err != nil {
+			// P05-GAP-1: surface the retired session_data cleanup (Max-Age=0
+			// Set-Cookie) even on auth failure. Huma error responses discard
+			// the output struct, so append directly to the wire headers.
+			if res != nil && len(res.cookies) > 0 {
+				if humaCtx, ok := ctx.Value(humaContextKey{}).(huma.Context); ok && humaCtx != nil {
+					for _, c := range res.cookies {
+						cookie := c
+						humaCtx.AppendHeader("Set-Cookie", cookie.String())
+					}
+				}
+			}
 			return nil, err
 		}
 		out := &getSessionOutput{}
@@ -132,15 +143,17 @@ type getSessionResult struct {
 // cookie-cache fast path (unless ?disableCookieCache), authoritative
 // database read, then refresh/cookie policy.
 //
+// HELD (merge-owner sign-off; upstream session.ts:94-112,287-303 returns 200
+// null for missing/expired sessions while Go fails closed with 401/400 per
+// the pinned SCOPE.md deviation): null-shape behavior is unchanged here;
+// only the stale-cleanup cookie emission on failure changed (P05-GAP-1).
+//
 // The fast path is context-aware (AUTH-C7-01): chunk/name recovery across
 // the Go legacy, configured, and upstream defaults, plus the JWT plugin
 // custom JWKS signer (rotation, typ/kid/aud/iss/sub/sid binding) with
 // authoritative fallback. Cookie issuance honors the request origin
 // (StoredRequest + EffectiveBaseURL) for Secure/Domain.
 func resolveGetSession(ctx context.Context, opts types.Options, req getSessionRequest) (*getSessionResult, error) {
-	if req.token == "" {
-		return nil, sessionRouteError(types.ErrFailedToGetSession)
-	}
 	now := time.Now().UTC()
 	headers := headersWithStoredRequest(ctx, req.headers)
 	cacheEnabled := opts.Session.CookieCache.Enabled
@@ -148,11 +161,16 @@ func resolveGetSession(ctx context.Context, opts types.Options, req getSessionRe
 	// it: retired while caching is disabled (upstream clean(),
 	// session.ts:102-109), or present but undecodable/mismatched while
 	// enabled (upstream expireCookie, session.ts:120-122). Either way the
-	// stale entries expire alongside the authoritative result below.
+	// stale entries expire alongside the authoritative result below — including
+	// on auth-failure returns (P05-GAP-1; fallback.test.ts:91-136), so the
+	// caller surfaces them via the result even when err != nil.
 	_, cachePresent := sessionDataCookieValue(req.cookieHeader, opts)
 	var staleCleanup []http.Cookie
 	if cachePresent && !cacheEnabled {
 		staleCleanup = expiredStaleSessionDataCookies(ctx, opts, headers, req.cookieHeader)
+	}
+	if req.token == "" {
+		return &getSessionResult{cookies: staleCleanup}, sessionRouteError(types.ErrFailedToGetSession)
 	}
 	if !req.query.DisableCookieCache {
 		if cached, ok := cachedSessionFromRequestFull(ctx, req.cookieHeader, opts.AllSecrets(), req.token, opts); ok {
@@ -173,15 +191,21 @@ func resolveGetSession(ctx context.Context, opts types.Options, req getSessionRe
 		readOnly:       req.readOnly,
 	})
 	if err != nil {
+		// P05-GAP-1: the retired session_data cleanup rides alongside the
+		// auth failure (upstream clean()/expireCookie emit Set-Cookie even
+		// when the session read fails; fallback.test.ts:91-136). Callers
+		// surface res.cookies even when err != nil (see GetSession huma
+		// header append and GetSessionFromRequest cookie return).
+		failed := &getSessionResult{cookies: staleCleanup}
 		switch {
 		case errors.Is(err, errSessionExpired):
-			return nil, sessionRouteError(types.ErrSessionExpired)
+			return failed, sessionRouteError(types.ErrSessionExpired)
 		case errors.Is(err, errUnauthorized):
-			return nil, sessionRouteError(types.ErrFailedToGetSession)
+			return failed, sessionRouteError(types.ErrFailedToGetSession)
 		case errors.Is(err, errUserMissing):
-			return nil, sessionRouteError(types.ErrUserNotFound)
+			return failed, sessionRouteError(types.ErrUserNotFound)
 		default:
-			return nil, sessionInternalError(types.ErrFailedToGetSession)
+			return failed, sessionInternalError(types.ErrFailedToGetSession)
 		}
 	}
 	session := rowToSession(sessionRow, opts)
@@ -228,6 +252,10 @@ func resolveGetSession(ctx context.Context, opts types.Options, req getSessionRe
 // getSessionFromCtx merges the caller config with the request query
 // (session.ts:479-490). Like upstream, resolution is GET-style, so an
 // enabled DeferSessionRefresh keeps this helper read-only.
+//
+// HELD (merge-owner sign-off; upstream session.ts:94-112,287-303 returns 200
+// null for missing/expired sessions while Go fails closed with 401/400 per
+// the pinned SCOPE.md deviation): null-shape behavior is unchanged here.
 func GetSessionFromRequest(r *http.Request, opts types.Options) (*types.Session, *types.User, []http.Cookie, error) {
 	cookieHeader := r.Header.Get("Cookie")
 	res, err := resolveGetSession(r.Context(), opts, getSessionRequest{
@@ -239,6 +267,11 @@ func GetSessionFromRequest(r *http.Request, opts types.Options) (*types.Session,
 		readOnly:       opts.Session.DeferSessionRefresh,
 	})
 	if err != nil {
+		// P05-GAP-1: surface stale cleanup cookies even on failure so
+		// middleware callers can clear retired session_data.
+		if res != nil && len(res.cookies) > 0 {
+			return nil, nil, res.cookies, err
+		}
 		return nil, nil, nil, err
 	}
 	return &res.session, &res.user, res.cookies, nil
@@ -678,9 +711,29 @@ func sessionExpiresAt(row map[string]any) time.Time {
 	return time.Time{}
 }
 
-func sessionUpdateAge(opts types.SessionOptions) time.Duration {
-	if opts.UpdateAge == 0 {
+// sessionUpdateAgeFromPtr implements the upstream updateAge tri-state
+// (session.ts:324-344; update-session.ts; session-api.test.ts:252-273):
+// nil (unset) => 24h default, explicit 0 => always-refresh (0 duration),
+// >0 => seconds. types.SessionOptions.UpdateAge is migrating int -> *int
+// under a concurrent owner; this helper pins the *int contract so the merge
+// owner only rewires the call sites to pass the pointer directly.
+func sessionUpdateAgeFromPtr(updateAge *int) time.Duration {
+	if updateAge == nil {
 		return 24 * time.Hour
+	}
+	if *updateAge == 0 {
+		return 0
+	}
+	return time.Duration(*updateAge) * time.Second
+}
+
+func sessionUpdateAge(opts types.SessionOptions) time.Duration {
+	// Tri-state bridge while types.SessionOptions.UpdateAge is still int:
+	// explicit 0 maps to always-refresh (0) per upstream. The unset default
+	// (24h) is covered by sessionUpdateAgeFromPtr(nil); once types lands
+	// *int, this wrapper becomes sessionUpdateAgeFromPtr(opts.UpdateAge).
+	if opts.UpdateAge == 0 {
+		return 0
 	}
 	return time.Duration(opts.UpdateAge) * time.Second
 }

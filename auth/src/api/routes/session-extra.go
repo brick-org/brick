@@ -177,6 +177,11 @@ type updateSessionOutput struct {
 // sessionUpdateFields validates an update-session body against the full
 // session schema (union semantics), shared by the stateful and stateless
 // (DB-less) update paths below.
+//
+// HELD (merge-owner sign-off; upstream update-session.ts:64-74 with test
+// session-api.test.ts:2509-2518 expects 400 for unknown-only bodies while Go
+// keeps the legacy union passthrough per the pinned SCOPE.md deviation):
+// unknown-only-update behavior is unchanged here.
 func sessionUpdateFields(body map[string]any, opts types.Options) (map[string]any, error) {
 	if body == nil {
 		return nil, huma.NewError(types.StatusForCode(types.ErrBodyMustBeAnObject), types.ErrBodyMustBeAnObject)
