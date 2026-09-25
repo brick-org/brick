@@ -14,6 +14,13 @@ import (
 // early-exit timing.
 // ConstantTimeEqual reports whether a and b hold equal bytes without
 // early-exit timing, mirroring upstream constantTimeEqual.
+//
+// DEVIATION (fail-closed STRICTER, kept — do not weaken): upstream
+// buffer.ts:16-22 loops Math.max(len) with zero-padding so a length mismatch
+// still walks the full loop; Go subtle.ConstantTimeCompare returns 0 early on
+// length mismatch. The difference is unobservable on the fixed 64B scrypt
+// path and fail-closed everywhere else (unequal lengths always reject); a
+// max-len reimplementation would only widen timing, never acceptance.
 func ConstantTimeEqual(a, b []byte) bool {
 	return subtle.ConstantTimeCompare(normalizeConstantTimeInput(a), normalizeConstantTimeInput(b)) == 1
 }
