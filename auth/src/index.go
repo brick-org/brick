@@ -255,6 +255,61 @@ func defaultAppName(appName string) string {
 	return appName
 }
 
+// applyStatelessDefaults applies upstream's stateless defu defaults at
+// construction (create-context.ts:106-128 @ 5468e6bf):
+//
+//	if (!isStateful) // !database && !secondaryStorage:
+//	  session.cookieCache defaults to
+//	  {enabled:true, strategy:"jwe", refreshCache:true,
+//	   maxAge:session.expiresIn||7d} defu-style (existing values win);
+//	if (!options.database):
+//	  account.storeAccountCookie defaults to true defu-style.
+//
+// Go zero-value deviation (pinned by TestF6DefuScalarZeroValueDeviation):
+// plain bool falsy values cannot distinguish "unset" from explicit false,
+// so a false Enabled/StoreAccountCookie is treated as unset and filled.
+// Presence-tracked kinds (non-empty Strategy, non-zero MaxAge, configured
+// RefreshCache) honor base-wins exactly. Stateful deployments stay opt-in:
+// no cache fields are touched when a server store is present.
+//
+// Call before plugin init so plugins see the final options (base wins in
+// defuOptions). RefreshCache threshold resolution stays in
+// applyCookieRefreshCacheConstruction (called after plugin init, before
+// finalizeAuthContext) via authstate.ResolveCookieRefreshCache.
+//
+// Upstream TypeScript names: createAuthContext (defu blocks).
+func applyStatelessDefaults(opts *Options) {
+	if opts == nil {
+		return
+	}
+	hasServerStore := opts.DB != nil || opts.SecondaryStorage != nil
+	if !hasServerStore {
+		if !opts.Session.CookieCache.Enabled {
+			opts.Session.CookieCache.Enabled = true
+		}
+		if opts.Session.CookieCache.Strategy == "" {
+			opts.Session.CookieCache.Strategy = types.SessionCookieCacheJWE
+		}
+		rc := opts.Session.CookieCache.RefreshCache
+		configured := rc.Enabled || rc.UpdateAge != 0 || rc.ShouldRefresh != nil
+		if !configured {
+			opts.Session.CookieCache.RefreshCache.Enabled = true
+		}
+		if opts.Session.CookieCache.MaxAge == 0 {
+			if opts.Session.ExpiresIn != 0 {
+				opts.Session.CookieCache.MaxAge = opts.Session.ExpiresIn
+			} else {
+				opts.Session.CookieCache.MaxAge = 60 * 60 * 24 * 7
+			}
+		}
+	}
+	if opts.DB == nil {
+		if !opts.Account.StoreAccountCookie {
+			opts.Account.StoreAccountCookie = true
+		}
+	}
+}
+
 // BetterAuth registers all auth routes on the provided adapter and returns an Auth instance.
 // The caller owns the HTTP handler — mount it on their router as usual.
 //
@@ -280,10 +335,18 @@ func defaultAppName(appName string) string {
 // with `plugin:<id>` source labels). Legacy Init(AuthContext) error keeps
 // working (runs first; either error aborts).
 //
-// The following Options fields are accepted for parity but remain inactive
-// in this runtime: cookie-cache strategies beyond compact (Session.CookieCache
-// Strategy "jwt"/"jwe", RefreshCache, and VersionFunc are accepted but only
-// compact/Version are enforced). Per-request baseURL rewriting is active:
+// Stateless defaults (upstream create-context.ts:106-128): when neither
+// Options.DB nor Options.SecondaryStorage is configured, Session.CookieCache
+// defaults defu-style to {enabled:true, strategy:"jwe", refreshCache:true,
+// maxAge:Session.ExpiresIn||7d} and Account.StoreAccountCookie defaults to
+// true when Options.DB is unset (secondary-only keeps the account-cookie
+// default but stays opt-in for the cache). Stateful deployments stay opt-in:
+// an empty Strategy resolves to "compact" at the route layer
+// (cookies.StrategyCompact), matching the historical Go default; stateless
+// defaults to "jwe". All three strategies (compact/jwt/jwe), RefreshCache,
+// and VersionFunc are wired (see auth/api/routes/session.go). A missing
+// static BaseURL without DynamicBaseURL warns via Options.Logger (upstream
+// "Base URL is not set"), quiet by default. Per-request baseURL rewriting is active:
 // Options.DynamicBaseURL allowedHosts/protocol/fallback expand into
 // TrustedOrigins at construction, resolve per request via
 // ResolveRequestContext/api.ResolveDynamicBaseURLForRequest, drive middleware
@@ -356,6 +419,10 @@ func BetterAuth(opts Options) (Auth, error) {
 	if opts, secret, secretCfg, err = resolveSecrets(opts); err != nil {
 		return Auth{}, err
 	}
+	// Stateless defu defaults (upstream create-context.ts:106-128): applied
+	// before plugin init so plugins see the final options (base wins in
+	// defuOptions). See applyStatelessDefaults.
+	applyStatelessDefaults(&opts)
 	opts.Schema = ResolveSchema(opts)
 	if opts.SecondaryStorage == nil && (opts.Session.StoreSessionInDatabase || opts.Session.PreserveSessionInDatabase) {
 		return Auth{}, fmt.Errorf("auth: secondary storage session persistence requires options.SecondaryStorage when Session.StoreSessionInDatabase or Session.PreserveSessionInDatabase is set (no backend configured): " +
@@ -657,7 +724,12 @@ func checkAbsoluteHTTPURL(raw string) error {
 //   - Endpoint conflicts across plugins → error diagnostic via the api
 //     layer (checkEndpointConflicts runs at Router start; see
 //     auth/api.FindEndpointConflicts).
+//   - Missing static BaseURL without DynamicBaseURL → upstream "Base URL is
+//     not set" warning (create-context.ts:152-156), quiet by default.
 func noteFrameworkRuntimeOptions(opts Options) {
+	if opts.BaseURL == "" && opts.DynamicBaseURL == nil {
+		authNotef(opts, "warn", "[better-auth] Base URL is not set. Set the baseURL option or BETTER_AUTH_URL env, or use a dynamic baseURL with allowedHosts for multi-host setups. Without it the origin is derived from the incoming request, and callbacks and redirects may not work correctly.")
+	}
 	if invalid := authapi.FindInvalidTrustedProxies(opts.Advanced.IPAddress.TrustedProxies); len(invalid) > 0 {
 		authNotef(opts, "warn", "auth: ignoring invalid `advanced.ipAddress.trustedProxies` entries: %s. Each entry must be an IP address or CIDR range.", strings.Join(invalid, ", "))
 	}

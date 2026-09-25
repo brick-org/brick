@@ -595,7 +595,7 @@ func TestF6TelemetryDisabledSilent(t *testing.T) {
 	t.Setenv("BETTER_AUTH_TELEMETRY_DEBUG", "")
 	got, logger := f6CaptureLogger(types.LogLevelDebug)
 	adapter, _ := newTestAdapter(t)
-	a := mustBetterAuth(t, auth.Options{Secret: f6Secret, Adapter: adapter, Logger: logger})
+	a := mustBetterAuth(t, auth.Options{Secret: f6Secret, Adapter: adapter, Logger: logger, BaseURL: "https://app.example.com"})
 	if len(*got) != 0 {
 		t.Fatalf("disabled telemetry must stay silent, got %v", *got)
 	}
