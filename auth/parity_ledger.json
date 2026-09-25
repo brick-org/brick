@@ -1363,11 +1363,11 @@
         },
         {
           "case": "should verify old hash with empty password",
-          "goTest": "TestV1_PasswordEmptyAndVeryLong"
+          "goTest": "TestV1_PasswordEmptyAndVeryLong (empty leg)"
         },
         {
           "case": "should verify old hash with very long password",
-          "goTest": "TestV1_PasswordEmptyAndVeryLong"
+          "goTest": "TestV1_PasswordEmptyAndVeryLong (very-long leg)"
         }
       ],
       "notes": "All 14 covered: noble back-compat legs share the byte-identical scrypt path (N=16384/r=16/p=1/dkLen=64, hex-salt-UTF8, NFKC, salt:key)."
