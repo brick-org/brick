@@ -1,0 +1,46 @@
+{
+  "base_url": "https://app.example.com",
+  "trusted_origins": [
+    "https://trusted.example.com",
+    "https://*.wildcard.example.com"
+  ],
+  "note": "Shared redirect-trust vectors. expected is the IsTrustedRedirect verdict under base_url + trusted_origins with no resolver. Evil rows must never be trusted (open-redirect fail-closed); safe rows must be trusted. Mirrors vendor trusted-origins.test.ts classes.",
+  "evil": [
+    {"name": "javascript scheme", "url": "javascript:alert(1)", "trusted": false},
+    {"name": "javascript mixed case", "url": "JaVaScRiPt:alert(1)", "trusted": false},
+    {"name": "data scheme", "url": "data:text/html,<script>alert(1)</script>", "trusted": false},
+    {"name": "vbscript scheme", "url": "vbscript:msgbox(1)", "trusted": false},
+    {"name": "file scheme", "url": "file:///etc/passwd", "trusted": false},
+    {"name": "suffix domain", "url": "https://app.example.com.attacker.com/", "trusted": false},
+    {"name": "query-embedded origin", "url": "https://attacker.com/?x=https://app.example.com", "trusted": false},
+    {"name": "suffix trusted domain", "url": "https://trusted.example.com.attacker.com/", "trusted": false},
+    {"name": "protocol-relative", "url": "//evil.com/phish", "trusted": false},
+    {"name": "empty authority", "url": "https:///evil.com", "trusted": false},
+    {"name": "backslash in authority", "url": "https://app.example.com\\evil.com", "trusted": false},
+    {"name": "backslash relative", "url": "/\\evil.com", "trusted": false},
+    {"name": "backslash mid-path", "url": "/foo\\bar", "trusted": false},
+    {"name": "encoded slash path", "url": "/%2f/evil.com", "trusted": false},
+    {"name": "encoded slash uppercase", "url": "/%2Fevil.com", "trusted": false},
+    {"name": "encoded backslash path", "url": "/%5cevil.com", "trusted": false},
+    {"name": "encoded traversal absolute", "url": "https://app.example.com/%2f..%2f..%2fetc", "trusted": false},
+    {"name": "null byte", "url": "/dash\u0000board", "trusted": false},
+    {"name": "unit separator", "url": "/dash\u001fboard", "trusted": false},
+    {"name": "del char", "url": "/dash\u007fboard", "trusted": false},
+    {"name": "header injection newline", "url": "https://app.example.com/\nSet-Cookie: x=1", "trusted": false},
+    {"name": "custom scheme authority escape", "url": "myapp://callback.attacker.tld", "trusted": false},
+    {"name": "wildcard suffix escape", "url": "https://wildcard.example.com.evil.com/", "trusted": false},
+    {"name": "wildcard sibling", "url": "https://evilwildcard.example.com/", "trusted": false},
+    {"name": "empty", "url": "", "trusted": false},
+    {"name": "not a url", "url": "not a url", "trusted": false},
+    {"name": "colons", "url": "::::", "trusted": false}
+  ],
+  "safe": [
+    {"name": "root-relative", "url": "/dashboard", "trusted": true},
+    {"name": "relative with encoded query", "url": "/callback?next=%2Fdashboard", "trusted": true},
+    {"name": "relative with fragment", "url": "/oauth2/callback?x=1#frag", "trusted": true},
+    {"name": "base origin path", "url": "https://app.example.com/any/path?q=1", "trusted": true},
+    {"name": "base origin default port", "url": "https://app.example.com:443/explicit-default-port", "trusted": true},
+    {"name": "listed trusted origin", "url": "https://trusted.example.com/x", "trusted": true},
+    {"name": "wildcard subdomain", "url": "https://a.wildcard.example.com/x", "trusted": true}
+  ]
+}

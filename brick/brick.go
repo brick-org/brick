@@ -43,10 +43,11 @@ type Config[TCtx any] struct {
 
 // Brick is the main framework instance, typed on the app's context type.
 type Brick[TCtx any] struct {
-	config Config[TCtx]
-	api    huma.API
-	db     *db.DB
-	router *bunrouter.Router // nil when API was injected externally
+	config  Config[TCtx]
+	api     huma.API
+	adapter huma.Adapter
+	db      *db.DB
+	router  *bunrouter.Router // nil when API was injected externally
 }
 
 // New creates a new Brick instance. When config.API is nil, brick builds
@@ -75,6 +76,7 @@ func New[TCtx any](config Config[TCtx]) (*Brick[TCtx], error) {
 		// Production path: brick owns the router stack.
 		b.router = bunrouter.New()
 		adapter := humabunrouter.NewAdapter(b.router)
+		b.adapter = adapter
 		b.api = huma.NewAPI(huma.DefaultConfig(config.Title, config.Version), adapter)
 	}
 
@@ -92,6 +94,14 @@ func New[TCtx any](config Config[TCtx]) (*Brick[TCtx], error) {
 // Huma returns the underlying huma API.
 func (b *Brick[TCtx]) Huma() huma.API {
 	return b.api
+}
+
+// Adapter returns the Brick-owned Huma adapter. Standalone modules such as
+// github.com/brick-org/brick/auth can use it to register routes on Brick's
+// router without depending on Brick themselves. It returns nil when
+// Config.API was supplied because that adapter is owned by the caller.
+func (b *Brick[TCtx]) Adapter() huma.Adapter {
+	return b.adapter
 }
 
 // OpenAPISpec returns the serialized OpenAPI 3.1 JSON spec for the app.

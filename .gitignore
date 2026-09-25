@@ -1,2 +1,4 @@
 examples/shop/dsl/dsl
 examples/shop/app/app
+node_modules
+dist

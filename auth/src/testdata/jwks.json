@@ -1,0 +1,12 @@
+{
+  "keys": [
+    {
+      "alg": "EdDSA",
+      "crv": "Ed25519",
+      "kid": "auth-r5-04-fixture-key-1",
+      "kty": "OKP",
+      "use": "sig",
+      "x": "PH_AVSNZZAv7vVFn5Xi5LHS_tKCXRqT0SoCV0W6mwII"
+    }
+  ]
+}

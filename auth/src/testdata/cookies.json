@@ -1,0 +1,29 @@
+{
+  "chunk_fixture": {
+    "cookies": {
+      "better-auth.session_data.0": "FIRST",
+      "better-auth.session_data.1": "SECOND",
+      "better-auth.session_data.2": "THIRD"
+    },
+    "name": "better-auth.session_data",
+    "want": "FIRSTSECONDTHIRD"
+  },
+  "note": "Wire: value.hmac with HMAC-SHA256 base64url-nopad; chunk names \u003cname\u003e.\u003cindex\u003e reassembled in index order.",
+  "sign_vectors": [
+    {
+      "secret": "secret",
+      "signed": "value.UOA-vmW-mLuL8RuiyJLVTAeayisNOwFidpxtdXolQ08",
+      "value": "value"
+    },
+    {
+      "secret": "key",
+      "signed": "The quick brown fox jumps over the lazy dog.97yD9DBThCSxMpjmqm-xQ-9NWaFJRhdZl0edvC0aPNg",
+      "value": "The quick brown fox jumps over the lazy dog"
+    },
+    {
+      "secret": "Jefe",
+      "signed": "what do ya want for nothing?.W9zBRr9gdU5qBCQmCJV1x1oAPwidJzmDnexYuWTsOEM",
+      "value": "what do ya want for nothing?"
+    }
+  ]
+}

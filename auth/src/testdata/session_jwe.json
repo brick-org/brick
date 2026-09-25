@@ -1,0 +1,35 @@
+{
+  "expected": {
+    "alg": "dir",
+    "enc": "A256CBC-HS512",
+    "expiresMillis": 2105332181000,
+    "kid": "hgtrgDbd-60Kb2mErrWRDVsdiCJToRgAqCrVtelk_KA"
+  },
+  "header": {
+    "alg": "dir",
+    "cty": "JWT",
+    "enc": "A256CBC-HS512",
+    "kid": "hgtrgDbd-60Kb2mErrWRDVsdiCJToRgAqCrVtelk_KA",
+    "typ": "JWT"
+  },
+  "note": "Upstream: setCookieCache jwe branch (symmetricEncodeJWT, HKDF salt better-auth-session, thumbprint kid, 15s tolerance).",
+  "secret": "auth-r5-04-session-cache-secret-at-least-32-chars!!",
+  "session": {
+    "createdAt": "2026-01-01T00:00:00Z",
+    "expiresAt": "2036-01-01T00:00:00Z",
+    "id": "sess-fixture-1",
+    "token": "tok-fixture-1",
+    "updatedAt": "2026-01-01T00:00:00Z",
+    "userId": "user-fixture-1"
+  },
+  "token": "eyJhbGciOiJkaXIiLCJjdHkiOiJKV1QiLCJlbmMiOiJBMjU2Q0JDLUhTNTEyIiwia2lkIjoiaGd0cmdEYmQtNjBLYjJtRXJyV1JEVnNkaUNKVG9SZ0FxQ3JWdGVsa19LQSIsInR5cCI6IkpXVCJ9..aBwyzr41acq7cIs_adIL5w.pCrfKjyoOM-5B1Axzkf9GAtFP7JtBJMUMPD6APkHkgrMFqgObOHc8KxOmAoVkPWJNZSRdbV4Jw0CMSFTqvu2R0N5nFHqTYLaOHval_sWaJ7XPInv6GfRsiOxtvSJKf2OwntbIaINf3ZYCoFAmmABwS5iI3b6ATbKxqgcTpPjAuwMEmUnUJNouUQniubIk3DmHzVmnimTjLVRPxVNIrZmV2bMtKBKafJ9bB1IepCB0oYoedhJ2BlimZ55x9iBE5SZjpR2OPLx4fmAgUQOuGFAdkDZih67u13am37nHAbE4tHE2cqS5kIjTVxJFfppU_PqCS1FKyJLh2N3uoEIxAt2VBE20UUn5EQN26uibxZhyYX6hZ3zH8JWjoOYGx0Dp56PTg-vDUDqkCC1B1irpXtxNW-1U42tuF8vLeX8vlvIYdulya023EQ1umnr10LiXH2f4ibLMGZC8-Zzv2oSAfSRsYQGKCs1648uX2aXTn-4ni0SYH_Dwk6qqIOt2rp_--S4X13R_B6JBG0obJ-rh9-rioydyMLteIns214okS1UJH7dxqdYnDkC2F1sNLbh3j4QxRHzlQxC4OD9pLChkaPlhjIdcKsRGRnoBHfkMK4-gGaZAPSGKqbpOzryIJs59mHM.1pJ9QeCx5HvogKIginF3n3v-jk6WvuYYvPlKurSZgmI",
+  "user": {
+    "createdAt": "2026-01-01T00:00:00Z",
+    "email": "fixture@example.com",
+    "emailVerified": true,
+    "id": "user-fixture-1",
+    "name": "Fixture",
+    "updatedAt": "2026-01-01T00:00:00Z"
+  },
+  "version": "7"
+}

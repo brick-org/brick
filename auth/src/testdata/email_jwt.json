@@ -1,0 +1,22 @@
+{
+  "expected": {
+    "alg": "HS256",
+    "email": "fixture@example.com",
+    "extra": {
+      "fixture": "auth-r5-04"
+    }
+  },
+  "header": {
+    "alg": "HS256",
+    "typ": "JWT"
+  },
+  "note": "Upstream: createEmailVerificationToken (SignJWT {alg HS256}, lowercased email, iat/exp).",
+  "payload": {
+    "email": "fixture@example.com",
+    "exp": 2105332181,
+    "fixture": "auth-r5-04",
+    "iat": 1789972181
+  },
+  "secret": "auth-r5-04-email-fixture-secret-0123456789",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImZpeHR1cmVAZXhhbXBsZS5jb20iLCJleHAiOjIxMDUzMzIxODEsImZpeHR1cmUiOiJhdXRoLXI1LTA0IiwiaWF0IjoxNzg5OTcyMTgxfQ.30NN7HOrGb06Fygg4kJ8gzHTyTTlTijIvAZR5aQBdXo"
+}

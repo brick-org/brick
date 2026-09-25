@@ -1,0 +1,1661 @@
+{
+  "ledger": "AUTH-R5-01",
+  "pin": {
+    "version": "1.7.5",
+    "commit": "5468e6bfcdff799848537cf5ad06ebab15aad9dd"
+  },
+  "coreRoutes": [
+    "/sign-up/email",
+    "/sign-in/email",
+    "/sign-out",
+    "/ok",
+    "/error",
+    "/get-session",
+    "/list-sessions",
+    "/revoke-session",
+    "/request-password-reset",
+    "/reset-password",
+    "/reset-password/{token}",
+    "/change-password",
+    "/send-verification-email",
+    "/verify-email",
+    "/list-accounts",
+    "/update-user",
+    "/change-email",
+    "/delete-user",
+    "/delete-user/callback",
+    "/verify-password",
+    "/revoke-sessions",
+    "/revoke-other-sessions",
+    "/update-session"
+  ],
+  "oauthHelperPaths": [],
+  "providers": [],
+  "pending": {
+    "count": 0,
+    "byFile": {},
+    "note": "Wave-10 closure: every pending marker was wired or converted to an explicit excluded(W10-XX) marker; the 7 exclusions are pinned by types/marker_audit_test.go TestExcludedMarkerLedger."
+  },
+  "upstreamTests": [
+    {
+      "file": "vendor/better-auth/packages/better-auth/src/api/routes/account.test.ts",
+      "area": "core-routes",
+      "wave": "AUTH-C7-02",
+      "goOwner": [
+        "api/routes/account.go",
+        "api/routes/account_extra.go",
+        "api/routes/delete_user_callback.go"
+      ],
+      "disposition": "partial",
+      "cases": 53,
+      "caseNames": [
+        "describe: account",
+        "it: should list all accounts",
+        "it: should link first account",
+        "it: should encrypt access token and refresh token",
+        "it: should expose and select a linked account by its local account ID",
+        "it: should not expose empty scope tokens from stored empty account scope",
+        "it: should get account info using the local account ID",
+        "it: returns an authentication error when the provider cannot resolve account info",
+        "it: should get account info server-side using userId without session headers",
+        "it: should reject account info over HTTP without a session even when userId is passed",
+        "it: should not resolve another user's local account ID",
+        "it: should select a local row when provider subjects collide across issuers",
+        "it: should enforce local account ownership on the server-side userId path",
+        "it: should reject account info for a non-social (credential) account",
+        "it: should pass custom scopes to authorization URL",
+        "it: should forward additionalParams and loginHint to the authorization URL",
+        "it: should reject additionalParams that override reserved OAuth params",
+        "it: should pass idTokenNonce to providers that require redirect nonce binding",
+        "it: should link second account from the same provider",
+        "it: should link third account with idToken",
+        "it: returns 401 over HTTP when a linked provider resolves an invalid account subject",
+        "it: prioritizes a missing provider email over an invalid account key",
+        "it: should keep provider aliases as separate accounts without allowing cross-user linking",
+        "it: should unlink account",
+        "it: should fail to unlink the last account of a provider",
+        "it: should unlink only the selected local account row",
+        "it: should unlink provider accounts individually by local account ID",
+        "it: should store account data cookie after oauth flow and retrieve it through getAccessToken",
+        "it: should use the selected account cookie in getAccessToken",
+        "it: should resolve a local account ID from the database instead of the account cookie",
+        "it: should not refresh with a stale account cookie belonging to another user",
+        "it: should persist refreshed idToken in database during getAccessToken auto-refresh",
+        "it: should persist refreshed idToken in account cookie during getAccessToken auto-refresh in stateless mode",
+        "it: should preserve the Cognito refresh token when getAccessToken auto-refresh receives no replacement",
+        "it: should NOT chunk account data cookies when exceeding 4KB",
+        "it: should chunk account data cookies when exceeding 4KB",
+        "it: should encrypt account cookie payload",
+        "it: should set account cookie on re-login after sign-out when updateAccountOnSignIn is false",
+        "it: should refresh account_data cookie when session is refreshed",
+        "it: should refresh account_data cookie in stateless mode",
+        "describe: validateUserInfo account linking",
+        "it: should reject account linking when validateUserInfo returns error",
+        "describe: account selector validation",
+        "it: rejects requests that provide both account selectors over HTTP",
+        "it: rejects requests that omit an account selector over HTTP",
+        "it: does not select a signed account cookie when account storage is disabled",
+        "describe: token routes cookie cache revocation",
+        "it: get-access-token fails closed after the session is revoked in a stateful deployment",
+        "describe: account resolution in stateless mode",
+        "it: resolves getAccessToken with a valid account cookie whose userId differs from the session user",
+        "it: resolves accountInfo with a valid account cookie whose userId differs from the session user",
+        "it: refreshes a valid account cookie whose userId differs from the session user",
+        "it: preserves a valid mismatched account cookie during stateless session refresh"
+      ],
+      "covered": [
+        {
+          "case": "should list all accounts",
+          "goTest": "TestAccount_ListAccounts"
+        },
+        {
+          "case": "should not expose empty scope tokens from stored empty account scope",
+          "goTest": "TestAccount_ListAccountsEmptyScope"
+        }
+      ],
+      "notes": "List-accounts core legs covered; all social/link/token/account-cookie/stateless legs v1-excluded."
+    },
+    {
+      "file": "vendor/better-auth/packages/better-auth/src/api/routes/cookie-cache-fallback.test.ts",
+      "area": "core-routes",
+      "wave": "AUTH-C7-01",
+      "goOwner": [
+        "api/routes/session.go",
+        "cookies/session_cache.go",
+        "cookies/session_jwt.go"
+      ],
+      "disposition": "partial",
+      "cases": 11,
+      "caseNames": [
+        "describe: disabled cookie cache fallback",
+        "it.each: ignores retired session_data when caching is disabled $mode",
+        "it.each: clears retired session_data when session_token is $state",
+        "describe: cookieCache HMAC verification failure fallback",
+        "it: should fall through to session_token DB validation when session_data HMAC fails",
+        "it: should expire malformed compact session_data and fall through to session_token DB validation",
+        "it: should still return null when both session_data and session_token are invalid",
+        "it: should work with JWT strategy when HMAC verification fails",
+        "it: should work with JWE strategy when decryption fails",
+        "it: should handle cross-subdomain cookie migration without silent logout",
+        "it: should work during cookieCache window even with stale session_data"
+      ],
+      "covered": [
+        {
+          "case": "ignores retired session_data when caching is disabled $mode",
+          "goTest": "TestStaleCache_RetiredCacheCleanedWhenDisabled"
+        },
+        {
+          "case": "should expire malformed compact session_data and fall through to session_token DB validation",
+          "goTest": "TestStaleCache_MalformedCacheExpiredAndServed"
+        },
+        {
+          "case": "clears retired session_data when session_token is missing/invalid (incl. on auth failure)",
+          "goTest": "TestSessionUpdateAge_StaleCleanupOnFailure"
+        },
+        {
+          "case": "expired session_token cleared alongside session_data on failure",
+          "goTest": "TestSessionCookie_ExpiredTokenCleanupCookieOnFailure"
+        }
+      ],
+      "notes": "Malformed-expiry fallthrough, disabled-cache cleanup, and retired-cleanup-on-failure covered; cross-subdomain migration, JWT/JWE-strategy fallback, and chunked re-issue legs open/excluded."
+    },
+    {
+      "file": "vendor/better-auth/packages/better-auth/src/api/routes/email-verification.test.ts",
+      "area": "core-routes",
+      "wave": "AUTH-C7-02",
+      "goOwner": [
+        "api/routes/email_verification.go",
+        "crypto/email_verification.go"
+      ],
+      "disposition": "partial",
+      "cases": 29,
+      "caseNames": [
+        "describe: Email Verification - Request body consumption bug",
+        "it: should not fail sign-up when callback request cloning throws",
+        "it: should not throw 'body already consumed' error when sendVerificationEmail callback reads the request",
+        "it: should not throw 'body already consumed' error when sendVerificationEmail is called during sign-up",
+        "it: should not throw 'body already consumed' error when sendVerificationEmail is called during sign-in",
+        "describe: Email Verification",
+        "it: should send a verification email when enabled",
+        "it: should return APIError status when sendVerificationEmail throws (e.g. rate limit)",
+        "it: should send a verification email if verification is required and user is not verified",
+        "it: should verify email",
+        "it: should redirect to callback",
+        "it: should sign after verification",
+        "it: should use custom expiresIn",
+        "it: should call afterEmailVerification callback when email is verified",
+        "it: should call beforeEmailVerification callback when email is verified",
+        "it: should call afterEmailVerification callback when email is verified",
+        "it: should preserve encoded characters in callback URL",
+        "it: should properly encode callbackURL with query parameters when sending verification email",
+        "it: should not send verification email when a third party requests for an already verified user",
+        "describe: Email Verification - Timing-safe unauthenticated path",
+        "it: should enforce a constant-time floor for both existing and non-existing emails",
+        "it: should still surface errors from sendVerificationEmail after the minimum delay",
+        "describe: Email Verification Secondary Storage",
+        "it: should verify email",
+        "it: should change email",
+        "it: should set emailVerified on all sessions",
+        "it: should set emailVerified on all sessions",
+        "it: should call hooks when verifying email change (change-email-verification)",
+        "it: should handle email case insensitivity when sending verification email while signed in"
+      ],
+      "covered": [
+        {
+          "case": "should verify email",
+          "goTest": "TestParity_VerifyEmailGetReturnsUserWithoutCallback"
+        },
+        {
+          "case": "should redirect to callback",
+          "goTest": "TestParity_VerifyEmailGetRedirectsOnSuccessAndError"
+        },
+        {
+          "case": "should enforce a constant-time floor for both existing and non-existing emails",
+          "goTest": "TestParity_SendVerificationEmailUnauthenticatedFloor"
+        },
+        {
+          "case": "should return APIError status when sendVerificationEmail throws (e.g. rate limit)",
+          "goTest": "TestVerificationSend_SendVerificationSenderAPIErrorPropagates"
+        },
+        {
+          "case": "should still surface errors from sendVerificationEmail after the minimum delay",
+          "goTest": "TestVerificationSend_SendVerificationMissingEmailFloor"
+        },
+        {
+          "case": "should send a verification email when enabled",
+          "goTest": "TestVerificationSend_SendVerificationDelivers"
+        },
+        {
+          "case": "should not send verification email when a third party requests for an already verified user",
+          "goTest": "TestVerificationSend_SendVerificationSkipsVerifiedThirdParty"
+        },
+        {
+          "case": "should redirect to callback",
+          "goTest": "TestVerificationSend_VerifyEmailGetRedirectsToCallback (supplement)"
+        },
+        {
+          "case": "should preserve encoded characters in callback URL",
+          "goTest": "TestVerificationSend_VerifyEmailGetPreservesEncodedCallback"
+        },
+        {
+          "case": "should set emailVerified on all sessions",
+          "goTest": "TestSecondaryWiring_VerifyEmailFlipsSecondarySessions + TestSecondaryV1 route coverage (secondary fan-out wired in all verify legs)"
+        },
+        {
+          "case": "should sign after verification",
+          "goTest": "TestCredentialTriage_VerifyEmailAutoSignInMintsSession"
+        },
+        {
+          "case": "should use custom expiresIn",
+          "goTest": "TestCredentialTriage_VerifyEmailExpiredTokenRejected"
+        },
+        {
+          "case": "should call afterEmailVerification callback when email is verified",
+          "goTest": "TestCredentialTriage_VerifyEmailAfterHookFires"
+        },
+        {
+          "case": "should call beforeEmailVerification callback when email is verified",
+          "goTest": "TestCredentialTriage_VerifyEmailBeforeHookFires"
+        },
+        {
+          "case": "should properly encode callbackURL with query parameters when sending verification email",
+          "goTest": "TestCredentialTriage_SendVerificationCallbackEncoding"
+        },
+        {
+          "case": "should handle email case insensitivity when sending verification email while signed in",
+          "goTest": "TestCredentialTriage_SendVerificationSignedInCaseInsensitive"
+        },
+        {
+          "case": "change-email resend links escape token/callbackURL",
+          "goTest": "TestVerifyEmailResend_ChangeEmailConfirmationResendEscapes + TestVerifyEmailResend_ChangeEmailLegacyResendEscapes"
+        },
+        {
+          "case": "should sign after verification (session reuse on email match)",
+          "goTest": "TestVerifyEmailResend_AutoSignInReusesMatchingSession + TestVerifyEmailResend_AutoSignInMintsOnMismatch (supplement)"
+        },
+        {
+          "case": "should sign after verification (updateTo-leg session reuse)",
+          "goTest": "TestVerifySessionReuse_ChangeEmailVerificationReusesMatchingSession + MintsOnMismatch + LegacyReuses + MintsOnMismatch (supplement)"
+        },
+        {
+          "case": "already-verified answers {status:true,user:null} (GET+POST, redirect unchanged)",
+          "goTest": "TestVerifyEmailNullUser_AlreadyVerified* (process/post/get/redirect/fresh)"
+        },
+        {
+          "case": "fresh plain verify answers {status:true,user:null} (GET+POST+process)",
+          "goTest": "TestVerifyUpdateTo_FreshPlainVerifyReturnsNull + root parity pins"
+        },
+        {
+          "case": "updateTo reuses pre-update activeSession token; fan-out post-commit log-only",
+          "goTest": "TestVerifyUpdateTo_UpdateToReusesPreUpdateToken + FanOutFailureStillSucceeds"
+        }
+      ],
+      "notes": "Auto-sign-in (+session reuse), expiresIn, hooks, encoding (incl. change-email resends), case-insensitivity covered; already-verified null-shape held by existing pin; body-consumption JS semantics excluded."
+    },
+    {
+      "file": "vendor/better-auth/packages/better-auth/src/api/routes/error.test.ts",
+      "area": "core-routes",
+      "wave": "AUTH-C7-04",
+      "goOwner": [
+        "api/routes/error.go"
+      ],
+      "disposition": "partial",
+      "cases": 3,
+      "caseNames": [
+        "describe: error page security",
+        "it: should sanitize error description to prevent XSS",
+        "it: should sanitize code parameter"
+      ],
+      "covered": [
+        {
+          "case": "should sanitize error description to prevent XSS",
+          "goTest": "TestErrorPageSanitizesDescription"
+        },
+        {
+          "case": "should sanitize code parameter",
+          "goTest": "TestErrorPageSanitizesCode"
+        },
+        {
+          "case": "full error-page snapshot parity (defaults, knobs, toggles, copy, links)",
+          "goTest": "TestErrorPageDefaultSnapshot + TestErrorPageCustomizedSnapshot + TestErrorPageDecorationToggles + TestErrorPageCustomDescriptionSnapshot"
+        }
+      ],
+      "notes": "XSS sanitization covered by error_test.go; full snapshot parity closed by error_page_snapshot_test.go (body/grid var(--background) fallbacks, exact text/html, all knobs). Residual: production-bounce nil-vs-zero needs types pointer."
+    },
+    {
+      "file": "vendor/better-auth/packages/better-auth/src/api/routes/password.test.ts",
+      "area": "core-routes",
+      "wave": "AUTH-C7-02",
+      "goOwner": [
+        "api/routes/password.go",
+        "api/routes/password_extra.go"
+      ],
+      "disposition": "partial",
+      "cases": 21,
+      "caseNames": [
+        "describe: forgot password",
+        "it: should send a reset password email when enabled",
+        "it: should reject untrusted redirectTo",
+        "it: should fail on invalid password",
+        "it: should verify the token",
+        "it: should update account's updatedAt when resetting password",
+        "it: should sign-in with the new password",
+        "it: shouldn't allow the token to be used twice",
+        "it: should reject a concurrent reset using the same token",
+        "it: should expire",
+        "it: should allow callbackURL to have multiple query params",
+        "it: should not reveal user existence on success",
+        "it: should not reveal user existence on failure",
+        "it: should not reveal failure of email sending",
+        "describe: revoke sessions on password reset",
+        "it: should revoke other sessions when revokeSessionsOnPasswordReset is enabled",
+        "it: should not revoke other sessions by default",
+        "describe: verify password",
+        "it: should verify password with correct password",
+        "it: should fail to verify password with incorrect password",
+        "it: should require a session to verify password"
+      ],
+      "covered": [
+        {
+          "case": "shouldn't allow the token to be used twice",
+          "goTest": "TestParity_PasswordResetSingleUseDBToken"
+        },
+        {
+          "case": "should reject untrusted redirectTo",
+          "goTest": "TestParity_PasswordResetRedirectToFlow"
+        },
+        {
+          "case": "should verify the token",
+          "goTest": "TestParity_PasswordResetAcceptsQueryToken"
+        },
+        {
+          "case": "should verify password with correct password",
+          "goTest": "TestVerifyPassword_AcceptsCurrentPassword"
+        },
+        {
+          "case": "should not reveal user existence on failure",
+          "goTest": "TestPasswordReset_RequestResetUnknownUserWarnsGeneric"
+        },
+        {
+          "case": "should reject untrusted redirectTo",
+          "goTest": "TestPasswordReset_RequestResetRejectsUntrustedRedirect (supplement)"
+        },
+        {
+          "case": "should allow callbackURL to have multiple query params",
+          "goTest": "TestPasswordReset_ResetURLCallbackEncoding"
+        },
+        {
+          "case": "should not reveal failure of email sending",
+          "goTest": "TestPasswordReset_ResetSenderFailureStillGeneric"
+        },
+        {
+          "case": "shouldn't allow the token to be used twice",
+          "goTest": "TestPasswordReset_ResetTokenSingleUseHTTP (HTTP-level supplement)"
+        },
+        {
+          "case": "should verify the token",
+          "goTest": "TestPasswordReset_ResetCallbackRedirect (callback-route leg)"
+        },
+        {
+          "case": "should verify password with correct password",
+          "goTest": "TestPasswordReset_VerifyPasswordStatuses (supplement)"
+        },
+        {
+          "case": "should fail to verify password with incorrect password",
+          "goTest": "TestPasswordReset_VerifyPasswordStatuses (supplement)"
+        },
+        {
+          "case": "should require a session to verify password",
+          "goTest": "TestPasswordReset_VerifyPasswordStatuses (supplement)"
+        },
+        {
+          "case": "should send a reset password email when enabled",
+          "goTest": "TestCredentialTriage_ResetEmailCarriesLongToken"
+        },
+        {
+          "case": "should fail on invalid password",
+          "goTest": "TestCredentialTriage_ResetShortPasswordRejected"
+        },
+        {
+          "case": "should update account's updatedAt when resetting password",
+          "goTest": "TestCredentialTriage_ResetBumpsAccountUpdatedAt"
+        },
+        {
+          "case": "should expire",
+          "goTest": "TestCredentialTriage_ResetExpiredTokenRejected"
+        },
+        {
+          "case": "should revoke other sessions when revokeSessionsOnPasswordReset is enabled",
+          "goTest": "TestCredentialTriage_ResetRevokesSessionsWhenEnabled"
+        },
+        {
+          "case": "should not revoke other sessions by default",
+          "goTest": "TestCredentialTriage_ResetKeepsSessionsByDefault"
+        },
+        {
+          "case": "should reject untrusted redirectTo (RESET_PASSWORD_DISABLED shape)",
+          "goTest": "TestPasswordResetCodes_RequestResetDisabledUpstreamCode (supplement)"
+        },
+        {
+          "case": "reset USER_NOT_FOUND is 400 (upstream password.ts:304)",
+          "goTest": "TestPasswordResetCodes_ResetUserNotFoundIsBadRequest"
+        },
+        {
+          "case": "should revoke other sessions when revokeSessionsOnPasswordReset is enabled (secondary purge)",
+          "goTest": "TestPasswordResetRevoke_ResetWithRevokePurgesSecondary + WithoutRevokeKeepsSessions (supplement)"
+        },
+        {
+          "case": "should reject a concurrent reset using the same token",
+          "goTest": "TestResetPasswordRace_ConcurrentSameTokenResetPin (8 racers 1x200+7x400, -race green)"
+        }
+      ],
+      "notes": "Reset issuance/validation/expiry/revocation matrices covered; concurrent-reset race same mem-adapter note as delete."
+    },
+    {
+      "file": "vendor/better-auth/packages/better-auth/src/api/routes/session-api.test.ts",
+      "area": "core-routes",
+      "wave": "AUTH-C7-01",
+      "goOwner": [
+        "api/routes/session.go",
+        "api/routes/session_extra.go",
+        "api/routes/sign_out.go"
+      ],
+      "disposition": "partial",
+      "cases": 85,
+      "caseNames": [
+        "describe: session",
+        "it: should set cookies correctly on sign in",
+        "it: should return null when not authenticated",
+        "it: should require a fresh session based on session creation time",
+        "it: should require a fresh session to list sessions",
+        "it: should update session when update age is reached",
+        "it: should update the session every time when set to 0",
+        "it: should handle 'don't remember me' option",
+        "it: should set cookies correctly on sign in after changing config",
+        "it: should clear session on sign out",
+        "it: should list sessions",
+        "it: should revoke session",
+        "it: should return session headers",
+        "it: should not exceed the 400-day browser Max-Age ceiling on session refresh",
+        "describe: session storage",
+        "it: should store session in secondary storage",
+        "it: should list sessions",
+        "it: revoke session and list sessions",
+        "it: should revoke session",
+        "describe: cookie cache",
+        "it: serves cached sessions without querying the database",
+        "it: reads fresh user data when cookie caching is bypassed",
+        "it: refreshes expired cache and reuses the replacement cookie",
+        "describe: cookie cache with JWT strategy",
+        "it: should cache cookies with JWT strategy",
+        "it: should not allow tampering with the cookie",
+        "it: should have max age expiry",
+        "it: should handle multiple concurrent requests with JWT cache",
+        "describe: cookie cache with JWT strategy backed by JWKS",
+        "it: should cache cookies with JWKS-backed JWT strategy",
+        "it: should ignore a JWKS cookie cache from a different session token",
+        "it: should not allow tampering with the cookie in JWKS mode",
+        "it: should reject a secret-signed cookie cache and fall back to the database",
+        "it: should verify existing cookie-cache JWTs across JWKS rotation grace period",
+        "describe: cookie cache with JWE strategy",
+        "it: serves cached sessions without querying the database",
+        "it: reads fresh user data when cookie caching is bypassed",
+        "it: refreshes expired cache and reuses the replacement cookie",
+        "it: serves concurrent requests from the cache",
+        "describe: cookie cache refreshCache",
+        "it: should not refresh cache when refreshCache is disabled (false)",
+        "it: should work without database (session stored in cookie only)",
+        "it: should preserve session expiry when refreshing stateless cookie cache",
+        "it: should work without database when refreshCache threshold is reached",
+        "it: should forward cookie cache headers from getSessionFromCtx",
+        "it: should extend session_token cookie expiry when refreshCache threshold is reached",
+        "describe: cookie cache versioning",
+        "it: should invalidate cookie cache when version changes (string version)",
+        "it: should work with function-based version",
+        "it: should work with async function-based version",
+        "it: should work with compact strategy",
+        "it: should work with jwt strategy",
+        "it: should default to version '1' when not specified",
+        "it: should include additionalFields when retrieving from cookie cache",
+        "describe: deferSessionRefresh",
+        "it: should return needsRefresh flag on GET when enabled",
+        "it: should return needsRefresh: false when session is fresh",
+        "it: should not update session on GET when deferSessionRefresh is enabled",
+        "it: should update session on POST when deferSessionRefresh is enabled",
+        "it: should reject POST when deferSessionRefresh is not enabled",
+        "it: should not delete expired session on GET when deferSessionRefresh is enabled",
+        "it: should delete expired session on POST when deferSessionRefresh is enabled",
+        "it: should still update session on GET when deferSessionRefresh is not enabled (default behavior)",
+        "it: should respect disableSessionRefresh config when deferSessionRefresh is enabled",
+        "describe: date field type consistency",
+        "it: should have consistent date types between cookie cache and refresh paths",
+        "describe: updateSession",
+        "it: should update a custom additional field on a session",
+        "it: should ignore core session fields",
+        "it: should ignore core field userId",
+        "it: should reject input: false fields",
+        "it: should return error when no fields to update",
+        "it: should update session cookie after mutation",
+        "describe: updateSession plugin authority fields",
+        "it.each: should reject forging the %s session field",
+        "describe: update-session cookie cache revocation",
+        "it: fails closed when the backing session is revoked in a stateful deployment",
+        "it: still refreshes the cookie in a DB-less deployment when no row exists",
+        "describe: forced strict session validation",
+        "it: a request cannot re-enable the cookie cache on a route that forces it off",
+        "it: uses the signed cookie as the authoritative session record without a server store",
+        "describe: get-session cache headers",
+        "it: sets Cache-Control: no-store on authenticated GET /get-session responses",
+        "it: sets Cache-Control: no-store on unauthenticated GET /get-session responses",
+        "it: does not set Cache-Control: no-store on session-gated endpoints"
+      ],
+      "covered": [
+        {
+          "case": "should set cookies correctly on sign in",
+          "goTest": "TestSessionMaxAge_SessionTokenMaxAgeSignInDefault + TestSessionMaxAge_SessionTokenMaxAgeDefault (MaxAge defaults to expiresIn)"
+        },
+        {
+          "case": "should not exceed the 400-day browser Max-Age ceiling on session refresh",
+          "goTest": "TestSessionMaxAge_SessionTokenMaxAgeRefreshCeiling"
+        },
+        {
+          "case": "should require a fresh session to list sessions",
+          "goTest": "TestSessionRevocation_ExpiredSessionListRevokeIs401 (expired token now 401)"
+        },
+        {
+          "case": "should work without database (session stored in cookie only)",
+          "goTest": "TestStatelessUpdate_DBlessGetSessionFromCookieCache"
+        },
+        {
+          "case": "should respect disableSessionRefresh config when deferSessionRefresh is enabled",
+          "goTest": "TestUpdateFailclosed_DeferWithDisableSessionRefresh"
+        },
+        {
+          "case": "fails closed when the backing session is revoked in a stateful deployment",
+          "goTest": "TestUpdateFailclosed_UpdateSessionRevokedFailsClosed"
+        },
+        {
+          "case": "still refreshes the cookie in a DB-less deployment when no row exists",
+          "goTest": "TestStatelessUpdate_DBlessUpdateSessionFromCookieCache (previously panicked on nil DB)"
+        },
+        {
+          "case": "should store session in secondary storage",
+          "goTest": "TestCreationMirrorsSecondaryStorage (pre-existing) + TestSecondaryFanout_RouteListRevokeSecondary"
+        },
+        {
+          "case": "should list sessions",
+          "goTest": "TestSecondaryFanout_RouteListRevokeSecondary (secondary mode)"
+        },
+        {
+          "case": "revoke session and list sessions",
+          "goTest": "TestSecondaryFanout_RouteListRevokeSecondary"
+        },
+        {
+          "case": "should revoke session",
+          "goTest": "TestSecondaryFanout_RouteListRevokeSecondary (no store residue)"
+        },
+        {
+          "case": "should list sessions",
+          "goTest": "TestSessionTriage_ListSessionsPrimary"
+        },
+        {
+          "case": "should revoke session",
+          "goTest": "TestSessionTriage_RevokeOwnSessionThenRevokeAll"
+        },
+        {
+          "case": "refreshes expired cache and reuses the replacement cookie",
+          "goTest": "TestSessionTriage_CompactExpiredCacheRefreshes"
+        },
+        {
+          "case": "should have max age expiry",
+          "goTest": "TestSessionTriage_JWTCacheMaxAgeExpiry"
+        },
+        {
+          "case": "should preserve session expiry when refreshing stateless cookie cache",
+          "goTest": "TestSessionTriage_StatelessRefreshPreservesExpiry"
+        },
+        {
+          "case": "should work without database when refreshCache threshold is reached",
+          "goTest": "TestSessionTriage_StatelessRefreshPreservesExpiry (serves + re-issues, DB nil)"
+        },
+        {
+          "case": "should extend session_token cookie expiry when refreshCache threshold is reached",
+          "goTest": "TestSessionTriage_StatelessRefreshPreservesExpiry (MaxAge=expiresIn)"
+        },
+        {
+          "case": "should include additionalFields when retrieving from cookie cache",
+          "goTest": "TestSessionTriage_CacheServesAdditionalFields"
+        },
+        {
+          "case": "should update session on POST when deferSessionRefresh is enabled",
+          "goTest": "TestSessionTriage_DeferPostWritesDueSession"
+        },
+        {
+          "case": "should have consistent date types between cookie cache and refresh paths",
+          "goTest": "TestSessionTriage_StatelessRefreshPreservesExpiry (equality across refresh)"
+        },
+        {
+          "case": "should update a custom additional field on a session",
+          "goTest": "TestSessionTriage_UpdateSessionCustomFieldAndCookie"
+        },
+        {
+          "case": "should ignore core session fields",
+          "goTest": "TestSessionTriage_UpdateSessionIgnoresCoreFields"
+        },
+        {
+          "case": "should ignore core field userId",
+          "goTest": "TestSessionTriage_UpdateSessionIgnoresCoreFields"
+        },
+        {
+          "case": "should update session cookie after mutation",
+          "goTest": "TestSessionTriage_UpdateSessionCustomFieldAndCookie (Set-Cookie on mutation)"
+        },
+        {
+          "case": "a request cannot re-enable the cookie cache on a route that forces it off",
+          "goTest": "TestSessionTriage_ForcedStrictChangePassword"
+        },
+        {
+          "case": "does not set Cache-Control: no-store on session-gated endpoints",
+          "goTest": "TestSessionTriage_NoStoreAbsentElsewhere (list-sessions vehicle)"
+        },
+        {
+          "case": "should return null when not authenticated",
+          "goTest": "DEVIATION (fail-closed): Go answers 401 FAILED_TO_GET_SESSION, pinned by TestResolveGetSessionMapsErrors; upstream 200 null intentionally not adopted"
+        },
+        {
+          "case": "should delete expired session on POST when deferSessionRefresh is enabled",
+          "goTest": "DEVIATION (fail-closed): row deleted per upstream, Go answers 400 SESSION_EXPIRED instead of 200 null"
+        },
+        {
+          "case": "sets Cache-Control: no-store on unauthenticated GET /get-session responses",
+          "goTest": "DEVIATION (fail-closed): no-store set on success only; follows from the null-shape deviation above"
+        },
+        {
+          "case": "should update the session every time when set to 0",
+          "goTest": "TestSessionUpdateAge_UpdateAgeTriState + TestSessionUpdateAge_ExplicitZeroAlwaysRefresh (UpdateAge *int tri-state)"
+        },
+        {
+          "case": "shouldSkipSessionRefresh gates refresh paths",
+          "goTest": "TestSessionCookie_SkipGateSuppressesRefresh"
+        },
+        {
+          "case": "should return null when not authenticated (200 null + no-store)",
+          "goTest": "TestSessionNull_* (missing/unknown/expired/deferred 200-null suite)"
+        },
+        {
+          "case": "updateSession unknown-only bodies 400 (parseSessionInput parity)",
+          "goTest": "TestUpdateSessionFields_UpdateSessionUnknownOnly400 + DeclaredAdditionalPasses"
+        },
+        {
+          "case": "get-session 200 literal null; user-missing null; compact interop both directions",
+          "goTest": "TestSessionCompactNull_* (null literal, user-missing, compact read/write)"
+        },
+        {
+          "case": "update-session extras flat top-level; revoke-other live-only, no cookies",
+          "goTest": "TestUpdateSessionFlat_UpdateSessionFlatTheme + TestUpdateSessionFlat_RevokeOtherLiveOnlyNoCookies"
+        }
+      ],
+      "notes": "Full 85-case triage done: 38 cited to pre-existing suites, 16 ported (triage_v1_session), 10 excluded (JWKS x5, plugin authority, returnHeaders, plugin-endpoint freshness, client-concurrency x2), 3 fail-closed deviations (null-shape), 1 accepted divergence (unknown-only update passes through). updateAge:0 closed via *int (F9); VersionFunc-500 held by existing fail-closed pin."
+    },
+    {
+      "file": "vendor/better-auth/packages/better-auth/src/api/routes/sign-in.test.ts",
+      "area": "core-routes",
+      "wave": "AUTH-C7-02",
+      "goOwner": [
+        "api/routes/sign_in.go"
+      ],
+      "disposition": "partial",
+      "cases": 30,
+      "caseNames": [
+        "describe: sign-in",
+        "it: should return a response with a set-cookie header",
+        "it: should read the ip address and user agent from the headers",
+        "it: verification email will be sent if sendOnSignIn is enabled",
+        "it: verification email will not be sent if sendOnSignIn is disabled",
+        "it: logs expected auth validation failures below error level",
+        "describe: url checks",
+        "it: should reject untrusted origins",
+        "describe: sign-in CSRF protection",
+        "it: should block cross-site navigation login attempts (no cookies)",
+        "it: should allow same-origin navigation login attempts",
+        "it: should allow fetch/XHR requests (cors mode)",
+        "it: should use origin validation when cookies exist",
+        "describe: sign-in with additionalFields",
+        "it: should return additionalFields in signInEmail response",
+        "describe: sign-in with form data",
+        "it: should accept form-urlencoded content type",
+        "it: accepts a null Origin when Fetch Metadata confirms a trusted target",
+        "it: accepts a null Origin through a trusted reverse proxy",
+        "it: ignores forwarded origins when proxy headers are not trusted",
+        "it: rejects a null Origin when the same-origin target is not trusted",
+        "it.each: rejects a null Origin for a %s form submission",
+        "it: rejects a null Origin without Fetch Metadata",
+        "it: rejects a missing Origin even when Fetch Metadata says same-origin",
+        "it: should block cross-site form submissions",
+        "it: should allow same-site form submissions from trusted origins",
+        "describe: email case insensitivity",
+        "it: should sign in with different email casing than sign-up",
+        "it: should store email as lowercase regardless of input casing",
+        "it: should not allow duplicate sign-ups with different email casing"
+      ],
+      "covered": [
+        {
+          "case": "logs expected auth validation failures below error level",
+          "goTest": "TestSignIn_SignInWarnLogs"
+        },
+        {
+          "case": "should return additionalFields in signInEmail response",
+          "goTest": "TestSignIn_SignInAdditionalFields"
+        },
+        {
+          "case": "should sign in with different email casing than sign-up",
+          "goTest": "TestSignIn_SignInCaseInsensitive"
+        },
+        {
+          "case": "should read the ip address and user agent from the headers",
+          "goTest": "TestClientIP_SignInStoresIPAndUserAgent"
+        },
+        {
+          "case": "should return a response with a set-cookie header",
+          "goTest": "TestCredentialTriage_SignInSetsSessionCookie"
+        },
+        {
+          "case": "verification email will not be sent if sendOnSignIn is disabled",
+          "goTest": "TestCredentialTriage_SignInNoResendWhenDisabled"
+        },
+        {
+          "case": "email format gate 400 INVALID_EMAIL (sign-in.ts validation)",
+          "goTest": "TestSignIn_MalformedEmailIs400"
+        },
+        {
+          "case": "callbackURL Location header (trusted only)",
+          "goTest": "TestSignIn_CallbackURLSetsLocationHeader"
+        },
+        {
+          "case": "verification email sent when sendOnSignIn is enabled",
+          "goTest": "TestSignIn_SendOnSignInResends"
+        },
+        {
+          "case": "should accept form-urlencoded content type",
+          "goTest": "TestSignInForm_SignInFormURLEncoded + FormValidationParity"
+        },
+        {
+          "case": "untrusted callbackURL 403 on sign-in/sign-up (global middleware parity)",
+          "goTest": "TestUntrustedCallback_SignInUntrustedCallback403 + SignUpUntrustedCallback403"
+        }
+      ],
+      "notes": "Cookie header, resend on/off, format gate, Location header, lowercase storage covered; social-callback legs excluded. Origin/CSRF enforcement now wired (F10); TestOriginMiddleware_NoCookie* realigned to upstream validateFormCsrf."
+    },
+    {
+      "file": "vendor/better-auth/packages/better-auth/src/api/routes/sign-out.test.ts",
+      "area": "core-routes",
+      "wave": "AUTH-C7-01",
+      "goOwner": [
+        "api/routes/sign_out.go"
+      ],
+      "disposition": "partial",
+      "cases": 10,
+      "caseNames": [
+        "describe: sign-out",
+        "it: should sign out",
+        "it: should clear local session cookie when reading the session fails",
+        "it: should return provider logout url with id_token_hint",
+        "it: should keep local-only sign out when provider has no logout endpoint",
+        "it: should keep local-only sign out when provider logout is disabled",
+        "it: should include callbackURL as post_logout_redirect_uri with state",
+        "it: should reject untrusted callbackURL",
+        "it: should return provider logout url without redirect when disabled",
+        "it: should use the most recently updated provider when multiple linked accounts exist"
+      ],
+      "covered": [
+        {
+          "case": "should sign out",
+          "goTest": "TestSignOut_SignOutDeletesSessionAndClearsCookies"
+        },
+        {
+          "case": "should clear local session cookie when reading the session fails",
+          "goTest": "TestSignOut_SignOutClearsCookiesOnUnreadableSession"
+        },
+        {
+          "case": "sign-out requireHeaders 401 + optional body parsed (provider excluded)",
+          "goTest": "TestSignOut*"
+        }
+      ],
+      "notes": "Core sign-out legs covered; provider-logout URL legs v1-excluded (no social providers)."
+    },
+    {
+      "file": "vendor/better-auth/packages/better-auth/src/api/routes/sign-up.test.ts",
+      "area": "core-routes",
+      "wave": "AUTH-C7-02",
+      "goOwner": [
+        "api/routes/sign_up.go"
+      ],
+      "disposition": "partial",
+      "cases": 40,
+      "caseNames": [
+        "describe: sign-up with custom fields",
+        "it: should work with custom fields on account table",
+        "it: should succeed when passing empty name",
+        "it: should get the ipAddress and userAgent from headers",
+        "it: should rollback when session creation fails",
+        "it: should not allow user to set the field that is set to input: false",
+        "it: should return additionalFields in signUpEmail response",
+        "it: should throw status code 400 when passing invalid body",
+        "describe: validateUserInfo sign-up",
+        "it: should allow email/password sign-up when validateUserInfo returns void",
+        "it: should reject email/password sign-up when validateUserInfo returns error",
+        "it: hides gate rejections behind the generic-duplicate response",
+        "describe: sign-up user enumeration protection",
+        "it: should return success for existing email when email verification is required",
+        "it: should call onExistingUserSignUp when requireEmailVerification is true",
+        "it: should call onExistingUserSignUp when autoSignIn is false and requireEmailVerification is true",
+        "it: should call onExistingUserSignUp when autoSignIn is false without requireEmailVerification",
+        "it: should not call onExistingUserSignUp when enumeration protection is inactive",
+        "it: should not call onExistingUserSignUp for new user sign-ups",
+        "it: should return synthetic user for existing email when autoSignIn is disabled without requireEmailVerification",
+        "it: should return token: null for new sign-up when autoSignIn is disabled",
+        "describe: sign-up CSRF protection",
+        "it: should block cross-site navigation sign-up attempts (no cookies)",
+        "it: should allow same-origin navigation sign-up attempts",
+        "it: should allow fetch/XHR sign-up requests (cors mode)",
+        "it: should use origin validation when cookies exist",
+        "describe: sign-up with form data",
+        "it: should accept form-urlencoded content type",
+        "it: should block cross-site form submissions",
+        "it: should allow same-site form submissions from trusted origins",
+        "describe: sign-up sendOnSignUp option behavior",
+        "it: should not send verification email when sendOnSignUp is false, even with requireEmailVerification",
+        "it: should send verification email when sendOnSignUp is true",
+        "it: should send verification email when sendOnSignUp is not set but requireEmailVerification is true (default)",
+        "describe: sign-up enumeration protection \u2014 indistinguishable response",
+        "it: should have identical image key presence for real and synthetic user when image is omitted",
+        "it: should have identical image key presence in raw JSON response when image is omitted",
+        "it: should return same keys in same order for real and synthetic user",
+        "describe: sign-up enumeration protection \u2014 customSyntheticUser with admin plugin",
+        "it: should return indistinguishable response with admin plugin fields"
+      ],
+      "covered": [
+        {
+          "case": "should work with custom fields on account table",
+          "goTest": "TestSignUp_SignUpAdditionalFields"
+        },
+        {
+          "case": "should succeed when passing empty name",
+          "goTest": "TestSignUp_SignUpEmptyName"
+        },
+        {
+          "case": "should not allow user to set the field that is set to input: false",
+          "goTest": "TestSignUp_SignUpInputFalseRejected"
+        },
+        {
+          "case": "should return additionalFields in signUpEmail response",
+          "goTest": "TestSignUp_SignUpAdditionalFields (response shape)"
+        },
+        {
+          "case": "should throw status code 400 when passing invalid body",
+          "goTest": "TestSignUp_SignUpMissingPasswordIsClientError + TestSignUp_SignUpShortPasswordWarns"
+        },
+        {
+          "case": "should properly encode callbackURL with query parameters when sending verification email",
+          "goTest": "TestSignUp_SignUpVerificationURLEncoding"
+        },
+        {
+          "case": "should not allow duplicate sign-ups with different email casing",
+          "goTest": "TestSignUp_SignUpDuplicateCaseInsensitive"
+        },
+        {
+          "case": "should have identical image key presence for real and synthetic user when image is omitted",
+          "goTest": "TestSignUp_SyntheticResponseParity"
+        },
+        {
+          "case": "should get the ipAddress and userAgent from headers",
+          "goTest": "TestClientIP_SignUpStoresIPAndUserAgent"
+        },
+        {
+          "case": "should rollback when session creation fails",
+          "goTest": "TestSignUpOrphan_SessionCreateFailureRemovesUser + SecondaryMirror/Cookie variants (compensating delete, no tx needed)"
+        },
+        {
+          "case": "should allow email/password sign-up when validateUserInfo returns void",
+          "goTest": "TestCredentialTriage_SignUpValidateUserInfoAllows"
+        },
+        {
+          "case": "should not call onExistingUserSignUp when enumeration protection is inactive",
+          "goTest": "TestCredentialTriage_SignUpExistingHookSkippedWhenInactive"
+        },
+        {
+          "case": "should not call onExistingUserSignUp for new user sign-ups",
+          "goTest": "TestCredentialTriage_SignUpExistingHookSkippedForNewUser"
+        },
+        {
+          "case": "should return token: null for new sign-up when autoSignIn is disabled",
+          "goTest": "TestCredentialTriage_SignUpAutoSignInFalseTokenNull"
+        },
+        {
+          "case": "should send verification email when sendOnSignUp is true",
+          "goTest": "TestCredentialTriage_SignUpSendOnSignUpTrue"
+        },
+        {
+          "case": "should send verification email when sendOnSignUp is not set but requireEmailVerification is true (default)",
+          "goTest": "TestCredentialTriage_SignUpSendOnSignUpDefault"
+        },
+        {
+          "case": "should return synthetic user for existing email when autoSignIn is disabled without requireEmailVerification",
+          "goTest": "TestSignUpAutoSignIn_AutoSignInFalseDuplicateIsSynthetic (generic-duplicate condition extended to autoSignIn=false)"
+        },
+        {
+          "case": "should call onExistingUserSignUp when autoSignIn is false without requireEmailVerification",
+          "goTest": "TestSignUpAutoSignIn_AutoSignInFalseDuplicateFiresHook"
+        },
+        {
+          "case": "should accept form-urlencoded content type",
+          "goTest": "TestSignUpForm_SignUpFormURLEncoded + TestSignUpForm_SignUpFormValidationParity"
+        },
+        {
+          "case": "should not send verification email when sendOnSignUp is false, even with requireEmailVerification",
+          "goTest": "TestSignUpForm_SendOnSignUpExplicitFalse + TestSignUpForm_SendOnSignUpTrueSendsWithoutRequire (SendOnSignUp *bool tri-state)"
+        },
+        {
+          "case": "invalid body rejected incl. mistyped known fields (zod parity)",
+          "goTest": "TestSignUpMistyped_SignUpJSONMistypedRememberMeIsClientError + NameIsClientError + UnmarshalMistypedKnownKeysError (supplement)"
+        }
+      ],
+      "notes": "Full triage done: validateUserInfo gates, hook skip legs, autoSignIn-false token-null/synthetic/hook, sendOnSignUp true/default/explicit-false (*bool), form-urlencoded bodies; CSRF/admin-synthetic legs excluded."
+    },
+    {
+      "file": "vendor/better-auth/packages/better-auth/src/api/routes/update-user.test.ts",
+      "area": "core-routes",
+      "wave": "AUTH-C7-02",
+      "goOwner": [
+        "api/routes/account.go"
+      ],
+      "disposition": "partial",
+      "cases": 35,
+      "caseNames": [
+        "describe: updateUser",
+        "it: should update the user's name",
+        "it: should unset image",
+        "it: should change email only after confirming both addresses",
+        "it: should update the user's password",
+        "it: should update account's updatedAt when changing password",
+        "it: should not update password if current password is wrong",
+        "it: should revoke other sessions",
+        "it: should preserve the replacement session in secondary storage",
+        "it: shouldn't pass defaults",
+        "it: should propagate updates across sessions when secondaryStorage is enabled",
+        "it: should not write to secondary storage multiple times for the same session token during updateUser",
+        "it: should not allow updating user with additional fields that are input: false",
+        "describe: delete user",
+        "it: should not delete user if deleteUser is disabled",
+        "it: should delete the user with a fresh session",
+        "it: should require password when session is no longer fresh",
+        "it: should delete every session from deleted user",
+        "it: should delete with verification flow and password",
+        "it: should delete only once when the same token is used concurrently",
+        "it: should ignore cookie cache for sensitive operations like changePassword",
+        "it: rejects /delete-user/callback when the backing session was revoked",
+        "describe: change-email enumeration protection",
+        "it: should return 200 when target email already exists",
+        "it: should not change the user's email",
+        "describe: change-email without sendVerificationEmail",
+        "it: should return the same error for existing and non-existing emails",
+        "describe: change-email callbackURL preservation",
+        "it: preserves a callbackURL that carries its own query string",
+        "describe: change-email rejects confirmation-only config for verified users",
+        "it: returns 400 when sendVerificationEmail is not configured",
+        "describe: credential identity across email changes",
+        "it: keeps one credential account when the user changes their sign-in email",
+        "describe: setPassword",
+        "it: sets the password on the existing passwordless credential account"
+      ],
+      "covered": [
+        {
+          "case": "should unset image",
+          "goTest": "TestAccount_UpdateUserUnsetsImage"
+        },
+        {
+          "case": "should not allow updating user with additional fields that are input: false",
+          "goTest": "TestAccount_UpdateUserInputFalseRejected"
+        },
+        {
+          "case": "should not update password if current password is wrong",
+          "goTest": "TestAccount_ChangePasswordWrongCurrent"
+        },
+        {
+          "case": "should revoke other sessions",
+          "goTest": "TestAccount_ChangePasswordRevokesOthers"
+        },
+        {
+          "case": "should return 200 when target email already exists",
+          "goTest": "TestAccount_ChangeEmailExistingTarget"
+        },
+        {
+          "case": "should return the same error for existing and non-existing emails",
+          "goTest": "TestAccount_ChangeEmailSameErrorWithoutSender"
+        },
+        {
+          "case": "preserves a callbackURL that carries its own query string",
+          "goTest": "TestAccount_ChangeEmailCallbackEncoding"
+        },
+        {
+          "case": "returns 400 when sendVerificationEmail is not configured",
+          "goTest": "TestAccount_ChangeEmailConfirmationOnlyConfig"
+        },
+        {
+          "case": "keeps one credential account when the user changes their sign-in email",
+          "goTest": "TestAccount_ChangeEmailKeepsCredentialAccount"
+        },
+        {
+          "case": "should change email only after confirming both addresses",
+          "goTest": "TestAccount_ChangeEmailDoubleConfirm"
+        },
+        {
+          "case": "should delete the user with a fresh session",
+          "goTest": "TestAccount_DeleteUserFreshSession"
+        },
+        {
+          "case": "should require password when session is no longer fresh",
+          "goTest": "TestAccount_DeleteUserRequiresPasswordWhenStale"
+        },
+        {
+          "case": "should delete with verification flow and password",
+          "goTest": "TestAccount_DeleteUserVerificationFlowWithPassword"
+        },
+        {
+          "case": "rejects /delete-user/callback when the backing session was revoked",
+          "goTest": "TestAccount_DeleteUserCallbackRevokedSession"
+        },
+        {
+          "case": "sets the password on the existing passwordless credential account",
+          "goTest": "TestSetPassword_SetPasswordOnPasswordlessAccount + CreatesMissingAccount (server-only SetPassword, no HTTP route upstream)"
+        },
+        {
+          "case": "should propagate updates across sessions when secondaryStorage is enabled",
+          "goTest": "TestSecondaryFanout_RefreshPropagatesAcrossSessions (helper; route wiring open)"
+        },
+        {
+          "case": "should not write to secondary storage multiple times for the same session token during updateUser",
+          "goTest": "TestSecondaryFanout_RefreshWritesOncePerToken (helper; route wiring open)"
+        },
+        {
+          "case": "should preserve the replacement session in secondary storage",
+          "goTest": "TestSecondaryFanout_DeleteAllThenRecreateKeepsOnlyReplacement (helper; ChangePassword wiring open)"
+        },
+        {
+          "case": "should update the user's password",
+          "goTest": "TestCredentialTriage_ChangePasswordSuccessRotatesCredentials"
+        },
+        {
+          "case": "should update account's updatedAt when changing password",
+          "goTest": "TestCredentialTriage_ChangePasswordBumpsAccountUpdatedAt"
+        },
+        {
+          "case": "should not delete user if deleteUser is disabled",
+          "goTest": "TestCredentialTriage_DeleteUserDisabledIs404"
+        },
+        {
+          "case": "should ignore cookie cache for sensitive operations like changePassword",
+          "goTest": "TestCredentialTriage_ChangePasswordIgnoresCookieCache"
+        },
+        {
+          "case": "should delete every session from deleted user (secondary-storage variant)",
+          "goTest": "TestDeleteUserPurge_DeleteUserDirectPurgesSecondary + TestDeleteUserPurge_DeleteUserCallbackPurgesSecondary"
+        },
+        {
+          "case": "should revoke other sessions (replacement Set-Cookie)",
+          "goTest": "TestPasswordResetCodes_ChangePasswordRevokeEmitsSetCookie (supplement)"
+        },
+        {
+          "case": "should delete with verification flow and password (token-before-freshness ordering)",
+          "goTest": "TestDeleteUserStale_DeleteUserStaleSessionValidTokenDeletes + WithoutTokenExpired + InvalidTokenUnauthorized (supplement)"
+        },
+        {
+          "case": "delete-user invalid/wrong-owner token 404 (callback parity on POST path)",
+          "goTest": "TestDeleteUserToken_DeleteUserInvalidTokenNotFound + WrongOwnerBurnsToken"
+        },
+        {
+          "case": "change-password non-revoke returns {token:null,user} (status compat kept)",
+          "goTest": "TestChangePasswordShape_NonRevokeReturnsNullTokenAndUser"
+        },
+        {
+          "case": "change-email/delete-user/reset-callback untrusted callbackURL 403",
+          "goTest": "TestF7b_* (3 legs)"
+        }
+      ],
+      "notes": "Change-password rotation (+replacement Set-Cookie), delete-disabled, cache-bypass, secondary purge on all delete paths covered; concurrent-delete race not deterministically pinnable on the mem adapter (DBs serialize)."
+    },
+    {
+      "file": "vendor/better-auth/packages/better-auth/src/cookies/cookies.test.ts",
+      "area": "cookies-crypto-oauth2",
+      "wave": "AUTH-C7-01",
+      "goOwner": [
+        "cookies/cookies.go",
+        "cookies/attributes.go",
+        "cookies/request.go"
+      ],
+      "disposition": "partial",
+      "cases": 118,
+      "caseNames": [
+        "describe: cookies",
+        "it: should set cookies with default options",
+        "it: should set multiple cookies",
+        "it: should use secure cookies",
+        "it: should use secure cookies when the base url is https",
+        "describe: production environment",
+        "it: should use secure cookies when baseURL is not configured",
+        "describe: crossSubdomainCookies",
+        "it: should update cookies with custom domain",
+        "it: should use default domain from baseURL if not provided",
+        "describe: cookie configuration",
+        "it: should return correct cookie options based on configuration",
+        "describe: cookie-utils parseSetCookieHeader",
+        "it: handles Expires with commas and multiple cookies",
+        "it: decodes URI-encoded cookie values",
+        "it: handles cookie with Expires followed by cookie without Expires",
+        "it: handles Expires when cookie value contains gmt substring",
+        "it: handles non-standard Expires=0",
+        "it: handles RFC 850 date format",
+        "it: handles asctime date format (no comma in date)",
+        "it: handles mixed cookies with and without Expires",
+        "it: parses partitioned as a boolean cookie attribute",
+        "it: converts parsed cookie attributes into cookie options",
+        "describe: cookie-utils stripSecureCookiePrefix",
+        "it: should strip __Secure- prefix from cookie name",
+        "it: should strip __Host- prefix from cookie name",
+        "it: should return cookie name unchanged if no prefix",
+        "it: should handle cookie names with prefix-like strings in the middle",
+        "it: should handle empty string",
+        "it: should handle cookie names that are exactly the prefix",
+        "it: should prioritize __Secure- prefix over __Host- prefix",
+        "it: should handle cookie names with dots and special characters",
+        "describe: cookie-utils setRequestCookie",
+        "it: writes a cookie when the header is empty",
+        "it: preserves existing cookies and joins with `; ` per RFC 6265",
+        "it: replaces an existing cookie of the same name rather than duplicating it",
+        "it: ignores malformed pairs in the existing header",
+        "it: percent-encodes reserved cookie-octet bytes when serializing",
+        "it: treats input as semantic and percent-encodes literal double-quotes",
+        "describe: getSessionCookie",
+        "it: should return the correct session cookie",
+        "it: should work with Headers object directly",
+        "it: should work with Headers-like object that has inherited 'headers' property",
+        "it: should work with cross-realm Headers-like object (instanceof fails)",
+        "it: should return the correct session cookie on production",
+        "describe.each: with '%s' separator",
+        "describe.each: with %s prefix (%s)",
+        "it.each: finds cookie with config %j",
+        "it: prefers the __Secure- cookie when a non-secure leftover is also present",
+        "it: does not fall back to a non-secure cookie when the __Secure- value is empty",
+        "it: should allow override cookie prefix with secure cookies",
+        "it: should allow override cookie name",
+        "it: should return cookie cache",
+        "it: should respect dontRememberMe when storing session in cookie cache",
+        "it: should return null if the cookie is invalid",
+        "it: should throw an error if the secret is not provided",
+        "it: should chunk large cookies instead of logging error",
+        "describe: sensitive session middleware cookie cache",
+        "it: should not let request query re-enable cookie cache on sensitive endpoints",
+        "describe: Cookie Cache Field Filtering",
+        "it: should exclude user fields with returned: false from cookie cache",
+        "it: should correctly filter multiple user fields based on returned config",
+        "it: should reduce cookie size when large fields are excluded",
+        "it: should maintain session field filtering (regression check)",
+        "it: should include unknown user fields for backward compatibility",
+        "it: should work with JWT strategy",
+        "it: should work with JWT strategy backed by JWKS keys",
+        "it: should work with compact strategy",
+        "it: should use the configured logger for an invalid signed compact cookie",
+        "it: should return null for invalid JWT token",
+        "it: should require a secret when helper verification has no JWKS",
+        "it: should reject JWT plugin tokens that are not cookie-cache JWTs",
+        "it: should return null when JWKS verification uses the wrong key set",
+        "it: should default to compact strategy when not specified",
+        "describe: Cookie Chunking",
+        "it: should chunk cookies when they exceed 4KB",
+        "it: should chunk JWKS-backed JWT cookies when they exceed 4KB",
+        "it: should reconstruct chunked cookies correctly",
+        "it: should clean up all chunks when deleting session",
+        "it: should NOT chunk cookies when they are under 4KB",
+        "it: should chunk session cache when attributes push the line over the limit",
+        "it: skips the session cache and warns when it is too large to chunk",
+        "it: skips the session cache and warns when the prefix alone overflows",
+        "describe: parse cookies",
+        "it: should parse cookies into key-value map",
+        "it: should securely parse the signed cookies with padding",
+        "describe: Cookie header without whitespace after semicolon",
+        "it: parseCookies returns each pair when separator is `;` only",
+        "it: parseCookies tolerates mixed `;`, `; `, and `;\\\\t` separators",
+        "it: getSessionCookie finds the session cookie when separator is `;` only",
+        "it: getChunkedCookie reconstructs chunks across `;`-only separators",
+        "describe: getChunkedCookie",
+        "it.each: ignores non-canonical chunk name %s",
+        "describe: parseCookies validation",
+        "it: returns empty map for empty header",
+        "it: rejects names containing characters outside RFC 7230 token",
+        "it: rejects values containing control chars, double-quote, or backslash",
+        "it: accepts values with space and comma (real-world deviation)",
+        "it: splits on first `=` only, preserving subsequent `=` in value",
+        "it: rejects entries with CR/LF in raw key or value (no trim escape)",
+        "it: strips double-quoted values per RFC 6265 \u00a74.1.1",
+        "describe: applySetCookies",
+        "it: merges into empty Cookie header",
+        "it: strips Set-Cookie attributes (only name=value lands)",
+        "it: merges multiple Set-Cookie values",
+        "it: last-wins on duplicate cookie name (existing + new)",
+        "it: re-encodes Set-Cookie values containing reserved bytes on wire join",
+        "it: strips RFC 6265 quoted-string wrapping from Set-Cookie values",
+        "describe: expireCookie",
+        "it: preserves attributes",
+        "it: scrubs collapsed Set-Cookie headers when getSetCookie is unavailable",
+        "describe: account cookie sync on user switch",
+        "it: keeps the fresh account cookie issued for the new user when the request carries another user's stale account cookie",
+        "it: still expires another user's stale account cookie when the response issues no fresh one",
+        "describe: getCookieCache expiry (compact strategy)",
+        "it: returns the session for a fresh snapshot",
+        "it: returns null when the embedded session has expired",
+        "it: returns null when the cache window has elapsed"
+      ],
+      "covered": [
+        {
+          "case": "Cookie Chunking",
+          "goTest": "TestChunkRoundTrip (round-trip only; chunk matrices open)"
+        },
+        {
+          "case": "handles Expires with commas and multiple cookies",
+          "goTest": "TestSetCookie_ParseSetCookieExpiresWithCommas"
+        },
+        {
+          "case": "decodes URI-encoded cookie values",
+          "goTest": "TestSetCookie_ParseSetCookieDecodesValues"
+        },
+        {
+          "case": "handles cookie with Expires followed by cookie without Expires",
+          "goTest": "TestSetCookie_ParseSetCookieExpiresThenBare"
+        },
+        {
+          "case": "handles Expires when cookie value contains gmt substring",
+          "goTest": "TestSetCookie_ParseSetCookieGMTSubstring"
+        },
+        {
+          "case": "handles non-standard Expires=0",
+          "goTest": "TestSetCookie_ParseSetCookieNonStandardExpires"
+        },
+        {
+          "case": "handles RFC 850 date format",
+          "goTest": "TestSetCookie_ParseSetCookieRFC850Expires"
+        },
+        {
+          "case": "handles asctime date format (no comma in date)",
+          "goTest": "TestSetCookie_ParseSetCookieAsctimeExpires"
+        },
+        {
+          "case": "handles mixed cookies with and without Expires",
+          "goTest": "TestSetCookie_ParseSetCookieMixed"
+        },
+        {
+          "case": "parses partitioned as a boolean cookie attribute",
+          "goTest": "TestSetCookie_ParseSetCookiePartitioned"
+        },
+        {
+          "case": "converts parsed cookie attributes into cookie options",
+          "goTest": "TestSetCookie_ToCookieOptions"
+        },
+        {
+          "case": "should handle empty string",
+          "goTest": "TestSetCookie_StripSecureCookiePrefixEdges (empty/exact-prefix/priority/dotted/mid-string edges)"
+        },
+        {
+          "case": "writes a cookie when the header is empty",
+          "goTest": "TestSetCookie_SetRequestCookieHeader (all 6 setRequestCookie cases)"
+        },
+        {
+          "case": "merges into empty Cookie header",
+          "goTest": "TestSetCookie_ApplySetCookiesHeader (all 6 applySetCookies cases)"
+        },
+        {
+          "case": "preserves attributes",
+          "goTest": "TestSetCookie_ExpireCookie"
+        },
+        {
+          "case": "scrubs collapsed Set-Cookie headers when getSetCookie is unavailable",
+          "goTest": "TestSetCookie_ScrubSetCookieEntries"
+        },
+        {
+          "case": "parseCookies returns each pair when separator is `;` only",
+          "goTest": "TestSetCookie_SemicolonOnlySeparators"
+        },
+        {
+          "case": "ignores non-canonical chunk name %s",
+          "goTest": "TestSetCookie_NonCanonicalChunkNamesIgnored"
+        },
+        {
+          "case": "should return correct cookie options based on configuration",
+          "goTest": "TestSetCookie_CookieOptionsFromConfig"
+        },
+        {
+          "case": "should return null if the cookie is invalid",
+          "goTest": "TestCacheExpiry_CompactCacheInvalidAndMissingSecret"
+        },
+        {
+          "case": "should throw an error if the secret is not provided",
+          "goTest": "TestCacheExpiry_CompactCacheInvalidAndMissingSecret"
+        },
+        {
+          "case": "should return null for invalid JWT token",
+          "goTest": "TestCacheExpiry_JWTCacheInvalidToken"
+        },
+        {
+          "case": "returns the session for a fresh snapshot",
+          "goTest": "TestCacheExpiry_CompactCacheFreshSnapshot"
+        },
+        {
+          "case": "returns null when the embedded session has expired",
+          "goTest": "TestCacheExpiry_CompactCacheEmbeddedSessionExpired"
+        },
+        {
+          "case": "returns null when the cache window has elapsed",
+          "goTest": "TestCacheExpiry_CompactCacheWindowElapsed"
+        },
+        {
+          "case": "rejects token with mismatched kid (no fallback)",
+          "goTest": "TestCacheExpiry_JWECacheMismatchedKidNoFallback"
+        },
+        {
+          "case": "decode kid-less JWT tries all secrets (fallback)",
+          "goTest": "TestCacheExpiry_JWECacheKidLessFallbackTriesAllSecrets"
+        },
+        {
+          "case": "should exclude user fields with returned: false from cookie cache",
+          "goTest": "TestOutputFilter_ExcludeSingleUserField + TestIssuanceFilter_IssuanceLegFiltersReturnedFalse (issuance legs)"
+        },
+        {
+          "case": "should correctly filter multiple user fields based on returned config",
+          "goTest": "TestOutputFilter_MultipleUserFields"
+        },
+        {
+          "case": "should reduce cookie size when large fields are excluded",
+          "goTest": "TestOutputFilter_LargeFieldExcluded"
+        },
+        {
+          "case": "should maintain session field filtering (regression check)",
+          "goTest": "TestOutputFilter_SessionFieldFiltering"
+        },
+        {
+          "case": "should include unknown user fields for backward compatibility",
+          "goTest": "TestOutputFilter_UnknownFieldsKept"
+        },
+        {
+          "case": "should work with JWT strategy",
+          "goTest": "TestOutputFilter_JWTStrategy (superset)"
+        },
+        {
+          "case": "should work with compact strategy",
+          "goTest": "TestOutputFilter_CompactStrategy (superset)"
+        },
+        {
+          "case": "should reconstruct chunked cookies correctly",
+          "goTest": "TestCookieTriage_ChunkedCompactCacheReadRoundTrip (READ leg; writes excluded)"
+        },
+        {
+          "case": "should securely parse the signed cookies with padding",
+          "goTest": "TestCookieTriage_ParseCookiesPaddedSignedValues"
+        },
+        {
+          "case": "parseCookies tolerates mixed `;`, `; `, and `;\\\\t` separators",
+          "goTest": "TestCookieTriage_ParseCookiesMixedSeparators (tab leg)"
+        },
+        {
+          "case": "rejects names containing characters outside RFC 7230 token",
+          "goTest": "TestCookieTriage_ParseCookiesRejectBadNames"
+        },
+        {
+          "case": "rejects values containing control chars, double-quote, or backslash",
+          "goTest": "TestCookieTriage_ParseCookiesRejectBadValues"
+        },
+        {
+          "case": "splits on first `=` only, preserving subsequent `=` in value",
+          "goTest": "TestCookieTriage_ParseCookiesSplitsOnFirstEquals"
+        },
+        {
+          "case": "rejects entries with CR/LF in raw key or value (no trim escape)",
+          "goTest": "TestCookieTriage_ParseCookiesRejectCRLFEntries"
+        },
+        {
+          "case": "should use the configured logger for an invalid signed compact cookie",
+          "goTest": "TestSchemaV1_CompactRejectsNullEmailVerified (codec) + TestSchemaV1_InvalidCacheWarnsAndMisses (route warn+miss) + TestSchemaV1_JWTRejectsNullEmailVerified + TestSchemaV1_JWERejectsNullEmailVerified"
+        },
+        {
+          "case": "chunked session-data cookie issuance (single/multi/oversize)",
+          "goTest": "TestF8 ChunkWriteStaysSingleUnderLimit + SplitsIndexed + OversizeSkips + AttributesPushOverLimit"
+        },
+        {
+          "case": "Expires=0 Invalid-Date + unknown-attr preservation + Max-Age=0 wire rendering",
+          "goTest": "TestF8 ExpiresZeroIsInvalidDate + UnknownAttrsPreservedInParseMap + MaxAgeZeroWireRendering"
+        },
+        {
+          "case": "chunked session-data issuance on live paths (write side wired)",
+          "goTest": "TestSessionCookie_ChunkedIssuanceMultiCookieOnOversize + TestCookiesChunked_OversizeIssuanceYieldsIndexedChunks + ShrinkExpiresStaleChunks"
+        }
+      ],
+      "notes": "Chunked multi-cookie writes now wired (read+write); post-signature payload-schema validation wired (ledger note corrected); remaining deltas are pinned exclusions (JWKS/plugin signer, social legs) or minor wire notes."
+    },
+    {
+      "file": "vendor/better-auth/packages/better-auth/src/crypto/password.test.ts",
+      "area": "cookies-crypto-oauth2",
+      "wave": "AUTH-C7-02",
+      "goOwner": [
+        "crypto/password.go"
+      ],
+      "disposition": "partial",
+      "cases": 14,
+      "caseNames": [
+        "describe: Password hashing and verification",
+        "it: should hash a password",
+        "it: should verify a correct password",
+        "it: should reject an incorrect password",
+        "it: should generate different hashes for the same password",
+        "it: should handle long passwords",
+        "it: should be case-sensitive",
+        "it: should handle Unicode characters",
+        "describe: Backward compatibility with @noble/hashes",
+        "it: should verify a hash created by the old @noble/hashes implementation",
+        "it: should reject wrong password against old hash",
+        "it: should verify old hash with Unicode password",
+        "it: should verify old hash with empty password",
+        "it: should verify old hash with very long password"
+      ],
+      "covered": [
+        {
+          "case": "should hash a password",
+          "goTest": "TestPasswordHashMatchesBetterAuthFormat"
+        },
+        {
+          "case": "should verify a correct password",
+          "goTest": "TestPasswordVerifiesBetterAuthScryptVector"
+        },
+        {
+          "case": "should reject an incorrect password",
+          "goTest": "TestPasswordVerifiesBetterAuthScryptVector"
+        },
+        {
+          "case": "should generate different hashes for the same password",
+          "goTest": "TestPasswordHashRandomSalt"
+        },
+        {
+          "case": "should handle Unicode characters",
+          "goTest": "TestPasswordNFKCCompatibility"
+        },
+        {
+          "case": "should handle long passwords",
+          "goTest": "TestV1_PasswordLong"
+        },
+        {
+          "case": "should be case-sensitive",
+          "goTest": "TestV1_PasswordCaseSensitive"
+        },
+        {
+          "case": "should handle Unicode characters",
+          "goTest": "TestV1_PasswordUnicode (Cyrillic+CJK supplement)"
+        },
+        {
+          "case": "should verify a hash created by the old @noble/hashes implementation",
+          "goTest": "TestPasswordVerifiesBetterAuthScryptVector (byte-identical params; same code path)"
+        },
+        {
+          "case": "should reject wrong password against old hash",
+          "goTest": "TestV1_PasswordRejectsWrongAgainstStoredHash (same passwords)"
+        },
+        {
+          "case": "should verify old hash with Unicode password",
+          "goTest": "TestV1_PasswordUnicode (same string)"
+        },
+        {
+          "case": "should verify old hash with empty password",
+          "goTest": "TestV1_PasswordEmptyAndVeryLong (empty leg)"
+        },
+        {
+          "case": "should verify old hash with very long password",
+          "goTest": "TestV1_PasswordEmptyAndVeryLong (very-long leg)"
+        }
+      ],
+      "notes": "Reset issuance/validation/expiry/revocation matrices covered; revoke emits replacement Set-Cookie; concurrent-reset race same mem-adapter note as delete."
+    },
+    {
+      "file": "vendor/better-auth/packages/better-auth/src/crypto/secret-rotation.test.ts",
+      "area": "cookies-crypto-oauth2",
+      "wave": "AUTH-F6-03",
+      "goOwner": [
+        "crypto/symmetric.go",
+        "crypto/token.go",
+        "secrets.go"
+      ],
+      "disposition": "partial",
+      "cases": 46,
+      "caseNames": [
+        "describe: secret rotation",
+        "describe: envelope format",
+        "it: parseEnvelope returns null for bare hex",
+        "it: parseEnvelope parses valid envelope",
+        "it: parseEnvelope rejects negative version",
+        "it: parseEnvelope rejects non-integer version",
+        "it: formatEnvelope produces correct format",
+        "describe: symmetricEncrypt / symmetricDecrypt",
+        "it: single secret string - bare hex, no envelope",
+        "it: SecretConfig with one key - produces envelope",
+        "it: rotation - encrypt with version 2, decrypt with both keys",
+        "it: decrypt old key - data encrypted with v1, config now on v2",
+        "it: legacy bare hex + SecretConfig with legacySecret",
+        "it: legacy bare hex without legacySecret - throws",
+        "it: unknown version in envelope - throws",
+        "it: version gaps work fine",
+        "describe: JWE multi-secret",
+        "it: encode and decode with single secret string",
+        "it: encode with SecretConfig, decode with same config",
+        "it: decode with rotated config containing old key",
+        "it: decode kid-less JWT tries all secrets (fallback)",
+        "it: decode legacy string-encoded JWT with SecretConfig legacySecret",
+        "it: rejects token with mismatched kid (no fallback)",
+        "describe: context secret helpers",
+        "describe: parseSecretsEnv",
+        "it: returns null for undefined/empty",
+        "it: trims whitespace around entries and values",
+        "it: rejects entry without colon",
+        "it: rejects negative version",
+        "it: rejects non-integer version",
+        "it: rejects empty value",
+        "describe: validateSecretsArray",
+        "it: throws on empty array",
+        "it: throws on duplicate versions",
+        "it: throws on negative version",
+        "it: throws on empty value",
+        "it: accepts valid config",
+        "it: accepts string versions that are valid integers",
+        "it: rejects hex string versions",
+        "it: rejects scientific notation versions",
+        "it: detects duplicates after coercion",
+        "describe: buildSecretConfig",
+        "it: builds config with keys map",
+        "it: includes legacySecret when provided",
+        "it: normalizes string versions to numbers in output",
+        "it: excludes DEFAULT_SECRET as legacySecret"
+      ],
+      "covered": [
+        {
+          "case": "parseEnvelope returns null for bare hex",
+          "goTest": "TestParseEnvelope"
+        },
+        {
+          "case": "parseEnvelope parses valid envelope",
+          "goTest": "TestParseEnvelope"
+        },
+        {
+          "case": "parseEnvelope rejects negative version",
+          "goTest": "TestParseEnvelope"
+        },
+        {
+          "case": "parseEnvelope rejects non-integer version",
+          "goTest": "TestParseEnvelope"
+        },
+        {
+          "case": "formatEnvelope produces correct format",
+          "goTest": "TestParseEnvelope"
+        },
+        {
+          "case": "single secret string - bare hex, no envelope",
+          "goTest": "TestEnvelope_SymmetricSingleStringBareHex"
+        },
+        {
+          "case": "SecretConfig with one key - produces envelope",
+          "goTest": "TestEnvelope_SymmetricOneKeyEnvelope"
+        },
+        {
+          "case": "rotation - encrypt with version 2, decrypt with both keys",
+          "goTest": "TestEnvelope_SymmetricRotation"
+        },
+        {
+          "case": "decrypt old key - data encrypted with v1, config now on v2",
+          "goTest": "TestEnvelope_SymmetricDecryptOldKeyAfterRotation"
+        },
+        {
+          "case": "legacy bare hex + SecretConfig with legacySecret",
+          "goTest": "TestEnvelope_SymmetricLegacyBareHex"
+        },
+        {
+          "case": "unknown version in envelope - throws",
+          "goTest": "TestEnvelope_SymmetricUnknownVersion"
+        },
+        {
+          "case": "version gaps work fine",
+          "goTest": "TestEnvelope_SymmetricVersionGaps"
+        },
+        {
+          "case": "decode kid-less JWT tries all secrets (fallback)",
+          "goTest": "TestCacheExpiry_JWECacheKidLessFallbackTriesAllSecrets"
+        },
+        {
+          "case": "rejects token with mismatched kid (no fallback)",
+          "goTest": "TestCacheExpiry_JWECacheMismatchedKidNoFallback"
+        },
+        {
+          "case": "JWE encode/decode single + same-config + rotated + legacy + kid-less + mismatched-kid",
+          "goTest": "TestJWE__SingleSecretString + SameConfig + RotatedContainingOldKey + KidLessFallbackTriesAllSecrets + LegacyStringConfig + MismatchedKidNoFallback"
+        }
+      ],
+      "notes": "Envelope parse/format, symmetric rotation matrices, JWE multi-secret legs (single/same/rotated/legacy/kid-less/mismatched) covered; parseSecretsEnv/validateSecretsArray helpers live in src/context."
+    }
+  ],
+  "scope": {
+    "document": "SCOPE.md",
+    "v1": "core-only: email/password + session; no plugins, no social providers, no oauth-provider",
+    "excluded": [
+      "src/plugins/* (all 27 upstream plugins)",
+      "packages/oauth-provider/src/*",
+      "social-providers/* and oauth2 social flows",
+      "/sign-in/social, /callback/{provider}, /link-social, /unlink-account, /account-info, /get-access-token, /refresh-token",
+      "17 OAuth helper paths (/oauth2/*, /admin/oauth2/*)",
+      "36 social providers"
+    ],
+    "upstreamTestFiles": 13,
+    "upstreamCases": 495
+  }
+}
