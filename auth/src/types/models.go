@@ -7,7 +7,7 @@ import "time"
 // Account, Verification, and RateLimit models).
 //
 // Content note: User and Session are moved unchanged from the former
-// types/email_password.go tail per SOURCE_LAYOUT_MOVE_LIST.md (public types
+// types/email-password.go tail per SOURCE_LAYOUT_MOVE_LIST.md (public types
 // toward the auth.go/models.ts boundary). Account, Verification, and
 // RateLimit have no dedicated Go structs; their shapes are covered by the
 // adapter row contract and plugin schemas.

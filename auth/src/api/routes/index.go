@@ -23,27 +23,30 @@ package routes
 // `DisabledPaths`; this file changes neither. The catalog below pins the
 // registrar -> OperationID mapping so renames are caught in review:
 //
-//	account.go:              ListUserAccounts (listUserAccounts), UpdateUser (updateUser),
-//	                         ChangeEmail (changeEmail), DeleteUser (deleteUser)
-//	account_extra.go:        GetAccessToken (getAccessToken), RefreshToken (refreshToken),
-//	                         AccountInfo (accountInfo), LinkSocialAccount (linkSocialAccount),
-//	                         UnlinkAccount (unlinkAccount)
+//	account.go:              ListUserAccounts (listUserAccounts)
+//	account_extra.go:        V1-EXCLUDED, not in tree (upstream account.ts
+//	                         token/social legs: getAccessToken, refreshToken,
+//	                         accountInfo, linkSocialAccount, unlinkAccount -
+//	                         see auth/SCOPE.md; named here only so the catalog
+//	                         covers every upstream owner)
 //	delete-user-callback.go: DeleteUserCallback (deleteUserCallback)
 //	email-verification.go:   SendVerificationEmail (sendVerificationEmail),
 //	                         VerifyEmail (verifyEmail), VerifyEmailGet (verifyEmailGet)
 //	error.go:                Error (auth-error-page)
 //	ok.go:                   Ok (auth-ok)
 //	password.go:             RequestPasswordReset (requestPasswordReset),
-//	                         ResetPassword (resetPassword), ChangePassword (changePassword)
-//	password-extra.go:       VerifyPassword (verifyPassword),
+//	                         ResetPassword (resetPassword),
+//	                         VerifyPassword (verifyPassword),
 //	                         RequestPasswordResetCallback (resetPasswordCallback)
 //	session.go:              GetSession (getSession, getSessionPost),
-//	                         ListSessions (listUserSessions), RevokeSession (revokeSession)
-//	session-extra.go:        RevokeSessions (revokeSessions),
+//	                         ListSessions (listUserSessions), RevokeSession (revokeSession),
+//	                         RevokeSessions (revokeSessions),
 //	                         RevokeOtherSessions (revokeOtherSessions),
 //	                         UpdateSession (updateSession)
+//	update-user.go:          UpdateUser (updateUser), ChangeEmail (changeEmail),
+//	                         DeleteUser (deleteUser), ChangePassword (changePassword)
 //	sign-in.go:              SignInEmail (signInEmail)
-///	sign-out.go:             SignOut (signOut)
+//	sign-out.go:             SignOut (signOut)
 //	sign-up.go:              SignUpEmail (signUpWithEmailAndPassword)
 //
 //	V1 SCOPE (auth/SCOPE.md): social auth is explicitly out of scope.
@@ -53,38 +56,17 @@ package routes
 //	`delete-user-callback.go`. The stale catalog line below is kept
 //	for archaeology only and does not describe a present registrar:
 //
-// Intentional Go splits (same package, no import impact). Consolidation
-// toward the single-file TS owners was evaluated and deliberately deferred:
-// each `*_extra.go` / `session-c701.go` file compiles in the same `routes`
-// package, so a merge would be behavior-neutral but high-churn, and the
-// split keeps blame/review history stable. The TS ownership for future
-// merges is:
+// File structure is 1:1 with the upstream TS owners (B8 alignment):
+// `password-extra.go` merged into `password.go`, `session-extra.go` +
+// `session-c701.go` merged into `session.go`, the update-user family split
+// out of `account.go` into `update-user.go` (ChangePassword moved from
+// `password.go`). All same-package moves, no behavior change.
+// Deliberately NOT mirrored: rate-limiter impl stays in the parent `api`
+// package (folding it into `api/rate-limiter/` would cycle `api`<->child),
+// and `crypto/symmetric.go` keeps its descriptive name instead of swapping
+// with the package-doc `index.go`.
 //
-//   - `account_extra.go` -> `account.ts` (token refresh, account info,
-//     link/unlink social). Helpers (`decryptOAuthToken`, `loadUserAccount`,
-//     `refreshAccountTokens`, `validAccountAccessToken`, `requireSessionUser`)
-//     stay shared until a merge.
-//   - `password-extra.go` -> `password.ts` (verify-password) and the
-//     reset-password callback redirect (upstream `password.ts` callback
-//     route). `resetTokenValid` / `appendRedirectQuery` stay shared.
-//   - `session-c701.go` -> `session.ts` (cookie-cache issuance/refresh with
-//     request context, upstream `session.ts` + `cookies/*` + JWT plugin
-//     `cookie-cache.ts`). `session-extra.go` -> `session.ts` (revoke
-//     variants) and `update-session.ts` (`UpdateSession`).
-//   - `social.go` -> `sign-in.ts` (`SignInSocial`) + `callback.ts`
-//     (`CallbackOAuth` GET+POST). V1-EXCLUDED (auth/SCOPE.md): no such
-//     registrar in tree; `callback.go` is the exclusion stub. Do not re-add
-//     without a scope change.
-//   - `delete-user-callback.go` -> `callback.ts` side (`DeleteUserCallback`)
-//     alongside `update-user.ts` ownership of `DeleteUser`.
-//   - `hooks.go` -> `src/api/dispatch.go` + `src/api/to-auth-endpoints.go`
-//     (hook pipeline, endpoint metadata, request-state stores, dynamic
-//     baseURL); the Go-only Huma plumbing (`registerAuthOperation`,
-//     `callRouteAPIErrorHandler`) stays here. The `api`-package facades
-//     delegate to (never duplicate) these helpers because `api` already
-//     imports `routes` and the reverse import would cycle.
-//
-// Go-only support files with no TS route counterpart (kept, not mapped):
+//// Go-only support files with no TS route counterpart (kept, not mapped):
 //
 //   - `generate-id.go` (model ID minting honoring `Advanced.Database.
 //     GenerateID).

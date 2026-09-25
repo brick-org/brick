@@ -88,16 +88,15 @@ documented splits (see §Structure).
 - 1:1 exact: `ok`, `error`, `sign-in` (email), `sign-out`, `sign-up`,
   `email-verification`, `callback` (exclusion stub), `routes/index`,
   all 5 `cookies/*`, `types/*` (7), `middlewares/*`, `state/should-session-refresh`.
-- Documented splits (keep, behavior-neutral): `update-user.ts` →
-  `account.go`+`delete-user-callback.go`+`password.go`(ChangePassword);
-  `password.ts` → `password.go`+`password-extra.go`; `session.ts` →
-  `session.go`+`session-extra.go`+`session-c701.go`; `update-session.ts` →
-  `session-extra.go`; `rate-limiter/index.ts` → parent `rate-limiter.go`+stub;
+- Merged 1:1 (B8, same package): `update-user.ts` → `update-user.go` +
+  `delete-user-callback.go` (+ `account.go` ListUserAccounts);
+  `password.ts` → `password.go`; `session.ts` + `update-session.ts` →
+  `session.go`; `rate-limiter/index.ts` → parent `rate-limiter.go`+stub;
   `db/*` remainder → root `schema.go`/`hooked_adapter.go`/`adapters/bun`;
   `context/*` → root `index.go`/`secrets.go`/telemetry/instrumentation.
 - Go-only (keep): `generate-id.go`, `schema-fields.go`, `hooks.go`,
   crypto `email-verification/jwe/pkce/token`, types
-  `email_password/oauth/trusted_origins/dpop`.
+  `email-password/oauth/trusted-origins/dpop`.
 - Excluded by decision (no counterpart): `api/state/oauth.ts`, plugins,
   social-providers, oauth2, client, adapters beyond Bun, integrations,
   `state.ts` (social-only).
@@ -132,11 +131,18 @@ Bun/SQLite/PG, custom JWKS signer, `integrations/*`, `test-utils/*` harness.
   (403 trust, F2-leg realign) + sign-up minors (disabled code, synthetic
   scope, mint-before-send). F8 gap 10 CLOSED (stateless defu + baseURL
   warn). F10 gap 14 helpers CLOSED (reserve, typed duplicate, consume
-  fallback helper; route call-site swap left for routes owner). F11 gap
+  fallback helper). F11 gap
   15 CLOSED (GetDate, TimeString, IsAPIError; keccak/clone excluded).
-  Full gate 13/13 green. Remaining: F10 route call-site swap
-  (password.go, account.go, email-verification.go ->
-  db.ConsumeOneWithFallback), B8 docs/renames.
+  Full gate 13/13 green.
+- F10 call-site swap CLOSED centrally: reset + delete-token consumes run
+  through db.ConsumeOneWithFallback (dual-key preserved, fail-safe;
+  B5/C5 pins cover the new path). email-verification cleanup deletes are
+  plain row deletes with no race gate to swap — left as-is by design.
+- B8 file-structure CLOSED: password-extra/session-extra/session-c701
+  merged, update-user.go extracted (incl. ChangePassword), kebab-case
+  type files, catalog + SCOPE maps updated. Deliberately unmirrored:
+  rate-limiter parent impl (import cycle), crypto/symmetric.go name
+  (descriptive over barrel mirroring), frozen *.gen.go suffix.
 
 ## Proposed fix batches (v1 release)
 

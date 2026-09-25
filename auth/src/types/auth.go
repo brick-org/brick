@@ -1206,17 +1206,17 @@ type Options struct {
 
 	// EmailAndPassword configures credential auth (upstream
 	// emailAndPassword, init-options.ts:791). See per-field owners in
-	// email_password.go.
+	// email-password.go.
 	// Runtime: wired:auth/api/routes/sign_up.go:42 (enable gate).
 	EmailAndPassword EmailAndPasswordOptions
 	// EmailVerification configures verification email flows (upstream
 	// emailVerification, init-options.ts:716). See per-field owners in
-	// email_password.go.
+	// email-password.go.
 	// Runtime: wired:auth/api/routes/email_verification.go:91.
 	EmailVerification EmailVerificationOptions
 	// Session configures session lifetime/refresh/storage (upstream
 	// session, init-options.ts:1050). See per-field owners in
-	// email_password.go.
+	// email-password.go.
 	// Runtime: wired:auth/api/routes/session.go:366 (expiry/refresh).
 	Session SessionOptions
 	// User configures user model, admission gate, and lifecycle flows

@@ -66,19 +66,19 @@ upstream Better Auth (TS) directly.
 Upstream module → Go counterpart. Splits are documented, never phantom:
 
 - `api/routes/account.ts` → `src/api/routes/account.go` (list-accounts)
-- `api/routes/update-user.ts` → `src/api/routes/account.go` (UpdateUser,
-  ChangeEmail, DeleteUser) + `delete-user-callback.go` (DeleteUserCallback)
-  + `password.go` (ChangePassword lives here, not in `account.go`)
+- `api/routes/update-user.ts` → `src/api/routes/update-user.go` (UpdateUser,
+  ChangeEmail, DeleteUser, ChangePassword) + `account.go` (ListUserAccounts)
+  + `delete-user-callback.go` (DeleteUserCallback)
 - `api/routes/callback.ts` → `src/api/routes/callback.go` (v1-excluded stub;
   social `CallbackOAuth` never registered)
 - `api/routes/email-verification.ts` → `email-verification.go`
 - `api/routes/error.ts` → `error.go`
 - `api/routes/ok.ts` → `ok.go`
-- `api/routes/password.ts` → `password.go` + `password-extra.go`
-  (VerifyPassword, reset-password callback)
-- `api/routes/session.ts` → `session.go` + `session-extra.go`
-  (revoke variants, UpdateSession) + `session-c701.go` (cookie-cache issuance)
-- `api/routes/update-session.ts` → `session-extra.go` (UpdateSession)
+- `api/routes/password.ts` → `password.go`
+  (VerifyPassword, reset-password callback, server-only `SetPassword`)
+- `api/routes/session.ts` → `session.go`
+  (get/list/revoke, cookie-cache issuance, UpdateSession)
+- `api/routes/update-session.ts` → `session.go` (UpdateSession)
 - `api/routes/sign-in.ts` (email leg) → `sign-in.go` (social leg excluded)
 - `api/routes/sign-out.ts` → `sign-out.go`
 - `api/routes/sign-up.ts` → `sign-up.go`
@@ -88,8 +88,16 @@ Upstream module → Go counterpart. Splits are documented, never phantom:
 
 Go-only (no TS counterpart, kept): `generate-id.go`, `schema-fields.go`,
 `hooks.go`, `api/dispatch.go`, `api/to-auth-endpoints.go`.
-Merges of the `*-extra.go` / `session-c701.go` splits into single-file TS
-owners are deferred as high-churn, behavior-neutral (see `index.go`).
+1:1 structure completed in the v3 fix round (B8): `password-extra.go` merged
+into `password.go`, `session-extra.go` + `session-c701.go` merged into
+`session.go`, update-user family extracted from `account.go` into
+`update-user.go` (ChangePassword moved from `password.go`), kebab-case
+`email-password.go` / `trusted-origins.go`. Deliberately NOT mirrored:
+rate-limiter impl stays in parent `api` package (folding it into
+`api/rate-limiter/` would cycle `api`↔child), `crypto/symmetric.go` keeps its
+descriptive name instead of swapping with the package-doc `index.go`
+(TS barrel convention doesn't map to Go), frozen `*.gen.go` artifacts keep
+their suffix.
 
 ## Explicit v1 exclusions within core files
 

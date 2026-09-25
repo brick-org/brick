@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"encoding/json"
 	"github.com/brick-org/brick/auth/src/crypto"
 	"github.com/brick-org/brick/auth/src/db"
 	"github.com/brick-org/brick/auth/src/types"
@@ -364,167 +365,6 @@ func ResetPassword(api huma.API, basePath string, opts types.Options) {
 	})
 }
 
-// --- change-password ---
-
-type changePasswordInput struct {
-	Authorization string `header:"Authorization"`
-	Cookie        string `header:"Cookie"`
-	CookieRequestHeaders
-	Body          struct {
-		CurrentPassword string `json:"currentPassword" required:"true"`
-		NewPassword     string `json:"newPassword" required:"true"`
-		// RevokeOtherSessions mirrors upstream's revokeOtherSessions
-		// (update-user.ts:169-175): when true, all sessions for the user are
-		// deleted and a fresh session is minted, its token returned.
-		RevokeOtherSessions *bool `json:"revokeOtherSessions,omitempty"`
-	}
-}
-
-type changePasswordOutput struct {
-	SetCookie []http.Cookie `header:"Set-Cookie"`
-	Body struct {
-		Status bool      `json:"status"`
-		Token  *string   `json:"token"`
-		User   *flatUser `json:"user,omitempty"`
-	}
-}
-
-// ChangePassword registers POST /change-password.
-func ChangePassword(api huma.API, basePath string, opts types.Options) {
-	registerAuthOperation(api, huma.Operation{
-		Tags:        []string{"Auth"},
-		Method:      http.MethodPost,
-		Path:        basePath + "/change-password",
-		OperationID: "changePassword",
-		Summary:     "Change password for authenticated user",
-	}, opts, func(ctx context.Context, input *changePasswordInput) (*changePasswordOutput, error) {
-		token := sessionTokenFromRequest(input.Cookie, input.Authorization, opts)
-		if token == "" {
-			return nil, huma.NewError(types.StatusForCode(types.ErrFailedToGetSession), types.ErrFailedToGetSession)
-		}
-
-		sessionRow, err := opts.DB.FindOne(ctx, "session", []types.Where{
-			{Field: "token", Value: token},
-		}, nil)
-		if err != nil || sessionRow == nil {
-			// Kept 401 (differs from StatusForCode 400): expired-session auth
-			// guard, matching upstream's 401-for-auth-failures convention. The
-			// sole BAD_REQUEST throw site (update-user.ts:543) covers
-			// delete-user freshness, which stays 400 (see DeleteUser).
-			return nil, huma.Error401Unauthorized(types.ErrSessionExpired)
-		}
-
-		userID, _ := sessionRow["userId"].(string)
-
-		// Upstream validates the new password length before touching the
-		// credential account (update-user.ts:254-264).
-		if len(input.Body.NewPassword) < passwordMinLength(opts) {
-			return nil, huma.NewError(types.StatusForCode(types.ErrPasswordTooShort), types.ErrPasswordTooShort)
-		}
-		if len(input.Body.NewPassword) > passwordMaxLength(opts) {
-			return nil, huma.NewError(types.StatusForCode(types.ErrPasswordTooLong), types.ErrPasswordTooLong)
-		}
-
-		accountRow, err := opts.DB.FindOne(ctx, "account", []types.Where{
-			{Field: "userId", Value: userID},
-			{Field: "providerId", Value: "credential", Connector: "AND"},
-		}, nil)
-		if err != nil || accountRow == nil {
-			// Upstream throws BAD_REQUEST for a missing credential account
-			// (update-user.ts:271-274 set-password, :478-481 delete-user);
-			// StatusForCode pins 400.
-			return nil, huma.NewError(types.StatusForCode(types.ErrCredentialAccountNotFound), types.ErrCredentialAccountNotFound)
-		}
-
-		// Upstream hashes the new password before verifying the current one
-		// (update-user.ts:276-283): a hashing failure breaks before any
-		// comparison.
-		hash, err := hashPassword(opts, input.Body.NewPassword)
-		if err != nil {
-			return nil, huma.Error500InternalServerError("failed to hash password")
-		}
-
-		storedHash, _ := accountRow["password"].(string)
-		valid, verifyErr := verifyPassword(opts, storedHash, input.Body.CurrentPassword)
-		if verifyErr != nil {
-			return nil, huma.Error500InternalServerError("failed to verify password")
-		}
-		if !valid {
-			return nil, huma.NewError(types.StatusForCode(types.ErrInvalidPassword), types.ErrInvalidPassword)
-		}
-
-		now := time.Now().UTC()
-		_, err = opts.DB.Update(ctx, "account", []types.Where{
-			{Field: "userId", Value: userID},
-			{Field: "providerId", Value: "credential", Connector: "AND"},
-		}, map[string]any{
-			"password":  hash,
-			"updatedAt": now,
-		})
-		if err != nil {
-			return nil, huma.Error500InternalServerError("failed to update password")
-		}
-
-		out := &changePasswordOutput{}
-		out.Body.Status = true
-		// revokeOtherSessions (update-user.ts:288-305): delete all sessions,
-		// mint a fresh one, and return its token plus the user. The Status
-		// field stays true so existing clients keep working.
-		// Non-revoke (update-user.ts:287,304,307-310): token null plus the
-		// user; Status stays true as a compat field.
-		if input.Body.RevokeOtherSessions != nil && *input.Body.RevokeOtherSessions {
-			// Secondary-aware bulk revoke (upstream deleteUserSessions,
-			// update-user.ts:289): cache entries go first per the flag
-			// matrix so secondary copies don't survive; without a
-			// secondary backend this is exactly the DeleteMany below.
-			if err := deleteSecondaryAwareUserSessions(ctx, opts, userID); err != nil {
-				return nil, huma.Error500InternalServerError("failed to revoke sessions")
-			}
-			newToken := crypto.GenerateID()
-			newExpires := now.Add(opts.Session.ExpiresInDuration())
-			session, serr := createIssuedSession(ctx, opts, userID, newToken, newExpires, now)
-			if serr != nil {
-				return nil, huma.NewError(types.StatusForCode(types.ErrFailedToGetSession), types.ErrFailedToGetSession)
-			}
-			userRow, uerr := opts.DB.FindOne(ctx, "user", []types.Where{
-				{Field: "id", Value: userID},
-			}, nil)
-			if uerr != nil || userRow == nil {
-				return nil, huma.NewError(types.StatusForCode(types.ErrUserNotFound), types.ErrUserNotFound)
-			}
-			user := rowToUser(userRow, opts)
-			if serr := writeSecondarySession(opts, session, user); serr != nil {
-				return nil, huma.NewError(types.StatusForCode(types.ErrFailedToCreateSession), types.ErrFailedToCreateSession)
-			}
-			// Upstream setSessionCookie(newSession) (update-user.ts:300-303):
-			// cookie-only clients need the replacement session cookie, not
-			// just the in-body token. A mint failure fails the route 500
-			// (FAILED_TO_CREATE_SESSION, canonical 500); the already-minted
-			// session row is kept (upstream create-then-cookie order, no
-			// rollback).
-			cookiesOut, cookieErr := newSessionCookies(opts, input.CookieRequestHeaders, newToken, session, user, opts.Session, now)
-			if cookieErr != nil {
-				return nil, huma.NewError(types.StatusForCode(types.ErrFailedToCreateSession), types.ErrFailedToCreateSession)
-			}
-			out.SetCookie = cookiesOut
-			out.Body.Token = &newToken
-			flat := flatUser(user)
-			out.Body.User = &flat
-		} else {
-			userRow, uerr := opts.DB.FindOne(ctx, "user", []types.Where{
-				{Field: "id", Value: userID},
-			}, nil)
-			if uerr != nil || userRow == nil {
-				return nil, huma.NewError(types.StatusForCode(types.ErrUserNotFound), types.ErrUserNotFound)
-			}
-			user := rowToUser(userRow, opts)
-			flat := flatUser(user)
-			out.Body.User = &flat
-		}
-		return out, nil
-	})
-}
-
 var errResetTokenNotFound = errors.New("reset token not found")
 
 // consumeResetPasswordToken atomically consumes the single-use verification
@@ -631,4 +471,238 @@ func consumeResetPasswordToken(ctx context.Context, opts types.Options, token st
 		return "", "", types.ErrInvalidToken, http.StatusBadRequest
 	}
 	return "", strings.ToLower(email), "", http.StatusOK
+}
+
+// Merged from password-extra.go (upstream password.ts: VerifyPassword,
+// reset-password callback, SetPassword server-only). Same package, no
+// behavior change (B8 file-structure alignment).
+
+type verifyPasswordInput struct {
+	Authorization string `header:"Authorization"`
+	Cookie        string `header:"Cookie"`
+	Body          struct {
+		Password string `json:"password" required:"true"`
+	}
+}
+
+type verifyPasswordOutput struct {
+	Body struct {
+		Status bool `json:"status"`
+	}
+}
+
+// VerifyPassword registers POST /verify-password.
+func VerifyPassword(api huma.API, basePath string, opts types.Options) {
+	registerAuthOperation(api, huma.Operation{
+		Tags:        []string{"Auth"},
+		Method:      http.MethodPost,
+		Path:        basePath + "/verify-password",
+		OperationID: "verifyPassword",
+		Summary:     "Verify the current user's password",
+	}, opts, func(ctx context.Context, input *verifyPasswordInput) (*verifyPasswordOutput, error) {
+		token := sessionTokenFromRequest(input.Cookie, input.Authorization, opts)
+		if token == "" {
+			return nil, huma.NewError(types.StatusForCode(types.ErrFailedToGetSession), types.ErrFailedToGetSession)
+		}
+
+		sessionRow, _, _, err := loadSessionAndUser(ctx, opts, token)
+		if err != nil {
+			if errors.Is(err, errSessionExpired) {
+				// Kept 401 (differs from StatusForCode 400): expired-session
+				// auth guard; see the note in ChangePassword.
+				return nil, huma.Error401Unauthorized(types.ErrSessionExpired)
+			}
+			return nil, huma.NewError(types.StatusForCode(types.ErrFailedToGetSession), types.ErrFailedToGetSession)
+		}
+
+		userID := stringField(sessionRow, "user_id", "userId")
+		accountRow, err := opts.DB.FindOne(ctx, "account", []types.Where{
+			{Field: "userId", Value: userID},
+			{Field: "providerId", Value: "credential", Connector: "AND"},
+		}, nil)
+		if err != nil || accountRow == nil {
+			return nil, huma.NewError(types.StatusForCode(types.ErrInvalidPassword), types.ErrInvalidPassword)
+		}
+
+		storedHash, _ := accountRow["password"].(string)
+		valid, verifyErr := verifyPassword(opts, storedHash, input.Body.Password)
+		if verifyErr != nil {
+			return nil, huma.Error500InternalServerError("failed to verify password")
+		}
+		if storedHash == "" || !valid {
+			return nil, huma.NewError(types.StatusForCode(types.ErrInvalidPassword), types.ErrInvalidPassword)
+		}
+
+		out := &verifyPasswordOutput{}
+		out.Body.Status = true
+		return out, nil
+	})
+}
+
+// RequestPasswordResetCallback registers GET /reset-password/{token}.
+// Upstream redirects the user to the callback URL with the token appended, or
+// to an error URL with ?error=INVALID_TOKEN when the token is missing,
+// expired, or unknown.
+func RequestPasswordResetCallback(api huma.API, basePath string, opts types.Options) {
+	op := &huma.Operation{
+		Tags:        []string{"Auth"},
+		Method:      http.MethodGet,
+		Path:        basePath + "/reset-password/{token}",
+		OperationID: "resetPasswordCallback",
+		Summary:     "Redirect the user to the password reset callback URL",
+	}
+
+	api.Adapter().Handle(op, func(ctx huma.Context) {
+		token := ctx.Param("token")
+		callbackURL := ctx.Query("callbackURL")
+
+		// Authoritative per-request error URL (upstream parseState).
+		defaultErrorURL := DefaultErrorURLWithHuma(ctx, opts)
+
+		// Headers must be set BEFORE SetStatus (which calls WriteHeader immediately).
+		redirect := func(location string) {
+			ctx.SetHeader("Location", location)
+			ctx.SetStatus(http.StatusFound)
+		}
+
+		reqForTrust := StoredRequestFromStd(ctx.Context())
+		if reqForTrust == nil {
+			reqForTrust = RequestFromHuma(ctx)
+		}
+		// Upstream originCheck guards the query callbackURL
+		// (origin-check.ts, password.ts:162): an untrusted value fails with
+		// 403 INVALID_CALLBACK_URL instead of redirecting with INVALID_TOKEN.
+		if callbackURL != "" && !types.IsTrustedRedirect(callbackURL, opts, reqForTrust) {
+			payload, _ := json.Marshal(map[string]any{
+				"status": http.StatusForbidden,
+				"title":  http.StatusText(http.StatusForbidden),
+				"detail": types.ErrInvalidCallbackURL,
+			})
+			ctx.SetHeader("Content-Type", "application/json")
+			ctx.SetStatus(http.StatusForbidden)
+			_, _ = ctx.BodyWriter().Write(payload)
+			return
+		}
+
+		errorBase := defaultErrorURL
+		if callbackURL != "" && types.IsTrustedRedirect(callbackURL, opts, reqForTrust) {
+			errorBase = callbackURL
+		}
+		redirectInvalid := func() {
+			redirect(appendRedirectQuery(errorBase, "error", "INVALID_TOKEN"))
+		}
+
+		if token == "" || callbackURL == "" {
+			redirectInvalid()
+			return
+		}
+
+		if !resetTokenValid(ctx.Context(), opts, token) {
+			redirectInvalid()
+			return
+		}
+
+		redirect(appendRedirectQuery(callbackURL, "token", token))
+	})
+}
+
+// resetTokenValid reports whether token is a live password-reset token.
+// It accepts upstream-style single-use verification rows
+// (identifier "reset-password:<token>", resolved across both stores with the
+// store-identifier option) as well as the legacy signed email
+// tokens issued by POST /request-password-reset. The token is not consumed
+// here; consumption happens in POST /reset-password.
+func resetTokenValid(ctx context.Context, opts types.Options, token string) bool {
+	if row, err := findResetVerification(ctx, opts, token); err == nil && row != nil {
+		return true
+	}
+	_, err := crypto.VerifyTokenAny(opts.AllSecrets(), token)
+	return err == nil
+}
+
+func resetPasswordIdentifier(token string) string {
+	return "reset-password:" + token
+}
+
+// isVerificationLive reports whether a verification expiry is still in the future.
+func isVerificationLive(expiresAt time.Time) bool {
+	return !expiresAt.IsZero() && !time.Now().UTC().After(expiresAt)
+}
+
+func appendRedirectQuery(rawURL, key, value string) string {
+	sep := "?"
+	if strings.Contains(rawURL, "?") {
+		sep = "&"
+	}
+	return rawURL + sep + url.QueryEscape(key) + "=" + url.QueryEscape(value)
+}
+
+// --- set-password (server-only) ---
+
+// SetPassword is the server-only counterpart of upstream `setPassword`
+// (update-user.ts:314-368, `createAuthEndpoint.serverOnly`): it sets the
+// password on the caller's existing passwordless credential account and
+// reports `{status: true}`. There is intentionally no HTTP route — upstream
+// exposes it only as `auth.api.setPassword`, so Go callers invoke this
+// function with the already-authenticated user ID (the sensitive-session
+// gate lives at the HTTP layer and has no server-only equivalent).
+//
+// Behavior mirrors upstream exactly: length gates with warn logs, link a new
+// credential account when none exists, fill a null password, and reject an
+// already-set password with PASSWORD_ALREADY_SET. Errors are
+// types.HttpError values carrying the canonical status.
+func SetPassword(ctx context.Context, opts types.Options, userID, newPassword string) (bool, error) {
+	if len(newPassword) < passwordMinLength(opts) {
+		Logf(opts, "warn", "Password is too short")
+		return false, types.NewHttpError(types.ErrPasswordTooShort)
+	}
+	if len(newPassword) > passwordMaxLength(opts) {
+		Logf(opts, "warn", "Password is too long")
+		return false, types.NewHttpError(types.ErrPasswordTooLong)
+	}
+	if opts.DB == nil {
+		return false, types.NewHttpError(types.ErrFailedToGetSession)
+	}
+	accountRow, err := opts.DB.FindOne(ctx, "account", []types.Where{
+		{Field: "userId", Value: userID},
+		{Field: "providerId", Value: "credential", Connector: "AND"},
+	}, nil)
+	if err != nil {
+		return false, err
+	}
+	hash, err := hashPassword(opts, newPassword)
+	if err != nil {
+		return false, err
+	}
+	now := time.Now().UTC()
+	if accountRow == nil {
+		credentialID, credentialHasID := mintModelID(opts, "account")
+		credentialData := map[string]any{
+			"userId":     userID,
+			"providerId": "credential",
+			"accountId":  userID,
+			"password":   hash,
+			"createdAt":  now,
+			"updatedAt":  now,
+		}
+		setRowID(credentialData, credentialID, credentialHasID)
+		if _, err := opts.DB.Create(ctx, "account", credentialData, nil); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	stored, _ := accountRow["password"].(string)
+	if stored != "" {
+		return false, types.NewHttpError(types.ErrPasswordAlreadySet)
+	}
+	if _, err := opts.DB.Update(ctx, "account", []types.Where{
+		{Field: "userId", Value: userID},
+		{Field: "providerId", Value: "credential", Connector: "AND"},
+	}, map[string]any{
+		"password":  hash,
+		"updatedAt": now,
+	}); err != nil {
+		return false, err
+	}
+	return true, nil
 }

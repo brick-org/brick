@@ -5,9 +5,12 @@
 //
 // File map:
 //   - buffer.go mirrors crypto/buffer.ts (constant-time comparison).
-//   - jwt.go mirrors crypto/jwt.ts (HS256 sign/verify plus the JWE key
-//     derivation and thumbprint helpers used by the session/account cookie
-//     codecs).
+//   - jwt.go mirrors the JWT-plugin surface (EdDSA/ES*/RS*/PS* + JWKS,
+//     kid-selected fail-closed); the crypto/jwt.ts HS256 sign/verify used by
+//     core lives in email-verification.go (short-secret-safe stdlib HMAC)
+//     and cookies/jwt.go (session-cache JWT codec), not here.
+//   - jwe.go carries the JWE key derivation and thumbprint helpers used by
+//     the session/account cookie codecs.
 //   - password.go mirrors crypto/password.ts (scrypt hash/verify).
 //   - random.go mirrors crypto/random.ts (identifier and token randomness).
 //   - symmetric.go mirrors crypto/index.ts (XChaCha20 symmetricEncrypt /

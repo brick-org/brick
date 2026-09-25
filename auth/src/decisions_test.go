@@ -123,7 +123,7 @@ func TestDecisions_D03_PKCEPlainRejected(t *testing.T) {
 // D04: IDNA/punycode.
 // Upstream canonicalizes hosts via URL parsing; Go lowercases only and
 // applies no punycode conversion because golang.org/x/net/idna is not in
-// auth/go.mod (auth/types/trusted_origins.go:399). The gap is fail-closed:
+// auth/go.mod (auth/types/trusted-origins.go:399). The gap is fail-closed:
 // unicode and xn-- spellings never match each other.
 // Intentional exclusion: no new dependency. Removal policy: revisit only
 // with cross-language fixtures proving both spellings match correctly.
