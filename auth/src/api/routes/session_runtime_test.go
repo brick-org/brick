@@ -43,7 +43,7 @@ func seedSessionUser(t *testing.T, db *parityMemAdapter, email, token string, ex
 func sessionTestOptions(db *parityMemAdapter) types.Options {
 	opts := parityTestOptions(db)
 	opts.Session.ExpiresIn = 3600
-	opts.Session.UpdateAge = 60
+	opts.Session.UpdateAge = intPtr(60)
 	return opts
 }
 

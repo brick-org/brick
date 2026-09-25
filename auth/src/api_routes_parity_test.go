@@ -31,7 +31,7 @@ func newParityHTTPServer(t *testing.T, opts auth.Options) (*httptest.Server, aut
 func TestParity_VerifyEmailGetRedirectsOnSuccessAndError(t *testing.T) {
 	var verificationToken string
 	srv, _ := newParityHTTPServer(t, auth.Options{
-		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 3600},
+		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(3600)},
 		EmailAndPassword: auth.EmailAndPasswordOptions{
 			Enabled: true,
 		},
@@ -86,7 +86,7 @@ func TestParity_VerifyEmailGetRedirectsOnSuccessAndError(t *testing.T) {
 func TestParity_VerifyEmailGetReturnsUserWithoutCallback(t *testing.T) {
 	var verificationToken string
 	srv, _ := newParityHTTPServer(t, auth.Options{
-		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 3600},
+		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(3600)},
 		EmailAndPassword: auth.EmailAndPasswordOptions{
 			Enabled: true,
 		},
@@ -131,7 +131,7 @@ func TestParity_VerifyEmailGetReturnsUserWithoutCallback(t *testing.T) {
 func TestParity_VerifyEmailPostAliasStillWorks(t *testing.T) {
 	var verificationToken string
 	srv, _ := newParityHTTPServer(t, auth.Options{
-		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 3600},
+		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(3600)},
 		EmailAndPassword: auth.EmailAndPasswordOptions{
 			Enabled: true,
 		},
@@ -176,7 +176,7 @@ func TestParity_VerifyEmailPostAliasStillWorks(t *testing.T) {
 
 func TestParity_SendVerificationEmailUnauthenticatedFloor(t *testing.T) {
 	srv, _ := newParityHTTPServer(t, auth.Options{
-		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 3600},
+		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(3600)},
 		EmailAndPassword: auth.EmailAndPasswordOptions{
 			Enabled: true,
 		},
@@ -203,7 +203,7 @@ func TestParity_SendVerificationEmailUnauthenticatedFloor(t *testing.T) {
 func TestParity_PasswordResetSingleUseDBToken(t *testing.T) {
 	var resetToken, resetURL string
 	srv, _ := newParityHTTPServer(t, auth.Options{
-		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 3600},
+		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(3600)},
 		EmailAndPassword: auth.EmailAndPasswordOptions{
 			Enabled: true,
 			SendResetPassword: func(data auth.ResetPasswordData) error {
@@ -254,7 +254,7 @@ func TestParity_PasswordResetSingleUseDBToken(t *testing.T) {
 func TestParity_PasswordResetAcceptsQueryToken(t *testing.T) {
 	var resetToken string
 	srv, _ := newParityHTTPServer(t, auth.Options{
-		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 3600},
+		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(3600)},
 		EmailAndPassword: auth.EmailAndPasswordOptions{
 			Enabled: true,
 			SendResetPassword: func(data auth.ResetPasswordData) error {
@@ -288,7 +288,7 @@ func TestParity_PasswordResetAcceptsQueryToken(t *testing.T) {
 func TestParity_PasswordResetRedirectToFlow(t *testing.T) {
 	var resetURL string
 	srv, _ := newParityHTTPServer(t, auth.Options{
-		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 3600},
+		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(3600)},
 		EmailAndPassword: auth.EmailAndPasswordOptions{
 			Enabled: true,
 			SendResetPassword: func(data auth.ResetPasswordData) error {

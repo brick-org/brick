@@ -70,7 +70,7 @@ func TestV1_SessionTokenMaxAgeRefreshCeiling(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := sessionTestOptions(db)
 	opts.Session.ExpiresIn = ceiling
-	opts.Session.UpdateAge = 30
+	opts.Session.UpdateAge = intPtr(30)
 	// Due session so GET performs the refresh write + cookie re-issue.
 	seedSessionUser(t, db, "ceiling@example.com", "tok-ceiling", time.Now().UTC().Add(30*time.Second))
 	_, api := humatest.New(t, huma.DefaultConfig("Test", "1.0.0"))

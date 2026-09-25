@@ -32,7 +32,7 @@ func TestF4_ExplicitZeroAlwaysRefresh(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := sessionTestOptions(db)
 	opts.Session.ExpiresIn = 3600
-	opts.Session.UpdateAge = 0 // explicit 0 => always-refresh upstream
+	opts.Session.UpdateAge = intPtr(0) // explicit 0 => always-refresh upstream
 	// Fresh session: just minted, expires in full ExpiresIn window.
 	seedSessionUser(t, db, "f4-always@example.com", "tok-f4-always", time.Now().UTC().Add(3600*time.Second))
 	_, _, refreshed, _, err := loadSessionWithRefresh(ctx, opts, "tok-f4-always", sessionRefreshConfig{})

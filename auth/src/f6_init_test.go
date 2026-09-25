@@ -141,7 +141,7 @@ func TestF6DefuNestedStructMerge(t *testing.T) {
 	a := mustBetterAuth(t, auth.Options{
 		Secret:  f6Secret,
 		Adapter: adapter,
-		Session: types.SessionOptions{UpdateAge: 100},
+		Session: types.SessionOptions{UpdateAge: intPtr(100)},
 		Plugins: []auth.Plugin{
 			&f6ObserverPlugin{
 				id:           "session-merger",
@@ -150,7 +150,7 @@ func TestF6DefuNestedStructMerge(t *testing.T) {
 		},
 	})
 	sess := a.Context.Options.Session
-	if sess.UpdateAge != 100 || sess.ExpiresIn != 999 {
+	if sess.UpdateAge == nil || *sess.UpdateAge != 100 || sess.ExpiresIn != 999 {
 		t.Fatalf("nested defu must merge both sides, got %+v", sess)
 	}
 }
@@ -228,7 +228,7 @@ func TestF6DefuScalarZeroValueDeviation(t *testing.T) {
 		Secret:           f6Secret,
 		Adapter:          adapter,
 		EmailAndPassword: types.EmailAndPasswordOptions{Enabled: false},
-		Session:          types.SessionOptions{UpdateAge: 0},
+		Session:          types.SessionOptions{},
 		TrustedOrigins:   nil,
 		Plugins: []auth.Plugin{
 			&f6ObserverPlugin{

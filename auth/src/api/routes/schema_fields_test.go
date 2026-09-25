@@ -15,6 +15,8 @@ var (
 
 func boolPtr(v bool) *bool { return &v }
 
+func intPtr(v int) *int { return &v }
+
 func testSessionFullFields() map[string]types.FieldAttribute {
 	return map[string]types.FieldAttribute{
 		"token":     {Type: types.FieldTypeString},

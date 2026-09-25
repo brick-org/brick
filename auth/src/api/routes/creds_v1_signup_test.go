@@ -141,7 +141,7 @@ func TestCredsV1_SignUpMissingPasswordIsClientError(t *testing.T) {
 func TestCredsV1_SignUpVerificationURLEncoding(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
-	opts.EmailVerification.SendOnSignUp = true
+	opts.EmailVerification.SendOnSignUp = boolPtr(true)
 	var capturedURL, capturedToken string
 	opts.EmailVerification.SendVerificationEmail = func(data types.VerificationEmailData) error {
 		capturedURL, capturedToken = data.URL, data.Token

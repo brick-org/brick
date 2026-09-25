@@ -27,7 +27,7 @@ func TestSignupHook_PostCommitFailureSurfacesHookCode(t *testing.T) {
 		Secret:  "test-secret",
 		Adapter: adapter,
 		DB:      authbun.New(db, authbun.Config{}),
-		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 1},
+		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(1)},
 		EmailAndPassword: auth.EmailAndPasswordOptions{
 			Enabled: true,
 		},

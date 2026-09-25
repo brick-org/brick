@@ -965,10 +965,7 @@ func resolveRateLimitContext(opts Options) types.ResolvedRateLimit {
 // 86400 (1 day), expiresIn 604800 (7 days), freshAge 86400 unless explicitly
 // set (an explicit 0 disables the freshness check).
 func resolveSessionConfig(opts Options) types.ResolvedSessionConfig {
-	updateAge := opts.Session.UpdateAge
-	if updateAge == 0 {
-		updateAge = 24 * 60 * 60
-	}
+	updateAge := types.ResolveUpdateAgeSeconds(opts.Session.UpdateAge)
 	expiresIn := opts.Session.ExpiresIn
 	if expiresIn == 0 {
 		expiresIn = 60 * 60 * 24 * 7

@@ -70,7 +70,7 @@ func noRedirectClient() *http.Client {
 
 func baseTestOptions() auth.Options {
 	return auth.Options{
-		Session:          auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 3600},
+		Session:          auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(3600)},
 		EmailAndPassword: auth.EmailAndPasswordOptions{Enabled: true},
 	}
 }
@@ -270,7 +270,7 @@ func TestVerifyPassword_AcceptsCurrentPassword(t *testing.T) {
 func TestDeleteUserCallback_DeletesUserWithRedirect(t *testing.T) {
 	var sent auth.DeleteAccountVerificationData
 	srv, db := newMemoryAuthServer(t, auth.Options{
-		Session:          auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 3600},
+		Session:          auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(3600)},
 		EmailAndPassword: auth.EmailAndPasswordOptions{Enabled: true},
 		User: auth.UserOptions{
 			DeleteUser: auth.DeleteUserOptions{
@@ -324,7 +324,7 @@ func TestDeleteUserCallback_DeletesUserWithRedirect(t *testing.T) {
 func TestDeleteUserCallback_JSONSuccessAndInvalidToken(t *testing.T) {
 	var sent auth.DeleteAccountVerificationData
 	srv, _ := newMemoryAuthServer(t, auth.Options{
-		Session:          auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 3600},
+		Session:          auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(3600)},
 		EmailAndPassword: auth.EmailAndPasswordOptions{Enabled: true},
 		User: auth.UserOptions{
 			DeleteUser: auth.DeleteUserOptions{

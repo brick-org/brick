@@ -502,7 +502,7 @@ func findCredentialAccountByEmail(t *testing.T, db auth.DBAdapter, email string)
 }
 
 func TestAuthSessionRefresh_UsesSignedCookie(t *testing.T) {
-	srv, db := newIntegrationAuth(t, auth.SessionOptions{ExpiresIn: 5, UpdateAge: 1})
+	srv, db := newIntegrationAuth(t, auth.SessionOptions{ExpiresIn: 5, UpdateAge: intPtr(1)})
 	resp, cookie := signUp(t, srv.URL, "refresh@example.com")
 	resp.Body.Close()
 
@@ -534,7 +534,7 @@ func TestAuthSessionFlows_RetainedCookieWorksAfterSecretRotation(t *testing.T) {
 		Secret:  "test-secret-v1",
 		Adapter: adapter,
 		DB:      authbun.New(db, authbun.Config{}),
-		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 1},
+		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(1)},
 		EmailAndPassword: auth.EmailAndPasswordOptions{
 			Enabled: true,
 		},
@@ -549,7 +549,7 @@ func TestAuthSessionFlows_RetainedCookieWorksAfterSecretRotation(t *testing.T) {
 		Secrets: []auth.Secret{{Version: 2, Value: "test-secret-v2"}, {Version: 1, Value: "test-secret-v1"}},
 		Adapter: rotatedAdapter,
 		DB:      authbun.New(db, authbun.Config{}),
-		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 1},
+		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(1)},
 		EmailAndPassword: auth.EmailAndPasswordOptions{
 			Enabled: true,
 		},
@@ -572,7 +572,7 @@ func TestAuthSessionFlows_NewCookieUsesCurrentSecretAfterRotation(t *testing.T) 
 		Secrets: []auth.Secret{{Version: 2, Value: "test-secret-v2"}, {Version: 1, Value: "test-secret-v1"}},
 		Adapter: adapter,
 		DB:      authbun.New(db, authbun.Config{}),
-		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 1},
+		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(1)},
 		EmailAndPassword: auth.EmailAndPasswordOptions{
 			Enabled: true,
 		},
@@ -601,7 +601,7 @@ func TestAuthPasswordResetToken_WorksAcrossSecretRotation(t *testing.T) {
 		Secret:  "test-secret-v1",
 		Adapter: oldAdapter,
 		DB:      authbun.New(db, authbun.Config{}),
-		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 1},
+		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(1)},
 		EmailAndPassword: auth.EmailAndPasswordOptions{
 			Enabled: true,
 			SendResetPassword: func(data auth.ResetPasswordData) error {
@@ -630,7 +630,7 @@ func TestAuthPasswordResetToken_WorksAcrossSecretRotation(t *testing.T) {
 		Secrets: []auth.Secret{{Version: 2, Value: "test-secret-v2"}, {Version: 1, Value: "test-secret-v1"}},
 		Adapter: rotatedAdapter,
 		DB:      authbun.New(db, authbun.Config{}),
-		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 1},
+		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(1)},
 		EmailAndPassword: auth.EmailAndPasswordOptions{
 			Enabled: true,
 		},
@@ -659,7 +659,7 @@ func TestAuthPasswordResetToken_WorksAcrossSecretRotation(t *testing.T) {
 
 func TestAuthSessionFlows_ListRevokeUpdateDelete(t *testing.T) {
 	srv, db := newIntegrationAuthWithOptions(t, auth.Options{
-		Session:          auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 1},
+		Session:          auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(1)},
 		EmailAndPassword: auth.EmailAndPasswordOptions{Enabled: true},
 		User:             auth.UserOptions{DeleteUser: auth.DeleteUserOptions{Enabled: true}},
 	})
@@ -777,7 +777,7 @@ func TestAuthRateLimit_SignInUsesSpecialRule(t *testing.T) {
 		Secret:  "test-secret",
 		Adapter: adapter,
 		DB:      authbun.New(db, authbun.Config{}),
-		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 1},
+		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(1)},
 		EmailAndPassword: auth.EmailAndPasswordOptions{
 			Enabled: true,
 		},
@@ -821,7 +821,7 @@ func TestAuthRateLimit_CustomRuleCanDisablePath(t *testing.T) {
 		Secret:  "test-secret",
 		Adapter: adapter,
 		DB:      authbun.New(db, authbun.Config{}),
-		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 1},
+		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(1)},
 		EmailAndPassword: auth.EmailAndPasswordOptions{
 			Enabled: true,
 		},
@@ -849,7 +849,7 @@ func TestAuthRateLimit_CustomRuleCanDisablePath(t *testing.T) {
 
 func TestDeleteUser_DisabledByUserOptions(t *testing.T) {
 	srv, db := newIntegrationAuthWithOptions(t, auth.Options{
-		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 1},
+		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(1)},
 		User: auth.UserOptions{
 			DeleteUser: auth.DeleteUserOptions{
 				Enabled: false,
@@ -881,7 +881,7 @@ func TestDeleteUser_DisabledByUserOptions(t *testing.T) {
 func TestDeleteUser_VerificationFlow(t *testing.T) {
 	var sent auth.DeleteAccountVerificationData
 	srv, db := newIntegrationAuthWithOptions(t, auth.Options{
-		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 1},
+		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(1)},
 		User: auth.UserOptions{
 			DeleteUser: auth.DeleteUserOptions{
 				Enabled: true,
@@ -939,7 +939,7 @@ func TestDeleteUser_VerificationFlow(t *testing.T) {
 
 func TestDeleteUser_RequiresFreshSessionWithoutPassword(t *testing.T) {
 	srv, db := newIntegrationAuthWithOptions(t, auth.Options{
-		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 1, FreshAge: intPtr(1)},
+		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(1), FreshAge: intPtr(1)},
 		User: auth.UserOptions{
 			DeleteUser: auth.DeleteUserOptions{
 				Enabled: true,
@@ -981,7 +981,7 @@ func TestDeleteUser_RequiresFreshSessionWithoutPassword(t *testing.T) {
 func TestChangeEmail_UpdateWithoutVerification(t *testing.T) {
 	var sent auth.VerificationEmailData
 	srv, _ := newIntegrationAuthWithOptions(t, auth.Options{
-		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 1},
+		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(1)},
 		EmailVerification: auth.EmailVerificationOptions{
 			SendVerificationEmail: func(data auth.VerificationEmailData) error {
 				sent = data
@@ -1041,7 +1041,7 @@ func TestChangeEmail_UpdateWithoutVerification(t *testing.T) {
 
 func TestEmailPassword_AutoSignInDisabledReturnsNullTokenWithoutCookie(t *testing.T) {
 	srv, _ := newMemoryAuthServer(t, auth.Options{
-		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 1},
+		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(1)},
 		EmailAndPassword: auth.EmailAndPasswordOptions{
 			Enabled:    true,
 			AutoSignIn: boolPtr(false),
@@ -1079,7 +1079,7 @@ func TestEmailPassword_AutoSignInDisabledReturnsNullTokenWithoutCookie(t *testin
 func TestEmailPassword_DuplicateSignUpReturnsSyntheticUserAndCallsOnExistingUserSignUp(t *testing.T) {
 	var callbackEmails []string
 	srv, _ := newMemoryAuthServer(t, auth.Options{
-		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 1},
+		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(1)},
 		EmailAndPassword: auth.EmailAndPasswordOptions{
 			Enabled:                  true,
 			RequireEmailVerification: true,
@@ -1142,7 +1142,7 @@ func TestEmailPassword_ResetPasswordHonorsCallbackAndSessionRevocationOptions(t 
 	var resetToken string
 	var resetEmails []string
 	srv, _ := newMemoryAuthServer(t, auth.Options{
-		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 1},
+		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(1)},
 		EmailAndPassword: auth.EmailAndPasswordOptions{
 			Enabled: true,
 			SendResetPassword: func(data auth.ResetPasswordData) error {
@@ -1185,7 +1185,7 @@ func TestEmailPassword_ResetPasswordHonorsCallbackAndSessionRevocationOptions(t 
 func TestEmailPassword_RevokeSessionsOnPasswordResetDeletesExistingSessions(t *testing.T) {
 	var resetToken string
 	srv, _ := newMemoryAuthServer(t, auth.Options{
-		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 1},
+		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(1)},
 		EmailAndPassword: auth.EmailAndPasswordOptions{
 			Enabled:                       true,
 			RevokeSessionsOnPasswordReset: true,
@@ -1221,7 +1221,7 @@ func TestEmailPassword_RevokeSessionsOnPasswordResetDeletesExistingSessions(t *t
 func TestEmailPassword_PasswordOverridesAreUsedAcrossSignUpSignInAndReset(t *testing.T) {
 	var resetToken string
 	srv, db := newMemoryAuthServer(t, auth.Options{
-		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 1},
+		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(1)},
 		EmailAndPassword: auth.EmailAndPasswordOptions{
 			Enabled: true,
 			Password: auth.PasswordOptions{
@@ -1277,7 +1277,7 @@ func TestEmailPassword_PasswordOverridesAreUsedAcrossSignUpSignInAndReset(t *tes
 func TestEmailPassword_CustomVerifierIsUsedForChangePasswordAndDeleteUser(t *testing.T) {
 	verifyCalls := 0
 	srv, _ := newMemoryAuthServer(t, auth.Options{
-		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 1},
+		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(1)},
 		EmailAndPassword: auth.EmailAndPasswordOptions{
 			Enabled: true,
 			Password: auth.PasswordOptions{
@@ -1457,7 +1457,7 @@ func extractCookieValue(t *testing.T, cookieHeader, name string) string {
 }
 
 func TestDeleteUser_RequiresFreshSessionWhenPasswordOmitted(t *testing.T) {
-	srv, db := newMemoryAuthServer(t, auth.Options{Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 1, FreshAge: intPtr(1)}, EmailAndPassword: auth.EmailAndPasswordOptions{Enabled: true}, User: auth.UserOptions{DeleteUser: auth.DeleteUserOptions{Enabled: true}}})
+	srv, db := newMemoryAuthServer(t, auth.Options{Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(1), FreshAge: intPtr(1)}, EmailAndPassword: auth.EmailAndPasswordOptions{Enabled: true}, User: auth.UserOptions{DeleteUser: auth.DeleteUserOptions{Enabled: true}}})
 	resp, cookieHeader := signUp(t, srv.URL, "stale-delete@example.com")
 	resp.Body.Close()
 
@@ -1500,7 +1500,7 @@ func TestSessionCookieCache_AllowsGetSessionWithoutDatabaseRow(t *testing.T) {
 	srv, db := newMemoryAuthServer(t, auth.Options{
 		Session: auth.SessionOptions{
 			ExpiresIn: 3600,
-			UpdateAge: 1,
+			UpdateAge: intPtr(1),
 			CookieCache: auth.SessionCookieCacheOptions{
 				Enabled: true,
 				MaxAge:  300,
@@ -2121,7 +2121,7 @@ func TestPluginSystem_HookMutatesData(t *testing.T) {
 		Secret:  "test-secret",
 		Adapter: adapter,
 		DB:      authbun.New(db, authbun.Config{}),
-		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 1},
+		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(1)},
 		EmailAndPassword: auth.EmailAndPasswordOptions{
 			Enabled: true,
 		},
@@ -2183,7 +2183,7 @@ func TestNew_DatabaseHooksRunAfterPluginHooks(t *testing.T) {
 		Secret:  "test-secret",
 		Adapter: adapter,
 		DB:      authbun.New(db, authbun.Config{}),
-		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 1},
+		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(1)},
 		EmailAndPassword: auth.EmailAndPasswordOptions{
 			Enabled: true,
 		},
@@ -2247,7 +2247,7 @@ func TestNew_DatabaseHooksWorkWithoutPlugins(t *testing.T) {
 		Secret:  "test-secret",
 		Adapter: adapter,
 		DB:      authbun.New(db, authbun.Config{}),
-		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 1},
+		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(1)},
 		EmailAndPassword: auth.EmailAndPasswordOptions{
 			Enabled: true,
 		},
@@ -2294,7 +2294,7 @@ func TestNew_DatabaseHooksDeleteUserExposeDeletedRows(t *testing.T) {
 		Secret:  "test-secret",
 		Adapter: adapter,
 		DB:      authbun.New(db, authbun.Config{}),
-		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: 1},
+		Session: auth.SessionOptions{ExpiresIn: 3600, UpdateAge: intPtr(1)},
 		EmailAndPassword: auth.EmailAndPasswordOptions{
 			Enabled: true,
 		},

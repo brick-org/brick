@@ -192,8 +192,13 @@ type EmailVerificationOptions struct {
 	SendVerificationEmailRequest func(data VerificationEmailData, r *http.Request) error
 
 	// Automatically send a verification email after sign-up.
+	// Tri-state mirroring upstream `sendOnSignUp?: boolean`
+	// (init-options.ts): nil (unset) follows
+	// EmailAndPassword.RequireEmailVerification; non-nil true sends
+	// unconditionally and non-nil false never sends. Resolve with
+	// ResolveSendOnSignUp.
 	// Runtime: wired:auth/api/routes/sign_up.go:142.
-	SendOnSignUp bool
+	SendOnSignUp *bool
 
 	// Send a verification email on sign-in when the user's email is not verified.
 	// Runtime: wired:auth/api/routes/sign_in.go:82.
@@ -242,6 +247,17 @@ func (o EmailVerificationOptions) Validate() error {
 		return fmt.Errorf("auth: options.EmailVerification.ExpiresIn must not be negative, got %d", o.ExpiresIn)
 	}
 	return nil
+}
+
+// ResolveSendOnSignUp resolves the effective send-on-sign-up flag, mirroring
+// upstream `sendOnSignUp ?? requireEmailVerification` (sign-up.ts:392-394):
+// a non-nil explicit value wins (even false); nil (unset) falls back to
+// requireVerification. Pure: no I/O.
+func ResolveSendOnSignUp(sendOnSignUp *bool, requireVerification bool) bool {
+	if sendOnSignUp != nil {
+		return *sendOnSignUp
+	}
+	return requireVerification
 }
 
 // SessionCookieCacheStrategy selects the session cookie-cache encoding.
@@ -395,9 +411,12 @@ type SessionOptions struct {
 	ExpiresIn int
 
 	// How often the session expiry is refreshed on use, in seconds.
-	// Default 86400 (1 day).
+	// Tri-state mirroring upstream `session.updateAge?: number`
+	// (init-options.ts, default 1 day): nil (unset) defaults to 86400;
+	// explicit 0 refreshes on every use (always-refresh); >0 is seconds.
+	// Resolve with ResolveUpdateAgeSeconds / UpdateAgeDuration.
 	// Runtime: wired:auth/api/routes/session.go:392 (sessionUpdateAge).
-	UpdateAge int
+	UpdateAge *int
 
 	// DisableSessionRefresh disables session refresh regardless of
 	// UpdateAge. Upstream default (documented, behavior unchanged here):
@@ -451,8 +470,8 @@ func (o SessionOptions) Validate() error {
 	if o.ExpiresIn < 0 {
 		return fmt.Errorf("auth: options.Session.ExpiresIn must not be negative, got %d", o.ExpiresIn)
 	}
-	if o.UpdateAge < 0 {
-		return fmt.Errorf("auth: options.Session.UpdateAge must not be negative, got %d", o.UpdateAge)
+	if o.UpdateAge != nil && *o.UpdateAge < 0 {
+		return fmt.Errorf("auth: options.Session.UpdateAge must not be negative, got %d", *o.UpdateAge)
 	}
 	if o.FreshAge != nil && *o.FreshAge < 0 {
 		return fmt.Errorf("auth: options.Session.FreshAge must not be negative, got %d", *o.FreshAge)
@@ -464,6 +483,31 @@ func (o SessionOptions) Validate() error {
 		return fmt.Errorf("auth: options.Session.CookieCache.RefreshCache.UpdateAge must not be negative, got %d", o.CookieCache.RefreshCache.UpdateAge)
 	}
 	return nil
+}
+
+// DefaultSessionUpdateAgeSeconds is the default session refresh interval in
+// seconds (1 day, 86400), mirroring upstream sessionConfig.updateAge
+// (create-context.ts: `options.session?.updateAge !== undefined ? value :
+// 24*60*60`).
+const DefaultSessionUpdateAgeSeconds = 24 * 60 * 60
+
+// ResolveUpdateAgeSeconds resolves SessionOptions.UpdateAge to seconds,
+// mirroring upstream create-context.ts: nil (unset) yields the 24h default;
+// an explicit value (including 0 for always-refresh) is returned as-is.
+// Pure: no I/O.
+func ResolveUpdateAgeSeconds(updateAge *int) int {
+	if updateAge == nil {
+		return DefaultSessionUpdateAgeSeconds
+	}
+	return *updateAge
+}
+
+// UpdateAgeDuration returns the resolved UpdateAge as a time.Duration: nil
+// defaults to 24h; explicit 0 yields 0 (always-refresh: the refresh
+// threshold equals the session creation time, so every use is due);
+// >0 is seconds. Pure: no I/O.
+func (s SessionOptions) UpdateAgeDuration() time.Duration {
+	return time.Duration(ResolveUpdateAgeSeconds(s.UpdateAge)) * time.Second
 }
 
 // ExpiresInDuration returns ExpiresIn as a time.Duration (defaults to 7 days).

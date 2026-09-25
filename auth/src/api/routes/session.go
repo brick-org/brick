@@ -714,9 +714,8 @@ func sessionExpiresAt(row map[string]any) time.Time {
 // sessionUpdateAgeFromPtr implements the upstream updateAge tri-state
 // (session.ts:324-344; update-session.ts; session-api.test.ts:252-273):
 // nil (unset) => 24h default, explicit 0 => always-refresh (0 duration),
-// >0 => seconds. types.SessionOptions.UpdateAge is migrating int -> *int
-// under a concurrent owner; this helper pins the *int contract so the merge
-// owner only rewires the call sites to pass the pointer directly.
+// >0 => seconds. Mirrors (SessionOptions).UpdateAgeDuration in types/;
+// kept as the route-layer unit pin for the same contract.
 func sessionUpdateAgeFromPtr(updateAge *int) time.Duration {
 	if updateAge == nil {
 		return 24 * time.Hour
@@ -728,14 +727,10 @@ func sessionUpdateAgeFromPtr(updateAge *int) time.Duration {
 }
 
 func sessionUpdateAge(opts types.SessionOptions) time.Duration {
-	// Tri-state bridge while types.SessionOptions.UpdateAge is still int:
-	// explicit 0 maps to always-refresh (0) per upstream. The unset default
-	// (24h) is covered by sessionUpdateAgeFromPtr(nil); once types lands
-	// *int, this wrapper becomes sessionUpdateAgeFromPtr(opts.UpdateAge).
-	if opts.UpdateAge == 0 {
-		return 0
-	}
-	return time.Duration(opts.UpdateAge) * time.Second
+	// types/ now carries UpdateAge *int (F9); the canonical tri-state lives
+	// in (SessionOptions).UpdateAgeDuration. sessionUpdateAgeFromPtr above
+	// pins the identical contract at the route layer (F4 unit pin).
+	return opts.UpdateAgeDuration()
 }
 
 func newSessionCookie(opts types.Options, headers CookieRequestHeaders, token string, expiresAt time.Time) (http.Cookie, error) {

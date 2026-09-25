@@ -135,7 +135,7 @@ func TestTriageV1_SignUpSendOnSignUpTrue(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
 	opts.EmailAndPassword.RequireEmailVerification = true
-	opts.EmailVerification.SendOnSignUp = true
+	opts.EmailVerification.SendOnSignUp = boolPtr(true)
 	var calls int
 	opts.EmailVerification.SendVerificationEmail = func(types.VerificationEmailData) error {
 		calls++

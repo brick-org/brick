@@ -376,7 +376,7 @@ func SignUpEmail(api huma.API, basePath string, opts types.Options) {
 			return nil, huma.NewError(types.StatusForCode(types.ErrFailedToCreateUser), types.ErrFailedToCreateUser)
 		}
 
-		shouldSendVerificationEmail := opts.EmailVerification.SendOnSignUp || opts.EmailAndPassword.RequireEmailVerification
+		shouldSendVerificationEmail := types.ResolveSendOnSignUp(opts.EmailVerification.SendOnSignUp, opts.EmailAndPassword.RequireEmailVerification)
 		if shouldSendVerificationEmail && (opts.EmailVerification.SendVerificationEmail != nil || opts.EmailVerification.SendVerificationEmailRequest != nil) {
 			// Issuance is the upstream HS256 email JWT
 			// (createEmailVerificationToken, email-verification.ts:17-43).
