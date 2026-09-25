@@ -383,7 +383,7 @@ type changePasswordOutput struct {
 	SetCookie []http.Cookie `header:"Set-Cookie"`
 	Body struct {
 		Status bool      `json:"status"`
-		Token  *string   `json:"token,omitempty"`
+		Token  *string   `json:"token"`
 		User   *flatUser `json:"user,omitempty"`
 	}
 }
@@ -469,6 +469,8 @@ func ChangePassword(api huma.API, basePath string, opts types.Options) {
 		// revokeOtherSessions (update-user.ts:288-305): delete all sessions,
 		// mint a fresh one, and return its token plus the user. The Status
 		// field stays true so existing clients keep working.
+		// Non-revoke (update-user.ts:287,304,307-310): token null plus the
+		// user; Status stays true as a compat field.
 		if input.Body.RevokeOtherSessions != nil && *input.Body.RevokeOtherSessions {
 			// Secondary-aware bulk revoke (upstream deleteUserSessions,
 			// update-user.ts:289): cache entries go first per the flag
@@ -505,6 +507,16 @@ func ChangePassword(api huma.API, basePath string, opts types.Options) {
 			}
 			out.SetCookie = cookiesOut
 			out.Body.Token = &newToken
+			flat := flatUser(user)
+			out.Body.User = &flat
+		} else {
+			userRow, uerr := opts.DB.FindOne(ctx, "user", []types.Where{
+				{Field: "id", Value: userID},
+			}, nil)
+			if uerr != nil || userRow == nil {
+				return nil, huma.NewError(types.StatusForCode(types.ErrUserNotFound), types.ErrUserNotFound)
+			}
+			user := rowToUser(userRow, opts)
 			flat := flatUser(user)
 			out.Body.User = &flat
 		}
