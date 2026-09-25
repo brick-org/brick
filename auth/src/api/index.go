@@ -58,14 +58,17 @@ func Router(adapter huma.Adapter, basePath string, opts types.Options) huma.API 
 	// validateFormCsrf). Mutating requests (everything but GET/OPTIONS/HEAD
 	// per upstream origin-check.ts:69-76) that carry browser evidence — an
 	// Origin (or Referer fallback) AND a Cookie header — must come from a
-	// trusted origin. Cookie-less requests keep the permissive fallback
-	// unless they carry browser evidence of their own (Fetch Metadata or an
-	// Origin/Referer header), in which case they are force-validated and
-	// cross-site navigations are blocked outright (upstream
-	// CROSS_SITE_NAVIGATION_LOGIN_BLOCKED). A same-origin form using
-	// `no-referrer` can send `Origin: null`; Fetch Metadata
-	// (`Sec-Fetch-Site: same-origin`) lets the middleware infer the origin
-	// from the request target instead of rejecting it.
+	// trusted origin (global originCheckMiddleware, forceValidate=false).
+	// The cookie-less Fetch-Metadata first-login gate (upstream
+	// validateFormCsrf / formCsrfMiddleware) is per-endpoint `use:` ONLY on
+	// /sign-in/email (sign-in.ts:406) and /sign-up/email (sign-up.ts:34):
+	// only those two legs force-validate cookie-less browser evidence and
+	// block cross-site navigations outright (upstream
+	// CROSS_SITE_NAVIGATION_LOGIN_BLOCKED). All other routes keep the
+	// permissive cookie-less fallback (global forceValidate=false). A
+	// same-origin form using `no-referrer` can send `Origin: null`; Fetch
+	// Metadata (`Sec-Fetch-Site: same-origin`) lets the middleware infer
+	// the origin from the request target instead of rejecting it.
 	// Requests without cookies and without any browser evidence
 	// (server-to-server) always pass through.
 	// Short-circuit errors use the huma {status,title,detail} shape, matching
@@ -134,12 +137,16 @@ func Router(adapter huma.Adapter, basePath string, opts types.Options) huma.API 
 				next(ctx)
 				return
 			}
-			// Cookie-less requests run the Fetch-Metadata first-login gate
-			// (upstream validateFormCsrf): cross-site navigations are
-			// blocked, any other browser evidence (fetch metadata or an
-			// Origin/Referer header) is force-validated, and requests with
-			// no evidence at all (curl, server-to-server) pass through.
-			if strings.TrimSpace(cookie) == "" &&
+			// Cookie-less requests on the two login legs run the Fetch-Metadata
+			// first-login gate (upstream validateFormCsrf, per-endpoint
+			// formCsrfMiddleware on /sign-in/email + /sign-up/email only):
+			// cross-site navigations are blocked, any other browser evidence
+			// (fetch metadata or an Origin/Referer header) is force-validated,
+			// and requests with no evidence at all (curl, server-to-server)
+			// pass through. All other routes keep the global permissive
+			// fallback (forceValidate=false).
+			if isFormCsrfPath(normalizeRateLimitPath(ctx.URL().Path, basePath)) &&
+				strings.TrimSpace(cookie) == "" &&
 				middlewares.RequiresForceOriginValidation(origin, referer, site, mode, dest) {
 				if middlewares.IsCrossSiteNavigation(site, mode) {
 					writeOriginRejection(ctx, "Cross-site navigation login blocked (CROSS_SITE_NAVIGATION_LOGIN_BLOCKED)")
@@ -968,6 +975,22 @@ func disabledPathMatched(disabled []string, route string) bool {
 		}
 	}
 	return false
+}
+
+// isFormCsrfPath reports whether a base-path-relative request path is one of
+// the two login legs carrying upstream's per-endpoint formCsrfMiddleware
+// (sign-in.ts:406 on /sign-in/email, sign-up.ts:34 on /sign-up/email). The
+// global originCheckMiddleware uses forceValidate=false; only these paths
+// force-validate cookie-less browser evidence. Comparison uses the same
+// base-path-relative leading-slash normalization as normalizeRateLimitPath
+// (plus trailing-slash tolerance) so /sign-in/email/ matches when
+// SkipTrailingSlashes variants are enabled.
+func isFormCsrfPath(requestPath string) bool {
+	path := requestPath
+	if len(path) > 1 {
+		path = strings.TrimSuffix(path, "/")
+	}
+	return path == "/sign-in/email" || path == "/sign-up/email"
 }
 
 // normalizeDisabledPath canonicalizes a DisabledPaths entry or route key for

@@ -88,10 +88,14 @@ func TestF10_NullOrigin_WithoutInferenceRejected(t *testing.T) {
 
 // P09-GAP-2: Fetch-Metadata first-login gate (upstream validateFormCsrf).
 // Cross-site navigations are blocked even without cookies.
+// G10 narrowing: upstream formCsrfMiddleware is per-endpoint use: ONLY on
+// /sign-in/email (sign-in.ts:406) and /sign-up/email (sign-up.ts:34), so the
+// force gate is pinned on a login leg here; other routes keep the permissive
+// cookie-less fallback (global forceValidate=false).
 func TestF10_FormCsrf_CrossSiteNavigateBlocked(t *testing.T) {
 	opts := f10OriginOptions("https://app.example")
 	api := Router(humatest.NewAdapter(), "/api/auth", opts)
-	resp := humatest.Wrap(t, api).Post("/api/auth/sign-out",
+	resp := humatest.Wrap(t, api).Post("/api/auth/sign-in/email",
 		"Sec-Fetch-Site: cross-site",
 		"Sec-Fetch-Mode: navigate",
 	)
@@ -102,10 +106,14 @@ func TestF10_FormCsrf_CrossSiteNavigateBlocked(t *testing.T) {
 
 // P09-GAP-2: cookie-less requests carrying an Origin are force-validated
 // (no permissive fallback for browser evidence).
+// G10 narrowing: upstream formCsrfMiddleware is per-endpoint use: ONLY on
+// /sign-in/email (sign-in.ts:406) and /sign-up/email (sign-up.ts:34), so the
+// force gate is pinned on a login leg here; other routes keep the permissive
+// cookie-less fallback (global forceValidate=false).
 func TestF10_FormCsrf_CookieLessOriginForceValidated(t *testing.T) {
 	opts := f10OriginOptions("https://app.example")
 	api := Router(humatest.NewAdapter(), "/api/auth", opts)
-	resp := humatest.Wrap(t, api).Post("/api/auth/sign-out",
+	resp := humatest.Wrap(t, api).Post("/api/auth/sign-in/email",
 		"Origin: https://evil.example",
 	)
 	if resp.Code != http.StatusForbidden {

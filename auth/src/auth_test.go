@@ -336,8 +336,8 @@ func TestNew_OnAPIErrorRunsForAuthRouteFailures(t *testing.T) {
 	if captured.title != "Bad Request" {
 		t.Fatalf("expected captured title %q, got %q", "Bad Request", captured.title)
 	}
-	if captured.detail != "email/password sign-in is not enabled" {
-		t.Fatalf("expected captured detail %q, got %q", "email/password sign-in is not enabled", captured.detail)
+	if captured.detail != "EMAIL_PASSWORD_DISABLED: Email and password is not enabled" {
+		t.Fatalf("expected captured detail %q, got %q", "EMAIL_PASSWORD_DISABLED: Email and password is not enabled", captured.detail)
 	}
 	if captured.path != "/api/auth/sign-in/email" {
 		t.Fatalf("expected captured path %q, got %q", "/api/auth/sign-in/email", captured.path)

@@ -21,7 +21,9 @@
 //
 // Enforcement wiring stays in the `api` package's `Router`
 // (`auth/src/api/index.go`), which installs the origin-check middleware
-// inline and resolves trust via `originTrustedForRequest` over
+// inline (global origin check plus the formCsrf force gate narrowed to the
+// two login legs per upstream per-endpoint use) and resolves trust via
+// `originTrustedForRequest` over
 // `types.IsTrustedOrigin` plus the dynamic-baseURL expansion; route handlers
 // validate redirect/callback URLs via `types.IsTrustedRedirect`. This package
 // intentionally imports only `context`, the standard library, and `types`

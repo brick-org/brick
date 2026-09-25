@@ -24,7 +24,9 @@ import (
 // `Cookie` header — via `originTrustedForRequest` (static trust through
 // `types.IsTrustedOrigin` plus the `ExpandDynamicBaseURLOrigins` dynamic
 // leg), force-validates cookie-less requests that carry Fetch Metadata or an
-// Origin/Referer header (blocking cross-site navigations), honors
+// Origin/Referer header on the two login legs only (/sign-in/email +
+// /sign-up/email per-endpoint formCsrfMiddleware; blocking cross-site
+// navigations), honors
 // `Advanced.DisableCSRFCheck` / `Advanced.DisableOriginCheck` with the same
 // backward-compat warning plus plugin-contributed skip-path arrays; route
 // handlers validate `callbackURL`/`redirectTo`/`errorCallbackURL`/
