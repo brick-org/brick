@@ -461,6 +461,16 @@ func UpdateUser(api huma.API, basePath string, opts types.Options) {
 			return nil, huma.NewError(types.StatusForCode(types.ErrFailedToUpdateUser), types.ErrFailedToUpdateUser)
 		}
 
+		// Secondary-storage fan-out (upstream refreshUserSessions,
+		// internal-adapter.ts:108-137): rewrite the cached user on every
+		// live session after the commit. A failing mirror fails loudly
+		// with the surrounding update convention, mirroring the
+		// writeSecondarySession failures on the issuance paths (never
+		// swallowed).
+		if err := refreshSecondaryUserSessions(opts, rowToUser(updatedUserRow, opts)); err != nil {
+			return nil, huma.NewError(types.StatusForCode(types.ErrFailedToUpdateUser), types.ErrFailedToUpdateUser)
+		}
+
 		out := &updateUserOutput{}
 		// Upstream always refreshes the session cookie with the new user
 		// data (update-user.ts:137-140), not only on session refresh.
@@ -573,6 +583,11 @@ func ChangeEmail(api huma.API, basePath string, opts types.Options) {
 			if updatedRow != nil {
 				if cookiesOut, cookieErr := newSessionCookies(opts, input.CookieRequestHeaders, token, rowToSession(sessionRow, opts), rowToUser(updatedRow, opts), opts.Session, time.Now().UTC()); cookieErr == nil {
 					out.SetCookie = cookiesOut
+				}
+				// Fan out to secondary sessions like UpdateUser post-commit
+				// (upstream updateUser -> refreshUserSessions).
+				if serr := refreshSecondaryUserSessions(opts, rowToUser(updatedRow, opts)); serr != nil {
+					return nil, huma.NewError(types.StatusForCode(types.ErrFailedToUpdateUser), types.ErrFailedToUpdateUser)
 				}
 			}
 			if canSendVerification {
@@ -721,6 +736,14 @@ func DeleteUser(api huma.API, basePath string, opts types.Options) {
 				return nil, huma.NewError(types.StatusForCode(types.ErrInvalidToken), types.ErrInvalidToken)
 			}
 			if err := finishDeleteUser(ctx, opts, userID, currentUser); err != nil {
+				// A hook-thrown APIError keeps its own status (upstream
+				// beforeDelete/afterDelete are awaited directly, so a thrown
+				// status propagates); hook errors arrive unwrapped through
+				// runBeforeDeleteHook/runAfterDeleteHook/finishDeleteUser.
+				var httpErr types.HttpError
+				if errors.As(err, &httpErr) {
+					return nil, huma.NewError(httpErr.Status, httpErr.Code)
+				}
 				// Kept 500 (differs from StatusForCode 401 for INVALID_USER):
 				// delete-transaction/hook failure, not a semantic invalid user.
 				return nil, huma.Error500InternalServerError(types.ErrInvalidUser)
@@ -763,6 +786,12 @@ func DeleteUser(api huma.API, basePath string, opts types.Options) {
 		}
 
 		if err := finishDeleteUser(ctx, opts, userID, currentUser); err != nil {
+			// A hook-thrown APIError keeps its own status (see the token
+			// path above); non-APIError delete failures stay 500.
+			var httpErr types.HttpError
+			if errors.As(err, &httpErr) {
+				return nil, huma.NewError(httpErr.Status, httpErr.Code)
+			}
 			// Kept 500 (differs from StatusForCode 401 for INVALID_USER):
 			// delete-transaction/hook failure, not a semantic invalid user.
 			return nil, huma.Error500InternalServerError(types.ErrInvalidUser)

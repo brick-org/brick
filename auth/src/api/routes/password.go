@@ -458,9 +458,11 @@ func ChangePassword(api huma.API, basePath string, opts types.Options) {
 		// mint a fresh one, and return its token plus the user. The Status
 		// field stays true so existing clients keep working.
 		if input.Body.RevokeOtherSessions != nil && *input.Body.RevokeOtherSessions {
-			if _, err := opts.DB.DeleteMany(ctx, "session", []types.Where{
-				{Field: "userId", Value: userID},
-			}); err != nil {
+			// Secondary-aware bulk revoke (upstream deleteUserSessions,
+			// update-user.ts:289): cache entries go first per the flag
+			// matrix so secondary copies don't survive; without a
+			// secondary backend this is exactly the DeleteMany below.
+			if err := deleteSecondaryAwareUserSessions(ctx, opts, userID); err != nil {
 				return nil, huma.Error500InternalServerError("failed to revoke sessions")
 			}
 			newToken := crypto.GenerateID()

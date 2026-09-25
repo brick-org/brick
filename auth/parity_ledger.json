@@ -228,6 +228,10 @@
         {
           "case": "should preserve encoded characters in callback URL",
           "goTest": "TestCredsV1_VerifyEmailGetPreservesEncodedCallback"
+        },
+        {
+          "case": "should set emailVerified on all sessions",
+          "goTest": "TestWiringV1_VerifyEmailFlipsSecondarySessions + TestSecondaryV1 route coverage (secondary fan-out wired in all verify legs)"
         }
       ],
       "notes": "Sender API-error propagation, delivery, verified-skip, redirect/encoding covered; cleanup flags and secondary-storage legs open."
@@ -802,7 +806,7 @@
           "goTest": "TestSecondaryV1_DeleteAllThenRecreateKeepsOnlyReplacement (helper; ChangePassword wiring open)"
         }
       ],
-      "notes": "Update/change-email/delete-user matrices plus server-only setPassword covered by creds_v1_account/setpassword suites; secondary-storage propagation legs open."
+      "notes": "Update/change-email/delete-user matrices covered by creds_v1_account/setpassword suites; secondary fan-out wired in UpdateUser post-commit, change-email direct leg, and ChangePassword revocation (fail-loud per D05); secondary-storage multi-write legs open."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/cookies/cookies.test.ts",

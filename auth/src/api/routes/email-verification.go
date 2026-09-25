@@ -465,7 +465,20 @@ func processStatelessUpdateTo(ctx context.Context, opts types.Options, payload *
 			return nil, nil, "failed to update user", http.StatusInternalServerError
 		}
 		updated := rowToUser(updatedRow, opts)
+		// Secondary-storage fan-out (upstream refreshUserSessions, queued by
+		// updateUserByEmail): existing sessions serve the new identity.
+		// A failing mirror fails loudly with the surrounding update
+		// convention (never swallowed).
+		if err := refreshSecondaryUserSessions(opts, updated); err != nil {
+			return nil, nil, "failed to update user", http.StatusInternalServerError
+		}
 		if err := runAfterEmailVerificationHook(requestContextForCallbacks(ctx), opts, &updated); err != nil {
+			// A hook-thrown APIError keeps its own status (upstream hooks
+			// are awaited directly); non-APIError failures stay 500.
+			var httpErr types.HttpError
+			if errors.As(err, &httpErr) {
+				return nil, nil, httpErr.Code, httpErr.Status
+			}
 			return nil, nil, "failed to handle email verification", http.StatusInternalServerError
 		}
 		sessionCookies, sessionErr := createVerificationSession(ctx, opts, headers, updated, now)
@@ -488,6 +501,13 @@ func processStatelessUpdateTo(ctx context.Context, opts types.Options, payload *
 			return nil, nil, "failed to update user", http.StatusInternalServerError
 		}
 		updated := rowToUser(updatedRow, opts)
+		// Secondary-storage fan-out (upstream refreshUserSessions, queued by
+		// updateUserByEmail): existing sessions serve the new identity.
+		// A failing mirror fails loudly with the surrounding update
+		// convention (never swallowed).
+		if err := refreshSecondaryUserSessions(opts, updated); err != nil {
+			return nil, nil, "failed to update user", http.StatusInternalServerError
+		}
 		nextToken, tokenErr := crypto.CreateEmailVerificationToken(opts.CurrentSecret(), payload.UpdateTo, "", emailVerificationExpirySeconds(opts), nil)
 		if tokenErr != nil {
 			return nil, nil, types.ErrFailedToCreateVerification, types.StatusForCode(types.ErrFailedToCreateVerification)
@@ -603,7 +623,20 @@ func processChangeEmailVerification(ctx context.Context, opts types.Options, tok
 			return nil, nil, types.ErrFailedToCreateVerification, types.StatusForCode(types.ErrFailedToCreateVerification)
 		}
 		updated := rowToUser(updatedRow, opts)
+		// Secondary-storage fan-out (upstream refreshUserSessions, queued by
+		// the email update): existing sessions serve the verified identity.
+		// A failing mirror fails loudly with the surrounding update
+		// convention (never swallowed).
+		if err := refreshSecondaryUserSessions(opts, updated); err != nil {
+			return nil, nil, "failed to update user", http.StatusInternalServerError
+		}
 		if err := runAfterEmailVerificationHook(ctx, opts, &updated); err != nil {
+			// A hook-thrown APIError keeps its own status (upstream hooks
+			// are awaited directly); non-APIError failures stay 500.
+			var httpErr types.HttpError
+			if errors.As(err, &httpErr) {
+				return nil, nil, httpErr.Code, httpErr.Status
+			}
 			return nil, nil, "failed to handle email verification", http.StatusInternalServerError
 		}
 		return &updated, nil, "", http.StatusOK
@@ -631,6 +664,12 @@ func verifyEmailForAddress(ctx context.Context, opts types.Options, email string
 		return &user, nil, "", http.StatusOK
 	}
 	if err := runBeforeEmailVerificationHook(ctx, opts, &user); err != nil {
+		// A hook-thrown APIError keeps its own status (upstream hooks are
+		// awaited directly); non-APIError failures stay 500.
+		var httpErr types.HttpError
+		if errors.As(err, &httpErr) {
+			return nil, nil, httpErr.Code, httpErr.Status
+		}
 		return nil, nil, "failed to handle email verification", http.StatusInternalServerError
 	}
 	now := time.Now().UTC()
@@ -644,7 +683,20 @@ func verifyEmailForAddress(ctx context.Context, opts types.Options, email string
 		return nil, nil, "failed to update user", http.StatusInternalServerError
 	}
 	updated := rowToUser(updatedRow, opts)
+	// Secondary-storage fan-out (upstream refreshUserSessions, queued by
+	// updateUserByEmail): every live session serves emailVerified=true.
+	// A failing mirror fails loudly with the surrounding update convention
+	// (never swallowed).
+	if err := refreshSecondaryUserSessions(opts, updated); err != nil {
+		return nil, nil, "failed to update user", http.StatusInternalServerError
+	}
 	if err := runAfterEmailVerificationHook(ctx, opts, &updated); err != nil {
+		// A hook-thrown APIError keeps its own status (upstream hooks are
+		// awaited directly); non-APIError failures stay 500.
+		var httpErr types.HttpError
+		if errors.As(err, &httpErr) {
+			return nil, nil, httpErr.Code, httpErr.Status
+		}
 		return nil, nil, "failed to handle email verification", http.StatusInternalServerError
 	}
 	var cookies []http.Cookie

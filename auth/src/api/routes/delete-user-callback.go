@@ -2,6 +2,7 @@ package routes
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/brick-org/brick/auth/src/types"
@@ -106,6 +107,17 @@ func DeleteUserCallback(api huma.API, basePath string, opts types.Options) {
 		// Wrap the request context so request-aware delete hooks receive the
 		// live request even when the API middleware wrap is not installed.
 		if err := finishDeleteUser(humaRequestContext(ctx.Context(), ctx), opts, userID, currentUser); err != nil {
+			// Hook-thrown APIErrors keep their status (same errors.As
+			// pattern as the verify-email/change-email hook sites).
+			var httpErr types.HttpError
+			if errors.As(err, &httpErr) {
+				writeJSON(httpErr.Status, map[string]any{
+					"status": httpErr.Status,
+					"title":  http.StatusText(httpErr.Status),
+					"detail": httpErr.Code,
+				})
+				return
+			}
 			// Kept 500 (differs from StatusForCode 401 for INVALID_USER):
 			// delete-transaction/hook failure, not a semantic invalid user.
 			writeJSON(http.StatusInternalServerError, map[string]any{
