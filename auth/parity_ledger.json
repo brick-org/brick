@@ -1043,6 +1043,34 @@
         {
           "case": "decode kid-less JWT tries all secrets (fallback)",
           "goTest": "TestV1_JWECacheKidLessFallbackTriesAllSecrets"
+        },
+        {
+          "case": "should exclude user fields with returned: false from cookie cache",
+          "goTest": "TestFilterV1_ExcludeSingleUserField + TestFilterV1_IssuanceLegFiltersReturnedFalse (issuance legs)"
+        },
+        {
+          "case": "should correctly filter multiple user fields based on returned config",
+          "goTest": "TestFilterV1_MultipleUserFields"
+        },
+        {
+          "case": "should reduce cookie size when large fields are excluded",
+          "goTest": "TestFilterV1_LargeFieldExcluded"
+        },
+        {
+          "case": "should maintain session field filtering (regression check)",
+          "goTest": "TestFilterV1_SessionFieldFiltering"
+        },
+        {
+          "case": "should include unknown user fields for backward compatibility",
+          "goTest": "TestFilterV1_UnknownFieldsKept"
+        },
+        {
+          "case": "should work with JWT strategy",
+          "goTest": "TestFilterV1_JWTStrategy (superset)"
+        },
+        {
+          "case": "should work with compact strategy",
+          "goTest": "TestFilterV1_CompactStrategy (superset)"
         }
       ],
       "notes": "Set-Cookie parse/serialize, expiry, separator, cache-expiry, and JWE-rotation legs covered by setcookie_v1/cacheexpiry_v1 suites; chunked multi-cookie writes excluded per SCOPE (read path only); route-integration and JWT-plugin legs out of scope."

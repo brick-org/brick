@@ -740,7 +740,7 @@ func expiredSessionCookie(opts types.Options, headers CookieRequestHeaders) http
 	}
 }
 
-func newSessionDataCookie(secret string, session types.Session, user types.User, opts types.SessionOptions, now time.Time, dontRememberMe bool) (http.Cookie, error) {
+func newSessionDataCookie(secret string, session types.Session, user types.User, fullOpts types.Options, opts types.SessionOptions, now time.Time, dontRememberMe bool) (http.Cookie, error) {
 	// Stamp the resolved version (upstream setCookieCache version block):
 	// rotation invalidates older caches on read. A failing VersionFunc fails
 	// the write, matching upstream where the awaited version rejects the
@@ -749,6 +749,10 @@ func newSessionDataCookie(secret string, session types.Session, user types.User,
 	if err != nil {
 		return http.Cookie{}, err
 	}
+	// Strip schema-declared returned:false fields after version resolution
+	// (upstream setCookieCache order; shared helper with the context-aware
+	// issuance path in session-c701.go).
+	session, user = filterCookieCacheSessionUser(session, user, fullOpts, opts)
 	maxAge := opts.CookieCacheMaxAgeDuration()
 	if dontRememberMe {
 		// Upstream clears the cache maxAge for non-persistent sessions
@@ -875,7 +879,7 @@ func issueSessionCookies(authOpts types.Options, headers CookieRequestHeaders, t
 		cookiesOut = append(cookiesOut, marker)
 	}
 	if opts.CookieCache.Enabled {
-		cacheCookie, err := newSessionDataCookie(authOpts.CurrentSecret(), session, user, opts, now, dontRememberMe)
+		cacheCookie, err := newSessionDataCookie(authOpts.CurrentSecret(), session, user, authOpts, opts, now, dontRememberMe)
 		if err != nil {
 			return nil, err
 		}

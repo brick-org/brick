@@ -91,7 +91,7 @@ func TestC701_SessionDataChunkRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	session, user := rowToSession(row, opts), rowToUser(urow, opts)
-	single, err := newSessionDataCookie(opts.CurrentSecret(), session, user, opts.Session, time.Now().UTC(), false)
+	single, err := newSessionDataCookie(opts.CurrentSecret(), session, user, opts, opts.Session, time.Now().UTC(), false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestC701_SessionDataCustomName(t *testing.T) {
 		t.Fatal(err)
 	}
 	session, user := rowToSession(row, opts), rowToUser(urow, opts)
-	single, err := newSessionDataCookie(opts.CurrentSecret(), session, user, opts.Session, time.Now().UTC(), false)
+	single, err := newSessionDataCookie(opts.CurrentSecret(), session, user, opts, opts.Session, time.Now().UTC(), false)
 	if err != nil {
 		t.Fatal(err)
 	}

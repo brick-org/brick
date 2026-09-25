@@ -210,6 +210,11 @@ func findCookieCacheSigner(opts types.Options) (any, bool) {
 // Session/user convert via the Go-canonical nested shape; maxAge uses the
 // upstream `maxAge || 60*5` default. The effective opts (BaseURL already
 // resolved to the request origin) bind the iss claim.
+//
+// The maps are filtered for schema-declared returned:false additional fields
+// (upstream setCookieCache filterOutputFields/parseUserOutput) so the custom
+// signer shares the same cache-payload contract as the secret strategies;
+// core columns and unknown fields are always kept.
 func signViaCustomSigner(ctx context.Context, opts types.Options, signer any, session types.Session, user types.User, version string, maxAge time.Duration) (string, error) {
 	sm, err := cacheStructMap(session)
 	if err != nil {
@@ -219,6 +224,7 @@ func signViaCustomSigner(ctx context.Context, opts types.Options, signer any, se
 	if err != nil {
 		return "", err
 	}
+	filterCookieCacheMaps(sm, um, opts, opts.Session)
 	if maxAge <= 0 {
 		maxAge = 5 * time.Minute
 	}
@@ -306,6 +312,103 @@ func verifyViaCustomSigner(ctx context.Context, opts types.Options, signer any, 
 }
 
 var errCustomSignerMissing = errors.New("auth: cookie-cache signer unavailable")
+
+// filterCookieCacheSessionUser returns copies of session/user with
+// schema-declared returned:false additional fields stripped from the
+// AdditionalFields maps (upstream setCookieCache filterOutputFields for the
+// session and parseUserOutput for the user, cookies/index.ts:169-174).
+// Core columns are untouched (they never live in AdditionalFields) and
+// unknown fields are kept for backward compatibility. The inputs are copied
+// by value with fresh maps, so callers' structs are never mutated.
+func filterCookieCacheSessionUser(session types.Session, user types.User, opts types.Options, sessionOpts types.SessionOptions) (types.Session, types.User) {
+	sessionFields := fullSessionFields(opts)
+	for name, field := range sessionOpts.Model.AdditionalFields {
+		sessionFields[name] = field
+	}
+	userFields := fullUserFields(opts)
+	session.AdditionalFields = stripReturnedFalseFields(session.AdditionalFields, sessionFields)
+	user.AdditionalFields = stripReturnedFalseFields(user.AdditionalFields, userFields)
+	return session, user
+}
+
+// stripReturnedFalseFields drops entries declared with returned:false in
+// fields, keeping everything else including keys unknown to the schema
+// (upstream filterOutputFields keeps unknown keys). A nil/empty input stays
+// nil; an input filtered to empty becomes nil.
+func stripReturnedFalseFields(in map[string]any, fields map[string]types.FieldAttribute) map[string]any {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(in))
+	for key, value := range in {
+		if name, ok := CanonicalInputKey(key, fields); ok {
+			if field := fields[name]; field.Returned != nil && !*field.Returned {
+				continue
+			}
+		}
+		out[key] = value
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// filterCookieCacheMaps strips schema-declared returned:false additional
+// fields from cacheStructMap outputs in place (the map-level equivalent of
+// filterCookieCacheSessionUser for the JWT/JWE/custom-signer codecs, whose
+// maps carry additional fields nested under "additionalFields"). Core
+// columns and unknown fields are kept. Safe on nil/empty maps.
+func filterCookieCacheMaps(sm, um map[string]any, opts types.Options, sessionOpts types.SessionOptions) {
+	sessionFields := fullSessionFields(opts)
+	for name, field := range sessionOpts.Model.AdditionalFields {
+		sessionFields[name] = field
+	}
+	userFields := fullUserFields(opts)
+	filterCookieCacheMap(sm, sessionFields)
+	filterCookieCacheMap(um, userFields)
+}
+
+// filterCookieCacheMap strips one cache map: the nested "additionalFields"
+// entries first, then (defensively) any flattened top-level additional keys.
+// Core cache keys are explicitly exempt so a misconfigured schema can never
+// drop them.
+func filterCookieCacheMap(m map[string]any, fields map[string]types.FieldAttribute) {
+	if len(m) == 0 {
+		return
+	}
+	if nested, ok := m["additionalFields"].(map[string]any); ok {
+		if stripped := stripReturnedFalseFields(nested, fields); len(stripped) == 0 {
+			delete(m, "additionalFields")
+		} else {
+			m["additionalFields"] = stripped
+		}
+	}
+	for key := range m {
+		if key == "additionalFields" || isCookieCacheCoreKey(key) {
+			continue
+		}
+		if name, ok := CanonicalInputKey(key, fields); ok {
+			if field := fields[name]; field.Returned != nil && !*field.Returned {
+				delete(m, key)
+			}
+		}
+	}
+}
+
+// isCookieCacheCoreKey reports the core session/user columns that the cache
+// filter must always keep (constraint: only schema-declared additional
+// fields with explicit returned:false are dropped).
+func isCookieCacheCoreKey(key string) bool {
+	switch key {
+	case "id", "email", "emailVerified", "name", "image", "createdAt", "updatedAt",
+		"userId", "token", "expiresAt", "ipAddress", "userAgent",
+		"activeOrganizationId", "activeTeamId":
+		return true
+	default:
+		return false
+	}
+}
 
 // headersWithStoredRequest supplements empty Host/proxy headers from the
 // middleware-reconstructed request (StoredRequestFromStd) so cross-subdomain
@@ -481,6 +584,12 @@ func newSessionDataCookieWithContext(ctx context.Context, opts types.Options, se
 	if err != nil {
 		return http.Cookie{}, err
 	}
+	// Cookie-cache field filtering (upstream setCookieCache, cookies/index.ts:
+	// 169-174): schema-declared returned:false additional fields are stripped
+	// from the cache payload for every strategy, while core columns and
+	// unknown fields are kept. Version resolution above sees the unfiltered
+	// pair, matching upstream's order (filter, then version from the original).
+	session, user = filterCookieCacheSessionUser(session, user, opts, sessionOpts)
 	maxAge := sessionOpts.CookieCacheMaxAgeDuration()
 	if dontRememberMe {
 		maxAge = time.Minute
@@ -519,6 +628,7 @@ func newSessionDataCookieWithContext(ctx context.Context, opts types.Options, se
 			if err != nil {
 				return http.Cookie{}, err
 			}
+			filterCookieCacheMaps(sm, um, opts, sessionOpts)
 			value, err = cookies.CreateSessionCacheJWT(opts.CurrentSecret(), sm, um, version, time.Until(expiresAt))
 			if err != nil {
 				return http.Cookie{}, err
@@ -533,6 +643,7 @@ func newSessionDataCookieWithContext(ctx context.Context, opts types.Options, se
 		if err != nil {
 			return http.Cookie{}, err
 		}
+		filterCookieCacheMaps(sm, um, opts, sessionOpts)
 		value, err = cookies.CreateSessionCacheJWE(opts.CurrentSecret(), sm, um, version, time.Until(expiresAt))
 		if err != nil {
 			return http.Cookie{}, err
@@ -540,11 +651,13 @@ func newSessionDataCookieWithContext(ctx context.Context, opts types.Options, se
 	} else {
 		// Compact uses the frozen secret-envelope codec; route callers
 		// pass the current secret (rotation reads accept older secrets).
+		// session/user were filtered for returned:false above, so the
+		// delegated frozen issuance carries a clean payload.
 		// Wire name stays the legacy Go cookie (sessionDataCookieName) for
 		// backward compatibility; reads accept the upstream and custom
 		// names via sessionDataCookieValue. Only re-attribute Domain/Secure
 		// from the request-aware config.
-		single, err := newSessionDataCookie(opts.CurrentSecret(), session, user, sessionOpts, now, dontRememberMe)
+		single, err := newSessionDataCookie(opts.CurrentSecret(), session, user, opts, sessionOpts, now, dontRememberMe)
 		if err != nil {
 			return http.Cookie{}, err
 		}

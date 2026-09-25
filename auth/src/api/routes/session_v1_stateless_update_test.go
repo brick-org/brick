@@ -26,7 +26,7 @@ func mintStatelessHeader(t *testing.T, opts types.Options, token string, session
 	if err != nil {
 		t.Fatal(err)
 	}
-	cacheCookie, err := newSessionDataCookie(opts.CurrentSecret(), session, user, opts.Session, time.Now().UTC(), false)
+	cacheCookie, err := newSessionDataCookie(opts.CurrentSecret(), session, user, opts, opts.Session, time.Now().UTC(), false)
 	if err != nil {
 		t.Fatal(err)
 	}

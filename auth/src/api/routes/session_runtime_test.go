@@ -68,7 +68,7 @@ func cacheHeaderFor(t *testing.T, ctx context.Context, opts types.Options, token
 	}
 	session := rowToSession(sessionRow, opts)
 	user := rowToUser(userRow, opts)
-	cacheCookie, err := newSessionDataCookie(opts.CurrentSecret(), session, user, opts.Session, time.Now().UTC(), false)
+	cacheCookie, err := newSessionDataCookie(opts.CurrentSecret(), session, user, opts, opts.Session, time.Now().UTC(), false)
 	if err != nil {
 		t.Fatalf("mint cache cookie: %v", err)
 	}
@@ -246,7 +246,7 @@ func TestCookieCacheStrategyGate(t *testing.T) {
 	} {
 		strategyOpts := opts.Session
 		strategyOpts.CookieCache.Strategy = strategy
-		cacheCookie, err := newSessionDataCookie(opts.CurrentSecret(), session, user, strategyOpts, time.Now().UTC(), false)
+		cacheCookie, err := newSessionDataCookie(opts.CurrentSecret(), session, user, opts, strategyOpts, time.Now().UTC(), false)
 		if err != nil {
 			t.Fatalf("%s: mint must succeed: %v", strategy, err)
 		}
