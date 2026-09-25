@@ -1931,6 +1931,53 @@ func persistSecondarySessionValue(opts types.Options, token string, updated *sec
 	return storeSecondarySessionRefs(opts, updated.Session.UserID, kept, nowMs)
 }
 
+// refreshSecondaryUserSessions rewrites the cached user on every live
+// secondary session of the user, mirroring upstream refreshUserSessions
+// (db/internal-adapter.ts:108-137), which updateUser/updateUserByEmail run
+// after the commit: one Set per live token carrying {session (unchanged),
+// user (new)}, TTL'd to the cached session expiry; the active-sessions list
+// is untouched, so one update costs exactly one write per token. Expired
+// references and missing/corrupt entries are skipped, never fatal. A nil
+// backend (or empty user ID) is a no-op so update paths can call it
+// unconditionally. Backend errors abort with the error for the caller to map
+// (upstream surfaces them via the after-transaction hook's onError).
+// Upstream TypeScript name: refreshUserSessions.
+func refreshSecondaryUserSessions(opts types.Options, user types.User) error {
+	if opts.SecondaryStorage == nil || user.ID == "" {
+		return nil
+	}
+	raw, err := opts.SecondaryStorage.Get(activeSessionsKey(user.ID))
+	if err != nil {
+		return err
+	}
+	if raw == nil {
+		return nil
+	}
+	now := time.Now()
+	nowMs := now.UnixMilli()
+	for _, ref := range parseSecondarySessionRefs(raw) {
+		if ref.ExpiresAt <= nowMs {
+			continue
+		}
+		cached, err := findSecondarySession(opts, ref.Token)
+		if err != nil {
+			return err
+		}
+		if cached == nil {
+			continue
+		}
+		encoded, err := encodeSecondarySessionValue(cached.Session, user)
+		if err != nil {
+			return err
+		}
+		ttl := secondarySessionTTL(cached.Session.ExpiresAt, now)
+		if err := opts.SecondaryStorage.Set(ref.Token, encoded, &ttl); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // secondaryAwareSessionOwner resolves the owning user ID of a session token
 // across both stores, mirroring the ownership check before upstream
 // deleteSession. A secondary hit wins; a miss falls back to the database

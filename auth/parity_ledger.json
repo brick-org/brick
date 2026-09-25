@@ -473,6 +473,22 @@
         {
           "case": "still refreshes the cookie in a DB-less deployment when no row exists",
           "goTest": "TestV1_DBlessUpdateSessionFromCookieCache (previously panicked on nil DB)"
+        },
+        {
+          "case": "should store session in secondary storage",
+          "goTest": "TestCreationMirrorsSecondaryStorage (pre-existing) + TestSecondaryV1_RouteListRevokeSecondary"
+        },
+        {
+          "case": "should list sessions",
+          "goTest": "TestSecondaryV1_RouteListRevokeSecondary (secondary mode)"
+        },
+        {
+          "case": "revoke session and list sessions",
+          "goTest": "TestSecondaryV1_RouteListRevokeSecondary"
+        },
+        {
+          "case": "should revoke session",
+          "goTest": "TestSecondaryV1_RouteListRevokeSecondary (no store residue)"
         }
       ],
       "notes": "MaxAge default/ceiling, expired-list/revoke 401, DB-less get/update paths, defer+disable, revocation fail-closed covered by session_v1_* suites; JWKS/JWT-plugin, org/admin authority, and returnHeaders legs out of scope."
@@ -772,6 +788,18 @@
         {
           "case": "sets the password on the existing passwordless credential account",
           "goTest": "TestCredsV1_SetPasswordOnPasswordlessAccount + CreatesMissingAccount (server-only SetPassword, no HTTP route upstream)"
+        },
+        {
+          "case": "should propagate updates across sessions when secondaryStorage is enabled",
+          "goTest": "TestSecondaryV1_RefreshPropagatesAcrossSessions (helper; route wiring open)"
+        },
+        {
+          "case": "should not write to secondary storage multiple times for the same session token during updateUser",
+          "goTest": "TestSecondaryV1_RefreshWritesOncePerToken (helper; route wiring open)"
+        },
+        {
+          "case": "should preserve the replacement session in secondary storage",
+          "goTest": "TestSecondaryV1_DeleteAllThenRecreateKeepsOnlyReplacement (helper; ChangePassword wiring open)"
         }
       ],
       "notes": "Update/change-email/delete-user matrices plus server-only setPassword covered by creds_v1_account/setpassword suites; secondary-storage propagation legs open."
