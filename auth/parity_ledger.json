@@ -493,9 +493,85 @@
         {
           "case": "should revoke session",
           "goTest": "TestSecondaryV1_RouteListRevokeSecondary (no store residue)"
+        },
+        {
+          "case": "should list sessions",
+          "goTest": "TestTriageV1_ListSessionsPrimary"
+        },
+        {
+          "case": "should revoke session",
+          "goTest": "TestTriageV1_RevokeOwnSessionThenRevokeAll"
+        },
+        {
+          "case": "refreshes expired cache and reuses the replacement cookie",
+          "goTest": "TestTriageV1_CompactExpiredCacheRefreshes"
+        },
+        {
+          "case": "should have max age expiry",
+          "goTest": "TestTriageV1_JWTCacheMaxAgeExpiry"
+        },
+        {
+          "case": "should preserve session expiry when refreshing stateless cookie cache",
+          "goTest": "TestTriageV1_StatelessRefreshPreservesExpiry"
+        },
+        {
+          "case": "should work without database when refreshCache threshold is reached",
+          "goTest": "TestTriageV1_StatelessRefreshPreservesExpiry (serves + re-issues, DB nil)"
+        },
+        {
+          "case": "should extend session_token cookie expiry when refreshCache threshold is reached",
+          "goTest": "TestTriageV1_StatelessRefreshPreservesExpiry (MaxAge=expiresIn)"
+        },
+        {
+          "case": "should include additionalFields when retrieving from cookie cache",
+          "goTest": "TestTriageV1_CacheServesAdditionalFields"
+        },
+        {
+          "case": "should update session on POST when deferSessionRefresh is enabled",
+          "goTest": "TestTriageV1_DeferPostWritesDueSession"
+        },
+        {
+          "case": "should have consistent date types between cookie cache and refresh paths",
+          "goTest": "TestTriageV1_StatelessRefreshPreservesExpiry (equality across refresh)"
+        },
+        {
+          "case": "should update a custom additional field on a session",
+          "goTest": "TestTriageV1_UpdateSessionCustomFieldAndCookie"
+        },
+        {
+          "case": "should ignore core session fields",
+          "goTest": "TestTriageV1_UpdateSessionIgnoresCoreFields"
+        },
+        {
+          "case": "should ignore core field userId",
+          "goTest": "TestTriageV1_UpdateSessionIgnoresCoreFields"
+        },
+        {
+          "case": "should update session cookie after mutation",
+          "goTest": "TestTriageV1_UpdateSessionCustomFieldAndCookie (Set-Cookie on mutation)"
+        },
+        {
+          "case": "a request cannot re-enable the cookie cache on a route that forces it off",
+          "goTest": "TestTriageV1_ForcedStrictChangePassword"
+        },
+        {
+          "case": "does not set Cache-Control: no-store on session-gated endpoints",
+          "goTest": "TestTriageV1_NoStoreAbsentElsewhere (list-sessions vehicle)"
+        },
+        {
+          "case": "should return null when not authenticated",
+          "goTest": "DEVIATION (fail-closed): Go answers 401 FAILED_TO_GET_SESSION, pinned by TestResolveGetSessionMapsErrors; upstream 200 null intentionally not adopted"
+        },
+        {
+          "case": "should delete expired session on POST when deferSessionRefresh is enabled",
+          "goTest": "DEVIATION (fail-closed): row deleted per upstream, Go answers 400 SESSION_EXPIRED instead of 200 null"
+        },
+        {
+          "case": "sets Cache-Control: no-store on unauthenticated GET /get-session responses",
+          "goTest": "DEVIATION (fail-closed): no-store set on success only; follows from the null-shape deviation above"
         }
       ],
-      "notes": "MaxAge default/ceiling, expired-list/revoke 401, DB-less get/update paths, defer+disable, revocation fail-closed covered by session_v1_* suites; JWKS/JWT-plugin, org/admin authority, and returnHeaders legs out of scope."
+      "notes": "Full 85-case triage done: 38 cited to pre-existing suites, 16 ported (triage_v1_session), 10 excluded (JWKS x5, plugin authority, returnHeaders, plugin-endpoint freshness, client-concurrency x2), 3 fail-closed deviations (null-shape), 1 accepted divergence (unknown-only update passes through, pinned), 1 open (explicit updateAge:0 needs *int tri-state, types frozen)."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/api/routes/sign-in.test.ts",

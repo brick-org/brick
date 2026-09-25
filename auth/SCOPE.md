@@ -104,3 +104,11 @@ owners are deferred as high-churn, behavior-neutral (see `index.go`).
   X-Real-IP → RemoteAddr host → `""`; UA verbatim → `""`). Full upstream
   `getIP` proxy-chain semantics are intentionally not replicated; session
   issuance stores the directly resolved address.
+
+- Get-session null-shape: upstream answers 200 `null` for missing/expired
+  sessions; Go answers 401/400 fail-closed (pinned). G1/G3/G5 recorded as
+  intentional deviations, not gaps.
+- Explicit `updateAge: 0` (always-refresh) is not distinguished from unset
+  (needs `*int` tri-state; `types` frozen) — open post-v1 gap.
+- Unknown-only update-session bodies pass through (union semantics, pinned)
+  instead of upstream 400 — accepted divergence.
