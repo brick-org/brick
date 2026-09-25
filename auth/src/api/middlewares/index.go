@@ -12,9 +12,12 @@
 //
 //   - `authorization.go`: RequireResourceOwnership / RequireOrgRole,
 //     mirroring `requireResourceOwnership` / `requireOrgRole`.
-//   - `origin-check.go`: IsMutatingMethod / NeedsOriginValidation plus the
+//   - `origin-check.go`: IsMutatingMethod / OriginOrReferer /
+//     ResolveOriginCandidate / NeedsOriginValidation / HasFetchMetadata /
+//     IsCrossSiteNavigation / RequiresForceOriginValidation plus the
 //     skip-gate documentation, mirroring the `validateOrigin` /
-//     `shouldSkipOriginCheck` / `shouldSkipCSRFForBackwardCompat` gates.
+//     `validateFormCsrf` / `shouldSkipOriginCheck` /
+//     `shouldSkipCSRFForBackwardCompat` gates.
 //
 // Enforcement wiring stays in the `api` package's `Router`
 // (`auth/src/api/index.go`), which installs the origin-check middleware

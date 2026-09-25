@@ -47,3 +47,44 @@ func GetShouldSkipSessionRefresh(ctx context.Context) bool {
 func ShouldSkipSessionRefresh(ctx context.Context) bool {
 	return GetShouldSkipSessionRefresh(ctx)
 }
+
+// --- Stateless cookie-cache refresh resolution (upstream
+// `src/context/create-context.ts:318-351`) ---
+//
+// Upstream resolves `session.cookieCache.refreshCache` at context creation:
+// `refreshCache` is intended for fully stateless / DB-less setups, so when a
+// server-side session store is configured (`hasServerSessionStore` =
+// database or secondaryStorage configured,
+// `src/context/store-capabilities.ts:3-5`) an enabled `refreshCache` logs a
+// warning and resolves to disabled (`false`); an unset `refreshCache`
+// resolves to disabled without warning; otherwise it resolves to enabled
+// with `updateAge` defaulting to `Math.floor(maxAge * 0.2)`.
+//
+// ResolveCookieRefreshCache is the pure Go mirror of that resolution.
+// configured reports whether the operator set refreshCache at all (any of
+// Enabled, a non-zero UpdateAge, or a ShouldRefresh gate — mirroring
+// upstream's truthiness of `true | { updateAge }`); updateAge and maxAge are
+// in seconds (non-positive maxAge falls back to upstream's 300 default);
+// hasServerStore mirrors hasServerSessionStore. It returns the effective
+// enabled flag, the effective threshold in seconds (0 when disabled), and
+// whether the caller must log upstream's warn-disable note.
+//
+// Construction wiring (auth.BetterAuth) and the route read path are owned by
+// sibling packages; this helper pins the decision table here so the state
+// package owns the upstream semantics.
+func ResolveCookieRefreshCache(configured bool, updateAge, maxAge int, hasServerStore bool) (enabled bool, effectiveUpdateAge int, warnDisable bool) {
+	if !configured {
+		return false, 0, false
+	}
+	if hasServerStore {
+		return false, 0, true
+	}
+	effective := maxAge
+	if effective <= 0 {
+		effective = 300
+	}
+	if updateAge > 0 {
+		return true, updateAge, false
+	}
+	return true, effective * 2 / 10, false
+}

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	stdpath "path"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -535,13 +535,20 @@ func useRateLimitMiddleware(api huma.API, basePath string, opts types.Options) {
 			return
 		}
 
-		if retryAfter, limited := isRateLimited(config); limited {
+		// Single-step atomic consume through the selected backend (memory by
+		// default), mirroring upstream onRequestRateLimit's single-step
+		// consume (vendor/.../src/api/rate-limiter/index.ts:418-437): the
+		// check-and-increment happens here in the request phase with no
+		// response-phase write-back, so a concurrent burst can never pass a
+		// stale read before any increment lands. The legacy two-phase
+		// isRateLimited/recordRateLimit helpers below stay for unit-level
+		// introspection only and must not be used for enforcement.
+		if retryAfter, limited := rateLimitStorage.Consume(config.Key, config.Window, config.Max); limited {
 			writeRateLimitResponse(ctx, retryAfter)
 			return
 		}
 
 		next(ctx)
-		recordRateLimit(config)
 	})
 }
 
@@ -784,7 +791,9 @@ func defaultRateLimitRule(path string) (types.RateLimitRule, bool) {
 // customRuleResolver finds the function-valued custom rule for path,
 // mirroring the wildcard/exact lookup upstream applies to customRules
 // (vendor/.../src/api/rate-limiter/index.ts:382-389). Exact keys win;
-// wildcard keys apply in sorted order for determinism.
+// wildcard keys (upstream wildcardMatch semantics, see wildcardMatchPath)
+// apply in sorted order for determinism (upstream uses JS insertion order,
+// which has no Go equivalent).
 func customRuleResolver(path string, resolvers map[string]types.RateLimitRuleResolver) (types.RateLimitRuleResolver, bool) {
 	if len(resolvers) == 0 {
 		return nil, false
@@ -803,12 +812,101 @@ func customRuleResolver(path string, resolvers map[string]types.RateLimitRuleRes
 	}
 	sort.Strings(keys)
 	for _, key := range keys {
-		matched, err := stdpath.Match(key, path)
-		if err == nil && matched {
+		if wildcardMatchPath(key, path) {
 			return resolvers[key], true
 		}
 	}
 	return nil, false
+}
+
+// wildcardMatchPath reports whether path matches a custom-rule glob pattern
+// with upstream wildcardMatch semantics
+// (vendor/.../src/utils/wildcard.ts, default separator "/"):
+//   - `*` matches any run of characters inside one `/` segment (never `/`);
+//   - `?` matches one in-segment character;
+//   - `**` crosses `/` boundaries (zero or more whole segments);
+//   - every other character matches literally (`\` escapes the next char).
+//
+// Only patterns containing `*` take this path: upstream applies
+// wildcardMatch only when the key includes "*" (otherwise the key must equal
+// the path exactly), so a "?" without "*" stays a literal match. Exact keys
+// keep winning over wildcard keys (checked first by the callers below);
+// wildcard keys apply in sorted order for determinism (upstream uses JS
+// insertion order, which has no Go equivalent — see customRateLimitRule).
+//
+// A pattern that cannot compile to a matcher never matches (fail-closed).
+func wildcardMatchPath(pattern, path string) bool {
+	if !strings.Contains(pattern, "*") {
+		return pattern == path
+	}
+	re, err := compileWildcardPattern(pattern)
+	if err != nil {
+		return false
+	}
+	return re.MatchString(path)
+}
+
+// compileWildcardPattern ports upstream transform() with separator=true:
+// "/" splits segments, the separator matcher is `[/\\]`, and the in-segment
+// wildcard is `[^/\\]`. The result is anchored (`^...$`) like upstream's
+// `new RegExp(`^${regexpPattern}$`)`.
+func compileWildcardPattern(pattern string) (*regexp.Regexp, error) {
+	const wildcard = `[^/\\]`
+	const requiredSeparator = `[/\\]+?`
+	const optionalSeparator = `[/\\]*?`
+
+	segments := strings.Split(pattern, "/")
+	var sb strings.Builder
+	for s, segment := range segments {
+		if segment == "" && s > 0 {
+			continue
+		}
+		currentSeparator := ""
+		if s == len(segments)-1 {
+			currentSeparator = optionalSeparator
+		} else if segments[s+1] != "**" {
+			currentSeparator = requiredSeparator
+		}
+		if segment == "**" {
+			if currentSeparator != "" {
+				if s != 0 {
+					sb.WriteString(currentSeparator)
+				}
+				sb.WriteString(`(?:` + wildcard + `*?` + currentSeparator + `)*?`)
+			}
+			continue
+		}
+		for c := 0; c < len(segment); c++ {
+			switch segment[c] {
+			case '\\':
+				// A trailing lone backslash is dropped upstream; an
+				// interior one escapes the next character.
+				if c+1 < len(segment) {
+					sb.WriteString(escapeWildcardChar(segment[c+1]))
+					c++
+				}
+			case '?':
+				sb.WriteString(wildcard)
+			case '*':
+				sb.WriteString(wildcard + `*?`)
+			default:
+				sb.WriteString(escapeWildcardChar(segment[c]))
+			}
+		}
+		sb.WriteString(currentSeparator)
+	}
+	return regexp.Compile(`^` + sb.String() + `$`)
+}
+
+// escapeWildcardChar escapes a literal byte for the matcher regexp,
+// mirroring upstream escapeRegExpChar.
+func escapeWildcardChar(char byte) string {
+	switch char {
+	case '-', '^', '$', '+', '.', '(', ')', '|', '[', ']', '{', '}', '*', '?', '\\':
+		return `\` + string(char)
+	default:
+		return string(char)
+	}
 }
 
 func customRateLimitRule(path string, rules map[string]types.RateLimitRule) (types.RateLimitRule, bool) {
@@ -828,10 +926,10 @@ func customRateLimitRule(path string, rules map[string]types.RateLimitRule) (typ
 	}
 	sort.Strings(keys)
 
-	// Match wildcard rules deterministically.
+	// Match wildcard rules deterministically (upstream wildcardMatch
+	// semantics, see wildcardMatchPath).
 	for _, key := range keys {
-		matched, err := stdpath.Match(key, path)
-		if err == nil && matched {
+		if wildcardMatchPath(key, path) {
 			return rules[key], true
 		}
 	}

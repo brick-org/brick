@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/brick-org/brick/auth/src/api/middlewares"
 	"github.com/brick-org/brick/auth/src/api/routes"
 	"github.com/brick-org/brick/auth/src/types"
 	"github.com/danielgtaylor/huma/v2"
@@ -53,19 +54,38 @@ func Router(adapter huma.Adapter, basePath string, opts types.Options) huma.API 
 	checkEndpointConflicts(opts)
 
 	// Origin-check middleware — mirrors better-auth's CSRF/origin protection
-	// (vendor/.../src/api/middlewares/origin-check.ts: validateOrigin).
-	// POST/PUT/PATCH/DELETE requests that carry both an Origin header AND a
-	// Cookie header must come from a trusted origin.
-	// Requests without cookies (server-to-server) always pass through.
+	// (vendor/.../src/api/middlewares/origin-check.ts: validateOrigin +
+	// validateFormCsrf). Mutating requests (everything but GET/OPTIONS/HEAD
+	// per upstream origin-check.ts:69-76) that carry browser evidence — an
+	// Origin (or Referer fallback) AND a Cookie header — must come from a
+	// trusted origin. Cookie-less requests keep the permissive fallback
+	// unless they carry browser evidence of their own (Fetch Metadata or an
+	// Origin/Referer header), in which case they are force-validated and
+	// cross-site navigations are blocked outright (upstream
+	// CROSS_SITE_NAVIGATION_LOGIN_BLOCKED). A same-origin form using
+	// `no-referrer` can send `Origin: null`; Fetch Metadata
+	// (`Sec-Fetch-Site: same-origin`) lets the middleware infer the origin
+	// from the request target instead of rejecting it.
+	// Requests without cookies and without any browser evidence
+	// (server-to-server) always pass through.
 	// Short-circuit errors use the huma {status,title,detail} shape, matching
 	// writeHookError below; only the rate limiter intentionally differs (it
 	// keeps upstream's {message} body — see writeRateLimitResponse).
 	//
 	// DisableOriginCheck skips this middleware entirely. Mirroring upstream's
 	// backward compatibility (shouldSkipCSRFForBackwardCompat), it also skips
-	// the CSRF check unless DisableCSRFCheck is set explicitly; BetterAuth
-	// logs a warning when the flag is set (direct Router callers get the
-	// same note here when logging is configured).
+	// the CSRF check unless DisableCSRFCheck is set explicitly (note: the
+	// compat path only ever applies to the boolean flag, never to
+	// skip-path arrays); BetterAuth logs a warning when the flag is set
+	// (direct Router callers get the same note here when logging is configured).
+	//
+	// Skip-path arrays (upstream ctx.skipOriginCheck string[], populated
+	// upstream by SSO plugin init) arrive via the optional
+	// skipOriginCheckPathsProvider plugin capability collected below; a
+	// listed exact path or slash-boundary child skips origin + CSRF
+	// validation for that request (see middlewares.ShouldSkipOriginCheck).
+	// Per-endpoint callbackURL/redirectTo trust stays with the route handlers
+	// (types.IsTrustedRedirect), which adopt skips incrementally.
 	//
 	// DynamicBaseURL mode installs this middleware even without a static
 	// BaseURL: the request origin is checked against the allowedHosts /
@@ -77,27 +97,61 @@ func Router(adapter huma.Adapter, basePath string, opts types.Options) huma.API 
 		apiLogf(opts, "warn", "auth: Advanced.DisableOriginCheck is set: origin validation is skipped in middleware, and CSRF origin checks are skipped as well for backward compatibility with better-auth; set Advanced.DisableCSRFCheck explicitly to silence this note")
 	}
 	if !originCheckSkipped && (opts.BaseURL != "" || len(opts.TrustedOrigins) > 0 || opts.TrustedOriginsFunc != nil || opts.DynamicBaseURL != nil) {
+		skipPaths := collectSkipOriginCheckPaths(opts)
 		api.UseMiddleware(func(ctx huma.Context, next func(huma.Context)) {
-			m := ctx.Method()
-			mutating := m == http.MethodPost || m == http.MethodPut ||
-				m == http.MethodPatch || m == http.MethodDelete
-			if mutating {
-				origin := ctx.Header("Origin")
-				cookie := ctx.Header("Cookie")
-				// Only validate when browser-style request (has both Origin + Cookie)
-				if origin != "" && cookie != "" {
-					// Reconstruct the request so TrustedOriginsFunc receives
-					// headers/URL/RemoteAddr; callers must still handle a
-					// body-less shallow copy (see requestFromContext limits).
-					if !originTrustedForRequest(origin, opts, requestFromContext(ctx)) {
-						// Headers before status: adapters flush on WriteHeader.
-						ctx.SetHeader("Content-Type", "application/json")
-						ctx.SetStatus(http.StatusForbidden)
-						_, _ = ctx.BodyWriter().Write([]byte(
-							`{"status":403,"title":"Forbidden","detail":"Invalid origin"}`,
-						))
-						return
-					}
+			if !middlewares.IsMutatingMethod(ctx.Method()) {
+				next(ctx)
+				return
+			}
+			// skipOriginCheck path-array: exact paths and slash-boundary
+			// children bypass origin + CSRF validation for this request.
+			if len(skipPaths) > 0 && middlewares.ShouldSkipOriginCheck(false, skipPaths, normalizeRateLimitPath(ctx.URL().Path, basePath)) {
+				next(ctx)
+				return
+			}
+			origin := ctx.Header("Origin")
+			referer := ctx.Header("Referer")
+			cookie := ctx.Header("Cookie")
+			site := ctx.Header("Sec-Fetch-Site")
+			mode := ctx.Header("Sec-Fetch-Mode")
+			dest := ctx.Header("Sec-Fetch-Dest")
+			candidate := middlewares.ResolveOriginCandidate(origin, referer, site, requestSchemeForOrigin(ctx, opts), ctx.Host())
+			// Reconstruct the request so TrustedOriginsFunc receives
+			// headers/URL/RemoteAddr; callers must still handle a
+			// body-less shallow copy (see requestFromContext limits).
+			req := requestFromContext(ctx)
+			if middlewares.NeedsOriginValidation(candidate, cookie) {
+				// A bare "null" that inference could not rescue carries no
+				// usable origin (upstream MISSING_OR_NULL_ORIGIN).
+				if candidate == "null" {
+					writeOriginRejection(ctx, "Missing or null origin")
+					return
+				}
+				if !originTrustedForRequest(candidate, opts, req) {
+					writeOriginRejection(ctx, "Invalid origin")
+					return
+				}
+				next(ctx)
+				return
+			}
+			// Cookie-less requests run the Fetch-Metadata first-login gate
+			// (upstream validateFormCsrf): cross-site navigations are
+			// blocked, any other browser evidence (fetch metadata or an
+			// Origin/Referer header) is force-validated, and requests with
+			// no evidence at all (curl, server-to-server) pass through.
+			if strings.TrimSpace(cookie) == "" &&
+				middlewares.RequiresForceOriginValidation(origin, referer, site, mode, dest) {
+				if middlewares.IsCrossSiteNavigation(site, mode) {
+					writeOriginRejection(ctx, "Cross-site navigation login blocked (CROSS_SITE_NAVIGATION_LOGIN_BLOCKED)")
+					return
+				}
+				if strings.TrimSpace(candidate) == "" || candidate == "null" {
+					writeOriginRejection(ctx, "Missing or null origin")
+					return
+				}
+				if !originTrustedForRequest(candidate, opts, req) {
+					writeOriginRejection(ctx, "Invalid origin")
+					return
 				}
 			}
 			next(ctx)
@@ -1070,6 +1124,71 @@ func originTrustedForRequest(origin string, opts types.Options, r *http.Request)
 	return false
 }
 
+// skipOriginCheckPathsProvider is an optional plugin capability mirroring
+// upstream's ctx.skipOriginCheck string[] branch
+// (vendor/.../src/api/middlewares/origin-check.ts:26-50, populated upstream
+// by SSO plugin init at vendor/.../packages/sso/src/index.ts:315): plugins
+// that need unauthenticated cross-site callbacks (SAML/OIDC reply URLs)
+// contribute the base-path-relative paths exempted from origin + CSRF
+// validation. It is discovered via type assertion alongside the legacy
+// Plugin interface; plugins that do not implement it keep working unchanged.
+// No plugin system is built here — this is a read-only assertion over the
+// existing opts.Plugins slice.
+type skipOriginCheckPathsProvider interface {
+	// SkipOriginCheckPaths returns base-path-relative skip paths
+	// (e.g. "/sso/saml2/callback"). Nil means none.
+	SkipOriginCheckPaths() []string
+}
+
+// collectSkipOriginCheckPaths gathers skip-origin-check paths across plugins
+// in declaration order (nil plugins and nil returns contribute nothing).
+func collectSkipOriginCheckPaths(opts types.Options) []string {
+	var out []string
+	for _, p := range opts.Plugins {
+		if p == nil {
+			continue
+		}
+		if provider, ok := p.(skipOriginCheckPathsProvider); ok {
+			out = append(out, provider.SkipOriginCheckPaths()...)
+		}
+	}
+	return out
+}
+
+// requestSchemeForOrigin derives the request-target scheme for null-Origin
+// inference (upstream getBaseURL/getOrigin over the request URL,
+// vendor/.../src/utils/url.ts:142-205): the trusted X-Forwarded-Proto value
+// when TrustedProxyHeaders opts in (upstream only honors forwarded headers
+// then), https for TLS requests, http otherwise.
+func requestSchemeForOrigin(ctx huma.Context, opts types.Options) string {
+	if opts.Advanced.TrustedProxyHeaders != nil && *opts.Advanced.TrustedProxyHeaders {
+		if proto := strings.ToLower(strings.TrimSpace(ctx.Header("X-Forwarded-Proto"))); proto == "http" || proto == "https" {
+			return proto
+		}
+	}
+	if ctx.TLS() != nil {
+		return "https"
+	}
+	return "http"
+}
+
+// writeOriginRejection answers 403 in the huma {status,title,detail} shape
+// shared with writeHookError (mirroring upstream's FORBIDDEN INVALID_ORIGIN /
+// MISSING_OR_NULL_ORIGIN / CROSS_SITE_NAVIGATION_LOGIN_BLOCKED throws at the
+// middleware layer). Headers precede the status: adapters flush on
+// WriteHeader.
+func writeOriginRejection(ctx huma.Context, detail string) {
+	ctx.SetHeader("Content-Type", "application/json")
+	ctx.SetStatus(http.StatusForbidden)
+	encoded, err := json.Marshal(detail)
+	if err != nil {
+		encoded = []byte(`"Invalid origin"`)
+	}
+	_, _ = ctx.BodyWriter().Write([]byte(
+		`{"status":403,"title":"Forbidden","detail":` + string(encoded) + `}`,
+	))
+}
+
 // isLoopbackHost reports whether hostport is a loopback host for developer
 // ergonomics, mirroring upstream isLoopbackHost
 // (vendor/.../core/src/utils/host.ts:390-393): IPv4 127.0.0.0/8, IPv6 ::1
@@ -1499,9 +1618,8 @@ func rateLimitNeedsCustomMiddleware(opts types.Options) bool {
 //     open, guarded reset/increment, re-read loop), mirroring upstream's
 //     createDatabaseStorageWrapper. Storage errors fail the request the same
 //     way.
-//   - memory: the legacy two-phase check/record pair (isRateLimited before
-//     the handler, recordRateLimit after), identical to the legacy
-//     middleware.
+//   - memory: one atomic rateLimitStorage.Consume step in the request phase
+//     (same single-step guarantee as the legacy middleware above).
 //
 // Limited responses keep the upstream {"message"} body and X-Retry-After
 // header via writeRateLimitResponse.
@@ -1572,12 +1690,11 @@ func useRateLimitMiddlewareWithStorage(api huma.API, basePath string, opts types
 			}
 			next(ctx)
 		default:
-			if retryAfter, limited := isRateLimited(config); limited {
+			if retryAfter, limited := rateLimitStorage.Consume(config.Key, config.Window, config.Max); limited {
 				writeRateLimitResponse(ctx, retryAfter)
 				return
 			}
 			next(ctx)
-			recordRateLimit(config)
 		}
 	})
 }
