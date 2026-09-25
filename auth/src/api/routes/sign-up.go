@@ -1,10 +1,14 @@
 package routes
 
 import (
+	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"strings"
@@ -112,6 +116,151 @@ func (b signUpBody) MarshalJSON() ([]byte, error) {
 	return json.Marshal(out)
 }
 
+// signUpFormMediaType is the additional request media type upstream accepts
+// on POST /sign-up/email (sign-up.ts:38-41 allowedMediaTypes json+form).
+const signUpFormMediaType = "application/x-www-form-urlencoded"
+
+// parseSignUpForm decodes an application/x-www-form-urlencoded body into the
+// JSON-equivalent object the sign-up schema validates: known fields coerced
+// (rememberMe "true"/"false" → bool, case-insensitive; anything else stays a
+// string so schema validation rejects it exactly like the JSON path), every
+// other present key preserved verbatim as an additional user field (single
+// value → string, repeated key → string array). Absent keys stay absent so
+// required-field validation matches the JSON path.
+func parseSignUpForm(values url.Values) map[string]any {
+	obj := make(map[string]any, len(values))
+	for key, vals := range values {
+		if len(vals) == 0 {
+			continue
+		}
+		if len(vals) == 1 {
+			obj[key] = vals[0]
+			continue
+		}
+		arr := make([]any, len(vals))
+		for i, v := range vals {
+			arr[i] = v
+		}
+		obj[key] = arr
+	}
+	if raw, ok := obj["rememberMe"].(string); ok {
+		switch strings.ToLower(strings.TrimSpace(raw)) {
+		case "true":
+			obj["rememberMe"] = true
+		case "false":
+			obj["rememberMe"] = false
+		}
+	}
+	return obj
+}
+
+// decodeSignUpForm populates b from a parsed form body, mirroring
+// UnmarshalJSON's known/rest split (same fields + additionalFields) through
+// the shared JSON round trip.
+func (b *signUpBody) decodeSignUpForm(values url.Values) error {
+	raw, err := json.Marshal(parseSignUpForm(values))
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(raw, b)
+}
+
+// isSignUpFormRequest reports whether ctx carries a form-urlencoded body.
+func isSignUpFormRequest(ctx huma.Context) bool {
+	ct := ctx.Header("Content-Type")
+	if ct == "" {
+		return false
+	}
+	if i := strings.IndexByte(ct, ';'); i >= 0 {
+		ct = ct[:i]
+	}
+	return strings.EqualFold(strings.TrimSpace(ct), signUpFormMediaType)
+}
+
+// signUpFormContext presents the transcoded JSON body to huma's pipeline,
+// delegating everything else to the wrapped context (same pattern as the
+// api-layer capturedContext).
+type signUpFormContext struct {
+	inner huma.Context
+	body  []byte
+}
+
+func (c *signUpFormContext) Operation() *huma.Operation { return c.inner.Operation() }
+func (c *signUpFormContext) Context() context.Context   { return c.inner.Context() }
+func (c *signUpFormContext) TLS() *tls.ConnectionState  { return c.inner.TLS() }
+func (c *signUpFormContext) Version() huma.ProtoVersion { return c.inner.Version() }
+func (c *signUpFormContext) Method() string             { return c.inner.Method() }
+func (c *signUpFormContext) Host() string               { return c.inner.Host() }
+func (c *signUpFormContext) RemoteAddr() string         { return c.inner.RemoteAddr() }
+func (c *signUpFormContext) URL() url.URL               { return c.inner.URL() }
+func (c *signUpFormContext) Param(name string) string   { return c.inner.Param(name) }
+func (c *signUpFormContext) Query(name string) string   { return c.inner.Query(name) }
+func (c *signUpFormContext) EachHeader(cb func(name, value string)) {
+	c.inner.EachHeader(cb)
+}
+func (c *signUpFormContext) GetMultipartForm() (*multipart.Form, error) {
+	return c.inner.GetMultipartForm()
+}
+func (c *signUpFormContext) SetReadDeadline(deadline time.Time) error {
+	return c.inner.SetReadDeadline(deadline)
+}
+func (c *signUpFormContext) SetStatus(code int)           { c.inner.SetStatus(code) }
+func (c *signUpFormContext) Status() int                  { return c.inner.Status() }
+func (c *signUpFormContext) SetHeader(name, value string) { c.inner.SetHeader(name, value) }
+func (c *signUpFormContext) AppendHeader(name, value string) {
+	c.inner.AppendHeader(name, value)
+}
+func (c *signUpFormContext) BodyWriter() io.Writer { return c.inner.BodyWriter() }
+func (c *signUpFormContext) Unwrap() huma.Context  { return c.inner }
+
+func (c *signUpFormContext) Header(name string) string {
+	if strings.EqualFold(name, "Content-Type") {
+		return "application/json"
+	}
+	return c.inner.Header(name)
+}
+
+func (c *signUpFormContext) BodyReader() io.Reader {
+	return bytes.NewReader(c.body)
+}
+
+// signUpFormMiddleware transcodes application/x-www-form-urlencoded bodies to
+// JSON before huma's JSON-only body pipeline runs (huma ships no form
+// format; registering one would require touching the shared Router, owned by
+// another lane). Non-form requests pass through untouched. Malformed form
+// bodies short-circuit 400; empty form bodies fall through to the required
+// body check like empty JSON bodies.
+func signUpFormMiddleware(api huma.API) func(huma.Context, func(huma.Context)) {
+	return func(ctx huma.Context, next func(huma.Context)) {
+		if !isSignUpFormRequest(ctx) {
+			next(ctx)
+			return
+		}
+		var buf bytes.Buffer
+		if r := ctx.BodyReader(); r != nil {
+			if _, err := io.Copy(&buf, r); err != nil {
+				_ = huma.WriteErr(api, ctx, http.StatusBadRequest, "invalid form body")
+				return
+			}
+		}
+		if buf.Len() == 0 {
+			next(ctx)
+			return
+		}
+		values, err := url.ParseQuery(buf.String())
+		if err != nil {
+			_ = huma.WriteErr(api, ctx, http.StatusBadRequest, "invalid form body")
+			return
+		}
+		transcoded, err := json.Marshal(parseSignUpForm(values))
+		if err != nil {
+			_ = huma.WriteErr(api, ctx, http.StatusBadRequest, "invalid form body")
+			return
+		}
+		next(&signUpFormContext{inner: ctx, body: transcoded})
+	}
+}
+
 // TransformSchema permits additional properties on the sign-up body,
 // mirroring upstream's `z.object({...}).and(z.record(z.string(), z.any()))`
 // (sign-up.ts:17-26): unknown top-level keys are additional user fields for
@@ -137,13 +286,17 @@ type signUpOutput struct {
 
 // SignUpEmail registers POST /sign-up/email.
 func SignUpEmail(api huma.API, basePath string, opts types.Options) {
-	registerAuthOperation(api, huma.Operation{
+	op := huma.Operation{
 		Tags:        []string{"Auth"},
 		Method:      http.MethodPost,
 		Path:        basePath + "/sign-up/email",
 		OperationID: "signUpWithEmailAndPassword",
 		Summary:     "Sign up with email and password",
-	}, opts, func(ctx context.Context, input *signUpInput) (*signUpOutput, error) {
+	}
+	// Upstream allowedMediaTypes json+form (sign-up.ts:38-41): the middleware
+	// transcodes form bodies to JSON (runtime); the OpenAPI stays JSON-shaped.
+	op.Middlewares = append(op.Middlewares, signUpFormMiddleware(api))
+	registerAuthOperation(api, op, opts, func(ctx context.Context, input *signUpInput) (*signUpOutput, error) {
 		if !opts.EmailAndPassword.Enabled || opts.EmailAndPassword.DisableSignUp {
 			return nil, huma.Error400BadRequest("email/password sign-up is not enabled")
 		}
