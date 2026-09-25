@@ -191,7 +191,11 @@ func TestRevokeOtherSessions_KeepsCurrent(t *testing.T) {
 
 func TestUpdateSession_PersistsAdditionalFields(t *testing.T) {
 	db := newMemoryAdapter()
-	srv := newCoreTestServer(t, db, baseTestOptions())
+	// B2 upstream parity: undeclared-only bodies 400, so declare the field
+	// under test (intent unchanged: declared additional fields persist).
+	opts := baseTestOptions()
+	opts.Session.Model.AdditionalFields = map[string]auth.FieldAttribute{"favoriteColor": {}}
+	srv := newCoreTestServer(t, db, opts)
 
 	resp, cookie := signUp(t, srv.URL, "update-session@example.com")
 	resp.Body.Close()
