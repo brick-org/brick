@@ -96,8 +96,7 @@ into `password.go`, `session-extra.go` + `session-c701.go` merged into
 rate-limiter impl stays in parent `api` package (folding it into
 `api/rate-limiter/` would cycle `api`↔child), `crypto/symmetric.go` keeps its
 descriptive name instead of swapping with the package-doc `index.go`
-(TS barrel convention doesn't map to Go), frozen `*.gen.go` artifacts keep
-their suffix.
+(TS barrel convention doesn't map to Go), frozen `*.gen.go` artifacts are kebab-renamed with content untouched.
 
 ## Explicit v1 exclusions within core files
 

@@ -140,9 +140,16 @@ Bun/SQLite/PG, custom JWKS signer, `integrations/*`, `test-utils/*` harness.
   plain row deletes with no race gate to swap — left as-is by design.
 - B8 file-structure CLOSED: password-extra/session-extra/session-c701
   merged, update-user.go extracted (incl. ChangePassword), kebab-case
-  type files, catalog + SCOPE maps updated. Deliberately unmirrored:
-  rate-limiter parent impl (import cycle), crypto/symmetric.go name
-  (descriptive over barrel mirroring), frozen *.gen.go suffix.
+  type files, crypto impl into index.go (upstream crypto/index.ts),
+  frozen gen artifacts kebab-renamed (content untouched), catalog + SCOPE
+  maps updated.
+- Single remaining structural deviation (measured, not deferred blindly):
+  rate-limiter impl stays in parent `api` ( Go forbids two packages per
+  directory, so the move needs a package split; the limiter shares 4
+  helpers bidirectionally with the parent and ~15 unexported symbols are
+  used across 8 test files — mirroring it means permanently exporting
+  ~20 internals + qualifying hundreds of call sites for zero behavior
+  gain. Revisit only with a dedicated API-review batch).
 
 ## Proposed fix batches (v1 release)
 
