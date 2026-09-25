@@ -718,11 +718,13 @@ func DeleteUser(api huma.API, basePath string, opts types.Options) {
 			if hash == "" || !valid {
 				return nil, huma.NewError(types.StatusForCode(types.ErrInvalidPassword), types.ErrInvalidPassword)
 			}
-		} else if !sessionIsFresh(sessionRow, opts.Session, time.Now().UTC()) {
-			return nil, huma.NewError(types.StatusForCode(types.ErrSessionExpired), types.ErrSessionExpired)
 		}
 
 		if input.Body.Token != nil {
+			// Upstream token path returns early (update-user.ts:492-504)
+			// before the freshAge gate (:539-545): a valid token deletes
+			// even on a stale session, so no freshness check applies here.
+			// The non-token path enforces freshness via the gate below.
 			// Upstream delegates to deleteUserCallback (update-user.ts:492-503):
 			// the single-use token is consumed atomically first (burned even
 			// for a wrong owner), then the account is deleted with hooks.
@@ -803,18 +805,6 @@ func DeleteUser(api huma.API, basePath string, opts types.Options) {
 		out.Body.Message = "User deleted"
 		return out, nil
 	})
-}
-
-func sessionIsFresh(sessionRow map[string]any, opts types.SessionOptions, now time.Time) bool {
-	freshAge, enabled := opts.FreshAgeDuration()
-	if !enabled {
-		return true
-	}
-	createdAt, ok := sessionRow["createdAt"].(time.Time)
-	if !ok {
-		return false
-	}
-	return now.Sub(createdAt) < freshAge
 }
 
 type changeEmailVerificationPayload struct {
