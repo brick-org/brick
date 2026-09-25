@@ -658,6 +658,10 @@
         {
           "case": "should get the ipAddress and userAgent from headers",
           "goTest": "TestIPUA_SignUpStoresIPAndUserAgent"
+        },
+        {
+          "case": "should rollback when session creation fails",
+          "goTest": "TestOrphanV1_SessionCreateFailureRemovesUser + SecondaryMirror/Cookie variants (compensating delete, no tx needed)"
         }
       ],
       "notes": "Additional-fields create, synthetic parity, enumeration, URL-encoding covered by creds_v1_signup suite; CSRF/form-data/secondary-storage legs excluded."

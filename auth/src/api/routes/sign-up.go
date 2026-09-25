@@ -130,7 +130,7 @@ type signUpInput struct {
 type signUpOutput struct {
 	SetCookie []http.Cookie `header:"Set-Cookie"`
 	Body      struct {
-		Token *string `json:"token"`
+		Token *string  `json:"token"`
 		User  flatUser `json:"user"`
 	}
 }
@@ -415,6 +415,7 @@ func SignUpEmail(api huma.API, basePath string, opts types.Options) {
 			// Kept 400 (differs from StatusForCode 500): upstream
 			// sign-up.ts:435-439 throws BAD_REQUEST when session creation
 			// fails after the user was created.
+			cleanupOrphanSignUp(ctx, opts, userID, token)
 			return nil, huma.Error400BadRequest(types.ErrFailedToCreateSession)
 		}
 
@@ -424,10 +425,12 @@ func SignUpEmail(api huma.API, basePath string, opts types.Options) {
 		// createSession mirroring, internal-adapter.ts:520-564). A failing
 		// mirror fails issuance loudly, like the database create above.
 		if err := writeSecondarySession(opts, session, user); err != nil {
+			cleanupOrphanSignUp(ctx, opts, userID, token)
 			return nil, huma.NewError(types.StatusForCode(types.ErrFailedToCreateSession), types.ErrFailedToCreateSession)
 		}
 		cookiesOut, err := issueSessionCookies(opts, input.CookieRequestHeaders, token, session, user, opts.Session, now, dontRememberMe)
 		if err != nil {
+			cleanupOrphanSignUp(ctx, opts, userID, token)
 			return nil, huma.NewError(types.StatusForCode(types.ErrFailedToCreateSession), types.ErrFailedToCreateSession)
 		}
 		out.SetCookie = cookiesOut
@@ -435,6 +438,27 @@ func SignUpEmail(api huma.API, basePath string, opts types.Options) {
 		out.Body.User = flatUser(user)
 		return out, nil
 	})
+}
+
+// cleanupOrphanSignUp best-effort deletes the just-committed user+account
+// rows after a post-commit session-issuance failure (upstream
+// sign-up.test.ts:125 "should rollback when session creation fails"). The
+// user+account transaction already committed, so a spanning transaction is
+// impossible; compensating deletes run instead. When token != "" the already
+// persisted session row for this issuance is removed too (mirror/cookie
+// failures happen after the primary row exists; at session-create failure
+// the delete is a harmless no-op). Nil-guarded: secondary-only deployments
+// have no primary rows to clean. Delete errors are ignored so callers
+// return their original status/code unchanged.
+func cleanupOrphanSignUp(ctx context.Context, opts types.Options, userID, token string) {
+	if opts.DB == nil || userID == "" {
+		return
+	}
+	_, _ = opts.DB.DeleteMany(ctx, "account", []types.Where{{Field: "userId", Value: userID}})
+	_, _ = opts.DB.DeleteMany(ctx, "user", []types.Where{{Field: "id", Value: userID}})
+	if token != "" {
+		_, _ = opts.DB.DeleteMany(ctx, "session", []types.Where{{Field: "token", Value: token}})
+	}
 }
 
 // verificationCallbackURL resolves the verification-link callback: the
