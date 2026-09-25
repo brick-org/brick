@@ -227,7 +227,9 @@ func sendVerificationEmailForUser(ctx context.Context, opts types.Options, userR
 
 type verifyEmailInput struct {
 	CookieRequestHeaders
-	Body struct {
+	Cookie        string `header:"Cookie"`
+	Authorization string `header:"Authorization"`
+	Body          struct {
 		Token string `json:"token" required:"true"`
 	}
 }
@@ -254,7 +256,18 @@ func VerifyEmail(api huma.API, basePath string, opts types.Options) {
 		OperationID: "verifyEmail",
 		Summary:     "Verify email address",
 	}, opts, func(ctx context.Context, input *verifyEmailInput) (*verifyEmailOutput, error) {
-		user, cookies, errCode, status := processVerifyEmail(ctx, opts, input.Body.Token, input.CookieRequestHeaders)
+		rctx := ctx
+		if input.Cookie != "" || input.Authorization != "" {
+			req, _ := http.NewRequest(http.MethodPost, "/", nil)
+			if input.Cookie != "" {
+				req.Header.Set("Cookie", input.Cookie)
+			}
+			if input.Authorization != "" {
+				req.Header.Set("Authorization", input.Authorization)
+			}
+			rctx = context.WithValue(ctx, storedRequestKey{}, req)
+		}
+		user, cookies, errCode, status := processVerifyEmail(rctx, opts, input.Body.Token, input.CookieRequestHeaders)
 		if errCode != "" {
 			return nil, huma.NewError(status, errCode)
 		}
@@ -446,7 +459,7 @@ func processStatelessUpdateTo(ctx context.Context, opts types.Options, payload *
 		verificationUser.Email = payload.UpdateTo
 		sendVerificationEmailWithRequest(requestContextForCallbacks(ctx), opts, types.VerificationEmailData{
 			User:  &verificationUser,
-			URL:   fmt.Sprintf("%s/verify-email?token=%s&callbackURL=%s", basePath, nextToken, callbackURL),
+			URL:   fmt.Sprintf("%s/verify-email?token=%s&callbackURL=%s", basePath, url.QueryEscape(nextToken), url.QueryEscape(callbackURL)),
 			Token: nextToken,
 		})
 		return nil, nil, "", http.StatusOK
@@ -515,7 +528,7 @@ func processStatelessUpdateTo(ctx context.Context, opts types.Options, payload *
 		if opts.EmailVerification.SendVerificationEmail != nil || opts.EmailVerification.SendVerificationEmailRequest != nil {
 			sendVerificationEmailWithRequest(requestContextForCallbacks(ctx), opts, types.VerificationEmailData{
 				User:  &updated,
-				URL:   fmt.Sprintf("%s/verify-email?token=%s&callbackURL=%s", basePath, nextToken, callbackURL),
+				URL:   fmt.Sprintf("%s/verify-email?token=%s&callbackURL=%s", basePath, url.QueryEscape(nextToken), url.QueryEscape(callbackURL)),
 				Token: nextToken,
 			})
 		}
@@ -701,13 +714,52 @@ func verifyEmailForAddress(ctx context.Context, opts types.Options, email string
 	}
 	var cookies []http.Cookie
 	if opts.EmailVerification.AutoSignInAfterVerification {
-		sessionCookies, sessionErr := createVerificationSession(ctx, opts, headers, updated, now)
-		if sessionErr != nil {
-			return nil, nil, types.ErrFailedToCreateSession, types.StatusForCode(types.ErrFailedToCreateSession)
+		if reused, ok := tryReuseVerificationSession(ctx, opts, headers, updated, now); ok {
+			cookies = reused
+		} else {
+			sessionCookies, sessionErr := createVerificationSession(ctx, opts, headers, updated, now)
+			if sessionErr != nil {
+				return nil, nil, types.ErrFailedToCreateSession, types.StatusForCode(types.ErrFailedToCreateSession)
+			}
+			cookies = sessionCookies
 		}
-		cookies = sessionCookies
 	}
 	return &updated, cookies, "", http.StatusOK
+}
+
+// tryReuseVerificationSession reuses the current session for
+// autoSignInAfterVerification when it is present, live, and email-matches
+// (upstream email-verification.ts:527-534). It returns (nil,false) when there
+// is no reusable session so the caller mints a new row. Email comparison is
+// case-insensitive; expiry/revocation is enforced by loadSessionAndUser.
+func tryReuseVerificationSession(ctx context.Context, opts types.Options, headers CookieRequestHeaders, updated types.User, now time.Time) ([]http.Cookie, bool) {
+	req := StoredRequestFromStd(ctx)
+	if req == nil {
+		req = callbackRequest(ctx)
+	}
+	if req == nil {
+		return nil, false
+	}
+	token := sessionTokenFromRequest(req.Header.Get("Cookie"), req.Header.Get("Authorization"), opts)
+	if token == "" {
+		return nil, false
+	}
+	sessionRow, userRow, _, err := loadSessionAndUser(ctx, opts, token)
+	if err != nil || sessionRow == nil || userRow == nil {
+		return nil, false
+	}
+	if !strings.EqualFold(rowToUser(userRow, opts).Email, updated.Email) {
+		return nil, false
+	}
+	session := rowToSession(sessionRow, opts)
+	if session.Token == "" {
+		session.Token = token
+	}
+	reused, err := newSessionCookies(opts, headers, session.Token, session, updated, opts.Session, now)
+	if err != nil {
+		return nil, false
+	}
+	return reused, true
 }
 
 // createVerificationSession mints a session for a freshly verified user,
