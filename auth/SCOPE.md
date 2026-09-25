@@ -54,12 +54,10 @@ upstream Better Auth (TS) directly.
 2. Upstream upgrade = update submodule pin, run
    `GOWORK=off go build ./... && go vet ./... && go test -count=1 ./...`,
    review diffs on the ~10 core TS route files only.
-3. Parity v2 removed the archived reference docs (`TRANSPILER_PLAN.md`,
-   `TRANSPILER_CANDIDATES.md`, `plan.md` Waves 5–10) and the `transpiler/`
-   generator itself. `src/utils/boolean.go`, `constants.go`, `hide-metadata.go` are checked-in frozen artifacts (renamed from `*.gen.go`; content untouched, do not hand-edit).
-4. `PARITY_V2.md` is the authoritative parity audit (old `PARITY.md`
-   removed in v2). Its plugin/oauth-provider/social legs are excluded by
-   this file; they describe code that does not exist in this tree.
+3. `src/utils/boolean.go`, `constants.go`, `hide-metadata.go` are checked-in
+   frozen artifacts (renamed from `*.gen.go`; content untouched, do not hand-edit).
+4. Plugin/oauth-provider/social legs are excluded by this file; they describe
+   code that does not exist in this tree.
 
 ## File map (TS → Go, 1:1 at package level)
 
