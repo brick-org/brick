@@ -5,24 +5,19 @@ import (
 	"math/big"
 )
 
-// Better Auth's generateRandomString alphabet (a-z, 0-9, A-Z, -_).
-// Upstream generateId is alphanumeric-only; see V3-17 §15.
+// Upstream crypto/random.ts
+// Note: upstream generateId is alphanumeric-only; this alphabet adds -_ for tokens.
 const idAlphabet = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-_"
 
-// DefaultIDSize is the default Better Auth identifier length: generateId
-// uses `size || 32` upstream (packages/core/src/utils/id.ts).
+// DefaultIDSize is the default identifier length (32).
 const DefaultIDSize = 32
 
-// GenerateID returns a 32-character Better Auth random identifier.
+// GenerateID returns a 32-character random identifier.
 func GenerateID() string {
 	return GenerateIDWithSize(DefaultIDSize)
 }
 
-// GenerateIDWithSize returns an n-character Better Auth random identifier,
-// mirroring upstream generateId(size?): non-positive sizes fall back to the
-// 32-character default (JS `size || 32`). The alphabet is the same
-// generateRandomString set used by GenerateID (see the documented deviation
-// on idAlphabet).
+// GenerateIDWithSize returns an n-character identifier; non-positive sizes fall back to 32.
 func GenerateIDWithSize(n int) string {
 	if n <= 0 {
 		n = DefaultIDSize
@@ -30,10 +25,7 @@ func GenerateIDWithSize(n int) string {
 	return GenerateRandomString(n)
 }
 
-// GenerateRandomString returns an n-character random string using Better Auth's
-// generateRandomString alphabet. It mirrors upstream `generateRandomString`
-// for the default alphabet; custom alphabets are not yet supported.
-// Non-positive lengths return an empty string (never panics).
+// GenerateRandomString returns an n-character random string; non-positive lengths return empty.
 func GenerateRandomString(n int) string {
 	if n <= 0 {
 		return ""

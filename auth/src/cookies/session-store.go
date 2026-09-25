@@ -7,35 +7,15 @@ import (
 	"strings"
 )
 
-// Chunked cookie store, mirroring
-// vendor/better-auth/packages/better-auth/src/cookies/session-store.ts
-// (chunkCookie, getMaxCookieValueSize, parseCookieChunkIndex, getCleanCookies,
-// getChunkedCookie).
-//
-// The account-cookie encode/decode helpers (setAccountCookie/getAccountCookie,
-// upstream symmetricEncodeJWT/symmetricDecodeJWT with the "better-auth-account"
-// salt) live in jwt.go alongside the session-cache codecs; this file holds the
-// transport-only chunking primitives shared by both stores. Wire behavior is
-// unchanged; this split only aligns file boundaries with upstream.
+// Upstream cookies/session-store.ts; chunking primitives shared by both stores.
 
-// MaxCookieSize is the per-cookie byte ceiling used by the upstream chunked
-// session store (session-store.ts): Safari's ~4093 floor, kept a little under
-// it for attributes added after sizing.
+// MaxCookieSize is the per-cookie byte ceiling (Safari ~4093 floor, room for attributes).
 const MaxCookieSize = 4050
 
-// MaxCookieChunks is the upstream cap on chunks per cookie. Larger values do
-// not belong in a cookie; callers should skip the cache and fall back to the
-// database.
+// MaxCookieChunks is the cap; larger values skip cache for database.
 const MaxCookieChunks = 100
 
-// ChunkCookieValue splits value into numbered chunk names ("<name>.<i>"),
-// mirroring the upstream session-store chunking (chunkCookie). Values that fit
-// within maxValueSize are returned as a single entry under name; callers that
-// want wire-accurate sizing should pass MaxCookieSize minus the serialized
-// overhead of the cookie name and attributes (see MaxValueSizeFor). An error
-// is returned when the value cannot fit within MaxCookieChunks chunks — the
-// caller must then skip the cache and fall back to the database, matching the
-// upstream "too large to store even after chunking" branch.
+// ChunkCookieValue splits into "<name>.<i>" chunks; oversize must skip cache for database.
 func ChunkCookieValue(name, value string, maxValueSize int) (map[string]string, error) {
 	if maxValueSize <= 0 {
 		return nil, fmt.Errorf("cookies: no room for a cookie value under %q with the given attributes", name)
@@ -62,16 +42,7 @@ func ChunkCookieValue(name, value string, maxValueSize int) (map[string]string, 
 	return out, nil
 }
 
-// BuildChunkedCookies issues a session-data value as one or more Set-Cookie
-// entries, mirroring upstream chunkCookie (session-store.ts:84-131) wired
-// through the session store chunk() path. The value budget comes from
-// MaxValueSizeFor (worst-case "<name>.99" sizing, so every emitted line
-// fits MaxCookieSize); values fitting the budget emit a single cookie under
-// the bare name, larger values split into indexed "<name>.<i>" chunks in
-// order. An error is returned when the value cannot fit within
-// MaxCookieChunks chunks (or the name+attributes alone overflow) — the
-// caller must skip the cache and fall back to the database, matching the
-// upstream warn-and-skip branch. Reads reassemble via JoinChunkedCookies.
+// BuildChunkedCookies issues Set-Cookie entries sized by MaxValueSizeFor; oversize must skip cache for database.
 func BuildChunkedCookies(name, value string, attrs Attributes) ([]*http.Cookie, error) {
 	budget := MaxValueSizeFor(name, attrs)
 	parts, err := ChunkCookieValue(name, value, budget)
@@ -95,22 +66,14 @@ func BuildChunkedCookies(name, value string, attrs Attributes) ([]*http.Cookie, 
 	return out, nil
 }
 
-// MaxValueSizeFor estimates the largest value that keeps the serialized
-// Set-Cookie for name within MaxCookieSize, mirroring upstream
-// getMaxCookieValueSize/serializeCookie. The overhead is measured with
-// Attributes.Serialize (wire-accurate, matching upstream serializeCookie)
-// so it stays in sync with the wire; the estimate sizes against
-// the worst-case chunk name ("<name>.99") so chunked cookies never overflow.
+// MaxValueSizeFor estimates value budget against worst-case "<name>.99" so chunks never overflow.
 func MaxValueSizeFor(name string, attrs Attributes) int {
 	worst := name + ".99"
 	overhead := len(attrs.Serialize(worst, ""))
 	return MaxCookieSize - overhead
 }
 
-// ParseChunkIndex returns the chunk index for cookieName when name has the
-// form "<cookieName>.<index>", mirroring upstream parseCookieChunkIndex.
-// It returns ok=false unless the suffix is a canonical non-negative integer
-// (no leading zeros, no signs, no whitespace).
+// ParseChunkIndex returns chunk index; suffix must be canonical non-negative integer.
 func ParseChunkIndex(cookieName, name string) (index int, ok bool) {
 	prefix := cookieName + "."
 	if !strings.HasPrefix(name, prefix) {
@@ -127,10 +90,7 @@ func ParseChunkIndex(cookieName, name string) (index int, ok bool) {
 	return n, true
 }
 
-// JoinChunkedCookies reconstructs a (possibly chunked) cookie value from
-// parsed request cookies, mirroring upstream getChunkedCookie/getCookieCache:
-// an exact-name match wins; otherwise "<name>.<index>" entries are sorted by
-// index and concatenated. It returns ok=false when nothing matches.
+// JoinChunkedCookies reconstructs value; exact-name wins, else sorted chunks.
 func JoinChunkedCookies(cookies map[string]string, name string) (value string, ok bool) {
 	if v, found := cookies[name]; found {
 		return v, true
@@ -148,8 +108,7 @@ func JoinChunkedCookies(cookies map[string]string, name string) (value string, o
 	if len(chunks) == 0 {
 		return "", false
 	}
-	// Insertion sort: chunk counts are small (<= MaxCookieChunks) and this
-	// avoids importing sort for a trivial loop.
+	// Insertion sort avoids importing sort for small counts.
 	for i := 1; i < len(chunks); i++ {
 		for j := i; j > 0 && chunks[j].index < chunks[j-1].index; j-- {
 			chunks[j], chunks[j-1] = chunks[j-1], chunks[j]
@@ -162,10 +121,7 @@ func JoinChunkedCookies(cookies map[string]string, name string) (value string, o
 	return sb.String(), true
 }
 
-// ExpiredChunks returns expiry cookies (MaxAge=0, preserving attributes) for
-// every stored entry under name, mirroring the upstream clean() path used by
-// deleteSessionCookie. Both the bare name and any "<name>.<index>" chunks are
-// expired so stale chunks never survive a shrink or logout.
+// ExpiredChunks returns expiry cookies for name and chunks so stale chunks never survive logout.
 func ExpiredChunks(cookies map[string]string, name string, attrs Attributes) []*http.Cookie {
 	expired := attrs
 	expired.MaxAge = 0

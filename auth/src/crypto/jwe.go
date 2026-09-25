@@ -16,38 +16,15 @@ import (
 	"golang.org/x/crypto/hkdf"
 )
 
-// GO-ONLY EXTENSION (auth/SOURCE_LAYOUT_MOVE_LIST.md Cryptography): no
-// standalone upstream file boundary in packages/better-auth/src/crypto/; the
-// API-route email flows consume it via Create/VerifyEmailVerificationToken.
-//
-// Portable pieces of the upstream JWE session/account-cookie strategy,
-// mirroring vendor/better-auth/packages/better-auth/src/crypto/jwt.ts
-// (symmetricEncodeJWT/symmetricDecodeJWT).
-//
-// Upstream derives a 64-byte content-encryption key with HKDF-SHA256 over the
-// auth secret (salted per cookie purpose: "better-auth-session" /
-// "better-auth-account"), wraps payloads in an A256CBC-HS512 JWE
-// (key-management "dir") whose "kid" is the JWK SHA-256 thumbprint of the
-// derived key, and enforces a 15s clock tolerance on decrypt.
-//
-// The helpers below expose exactly the portable, JOSE-independent parts —
-// key derivation and kid computation — so key lifecycle and test vectors can
-// be validated without a JOSE stack. The generic JWE issue/verify port
-// (SymmetricEncodeJWT/SymmetricDecodeJWT below, mirroring jwt.ts) lives here
-// for crypto-owned rotation vectors; the typed session/account-cookie
-// wrappers live in cookies/jwt.go (Create/VerifySessionCacheJWE) and are
-// wired at the route layer; never decode jwt/jwe cache payloads without it.
+// Upstream crypto/jwt.ts
 const (
-	// JWEKeyManagementAlg is the upstream JWE key-management algorithm
-	// ("dir": the derived key is used directly).
+	// JWEKeyManagementAlg is the upstream JWE key-management algorithm ("dir").
 	JWEKeyManagementAlg = "dir"
-	// JWEContentEncryption is the upstream JWE content-encryption algorithm
-	// (64-byte key).
+	// JWEContentEncryption is the upstream content-encryption algorithm (64-byte key).
 	JWEContentEncryption = "A256CBC-HS512"
 	// JWEClockToleranceSeconds mirrors jwtDecryptOpts clockTolerance.
 	JWEClockToleranceSeconds = 15
-	// EncryptionKeyInfo is the HKDF info string, the UTF-8 bytes of
-	// "BetterAuth.js Generated Encryption Key".
+	// EncryptionKeyInfo is the HKDF info string "BetterAuth.js Generated Encryption Key".
 	EncryptionKeyInfo = "BetterAuth.js Generated Encryption Key"
 	// SessionCookieEncryptionSalt is the HKDF salt for session-data cookies.
 	SessionCookieEncryptionSalt = "better-auth-session"
@@ -55,18 +32,10 @@ const (
 	AccountCookieEncryptionSalt = "better-auth-account"
 )
 
-// DerivedEncryptionKeyLen is the HKDF output length in bytes (A256CBC-HS512
-// needs a 64-byte key).
+// DerivedEncryptionKeyLen is the HKDF output length in bytes (64 for A256CBC-HS512).
 const DerivedEncryptionKeyLen = 64
 
-// DeriveEncryptionSecret derives the 64-byte JWE content-encryption key for
-// salt from secret, mirroring upstream deriveEncryptionSecret:
-//
-//	hkdf(SHA-256, ikm=secret, salt=salt, info="BetterAuth.js Generated
-//	Encryption Key", L=64)
-//
-// secret and salt are raw UTF-8 bytes. Different salts (session vs account)
-// derive unrelated keys from the same secret.
+// DeriveEncryptionSecret derives the 64-byte JWE key via HKDF-SHA256(secret, salt, info, L=64).
 func DeriveEncryptionSecret(secret, salt string) ([]byte, error) {
 	if secret == "" {
 		return nil, fmt.Errorf("crypto: secret is required")
@@ -84,18 +53,13 @@ func DeriveEncryptionSecret(secret, salt string) ([]byte, error) {
 	return key, nil
 }
 
-// OctThumbprint computes the RFC 7638 JWK SHA-256 thumbprint of a symmetric
-// (oct) key, mirroring jose's calculateJwkThumbprint for the derived
-// encryption key: base64url(SHA-256('{"k":"<base64url(key)>","kty":"oct"}')).
-// Upstream stores this thumbprint as the JWE "kid" so decoders can select
-// the secret whose derived key matches without trial-decrypting every
-// rotated secret.
+// OctThumbprint computes the RFC 7638 JWK SHA-256 thumbprint of a symmetric key.
+// Upstream stores this as JWE "kid" so decoders select keys without trial-decrypting.
 func OctThumbprint(key []byte) (string, error) {
 	if len(key) == 0 {
 		return "", fmt.Errorf("crypto: key is required")
 	}
-	// Struct (not map) keeps the RFC 7638 lexicographic member order
-	// ("k" before "kty") deterministic.
+	// Struct (not map) keeps RFC 7638 lexicographic order deterministic.
 	canonical, err := json.Marshal(struct {
 		K   string `json:"k"`
 		Kty string `json:"kty"`
@@ -110,13 +74,7 @@ func OctThumbprint(key []byte) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(sum[:]), nil
 }
 
-// SymmetricEncodeJWT encrypts payload into a compact JWE, mirroring upstream
-// symmetricEncodeJWT (jwt.ts:90-110): HKDF-derived dir/A256CBC-HS512 key for
-// salt, protected header exactly {alg,enc,kid} with kid set to the
-// derived-key thumbprint, iat/exp/jti claims. key is a
-// string (single secret) or SecretConfig (versioned envelope selection via
-// the current version). expiresInSeconds defaults to 3600 when zero, matching
-// the upstream default parameter.
+// SymmetricEncodeJWT encrypts payload into a compact JWE with HKDF-derived dir/A256CBC-HS512 key.
 func SymmetricEncodeJWT(payload map[string]any, key any, salt string, expiresInSeconds int) (string, error) {
 	current, err := jweCurrentSecret(key)
 	if err != nil {
@@ -161,15 +119,11 @@ func SymmetricEncodeJWT(payload map[string]any, key any, salt string, expiresInS
 	return object.CompactSerialize()
 }
 
-// SymmetricDecodeJWT decrypts a compact JWE issued by SymmetricEncodeJWT,
-// mirroring upstream symmetricDecodeJWT (jwt.ts:118-185): kid selects the
+// SymmetricDecodeJWT decrypts a compact JWE issued by SymmetricEncodeJWT.
 // secret whose derived-key thumbprint matches (unknown kids fail closed with
 // no fallback); kid-less tokens are tried against every candidate in order.
-// Expiry enforces the upstream 15s clock tolerance; A256GCM payloads are
-// accepted like jwtDecryptOpts (derived key truncated to 32 bytes, gated on
-// the token's enc). Decoding stays tolerant of legacy typ/cty-bearing
-// tokens. Empty tokens and undecryptable/tampered/expired payloads fail
-// closed with an error (upstream returns null).
+// Empty tokens and undecryptable/tampered/expired payloads fail
+// closed with an error.
 func SymmetricDecodeJWT(token string, key any, salt string) (map[string]any, error) {
 	if token == "" {
 		return nil, fmt.Errorf("crypto: invalid jwe encoding")
@@ -239,8 +193,7 @@ func SymmetricDecodeJWT(token string, key any, salt string) (map[string]any, err
 		}
 		return nil, fmt.Errorf("crypto: no matching decryption secret")
 	}
-	// Kid-less: try the current (first) secret, then every remaining secret
-	// (upstream symmetricDecodeJWT fallback).
+	// Kid-less tries current secret first, then retained ones.
 	var lastErr error = fmt.Errorf("crypto: jwe decryption failed")
 	for _, c := range candidates {
 		claims, err := decryptWith(c)
@@ -252,11 +205,7 @@ func SymmetricDecodeJWT(token string, key any, salt string) (map[string]any, err
 	return nil, lastErr
 }
 
-// jweDecryptionKeys selects the decryption key bytes for a content-encryption
-// algorithm, mirroring the cookies/jwt.go decryptionKeys policy (the more
-// faithful read of upstream jwtDecryptOpts): the full 64-byte derived key,
-// truncated to 32 bytes only for the A256GCM payloads jwtDecryptOpts still
-// accepts.
+// jweDecryptionKeys uses full 64-byte key, truncated to 32 bytes for A256GCM payloads.
 func jweDecryptionKeys(key []byte, enc string) [][]byte {
 	if jose.ContentEncryption(enc) == jose.A256GCM && len(key) >= 32 {
 		return [][]byte{key[:32]}
@@ -264,9 +213,7 @@ func jweDecryptionKeys(key []byte, enc string) [][]byte {
 	return [][]byte{key}
 }
 
-// jweContentEncryption reads the "enc" protected-header parameter from a
-// compact JWE without a JOSE round-trip (go-jose surfaces only merged
-// headers, not the content-encryption selector).
+// jweContentEncryption reads "enc" without a JOSE round-trip.
 func jweContentEncryption(token string) (string, error) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 5 {
@@ -285,8 +232,7 @@ func jweContentEncryption(token string) (string, error) {
 	return header.Enc, nil
 }
 
-// jweCurrentSecret selects the encryption secret for issuance, mirroring
-// upstream getCurrentSecret (jwt.ts:62-71).
+// jweCurrentSecret selects the issuance secret.
 func jweCurrentSecret(key any) (string, error) {
 	switch k := key.(type) {
 	case string:
@@ -310,11 +256,7 @@ func jweCurrentSecret(key any) (string, error) {
 	}
 }
 
-// jweAllSecrets lists every candidate decryption secret, mirroring upstream
-// getAllSecrets (jwt.ts:73-88): the versioned keys plus the legacy secret
-// when its value is not already present. Order is deterministic (current
-// first, then remaining versions ascending) so kid-less fallback tries the
-// current secret before retained ones.
+// jweAllSecrets lists candidates current-first for kid-less fallback.
 func jweAllSecrets(key any) []string {
 	switch k := key.(type) {
 	case string:
@@ -358,9 +300,7 @@ func jweAllSecrets(key any) []string {
 	}
 }
 
-// newJWEJTI mints the random jti claim EncryptJWT sets on every payload.
-// Uniqueness is transport-only: neither upstream nor this runtime tracks jtis
-// for replay.
+// newJWEJTI mints the random jti claim.
 func newJWEJTI() string {
 	var nonce [16]byte
 	if _, err := rand.Read(nonce[:]); err != nil {

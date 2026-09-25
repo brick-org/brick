@@ -10,18 +10,8 @@ import (
 	"time"
 )
 
-// GO-ONLY EXTENSION (auth/SOURCE_LAYOUT_MOVE_LIST.md Cryptography): upstream
-// issues email tokens from src/api/routes/email-verification.ts; the Go port
-// factors issuance/verification here for the API routes to share.
-//
-// EmailVerificationPayload is the verified claim set of an upstream-compatible
-// email verification JWT. It mirrors the payload written by upstream
-// createEmailVerificationToken
-// (vendor/better-auth/packages/better-auth/src/api/routes/email-verification.ts):
-// lowercased email, optional lowercased updateTo, and any extra payload keys.
-// RequestType carries the well-known "requestType" extra key used by the
-// change-email flows ("change-email-confirmation" /
-// "change-email-verification"); all other extra keys are preserved in Extra.
+// Upstream api/routes/email-verification.ts
+// EmailVerificationPayload is the verified claim set of an upstream-compatible email verification JWT.
 type EmailVerificationPayload struct {
 	Email       string
 	UpdateTo    string
@@ -31,17 +21,11 @@ type EmailVerificationPayload struct {
 	ExpiresAt   time.Time
 }
 
-// DefaultEmailVerificationExpirySeconds mirrors the upstream default
-// expiresIn (3600 seconds) of createEmailVerificationToken.
+// DefaultEmailVerificationExpirySeconds is the upstream default expiresIn (3600 seconds).
 const DefaultEmailVerificationExpirySeconds = 3600
 
-// CreateEmailVerificationToken issues an upstream-compatible HS256 JWT for
-// email verification, mirroring createEmailVerificationToken: SignJWT with
-// {alg: HS256}, iat, and exp = now + expiresIn over
-// {email (lowercased), updateTo (lowercased, when set), ...extraPayload}.
-// expiresInSeconds == 0 selects the upstream default (3600s); negative values
-// produce already-expired tokens. extraPayload keys are spread last so they
-// can extend (or, as upstream, override) the standard claims.
+// CreateEmailVerificationToken issues an upstream-compatible HS256 JWT for email verification.
+// expiresInSeconds == 0 selects the upstream default; negative values produce already-expired tokens.
 //
 // The JWT is built with the standard library rather than go-jose because
 // upstream accepts secrets of any length (raw UTF-8 bytes) while go-jose
@@ -73,9 +57,7 @@ func CreateEmailVerificationToken(secret, email string, updateTo string, expires
 	return signHS256(secret, claims)
 }
 
-// signHS256 serializes claims as a compact HS256 JWT
-// (base64url(header).base64url(payload).base64url(HMAC-SHA256)), mirroring
-// upstream SignJWT with {alg: HS256} and no key-size floor.
+// signHS256 builds HS256 JWT with stdlib so short secrets verify (no key-size floor).
 func signHS256(secret string, claims map[string]any) (string, error) {
 	header, err := json.Marshal(map[string]any{"alg": "HS256", "typ": "JWT"})
 	if err != nil {
@@ -91,17 +73,12 @@ func signHS256(secret string, claims map[string]any) (string, error) {
 	return signingInput + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
 }
 
-// VerifyEmailVerificationToken verifies an email verification JWT against a
-// single secret, mirroring the upstream verify-email endpoint (jwtVerify with
-// algorithms ["HS256"] plus schema parsing of {email, updateTo?,
-// requestType?}).
+// VerifyEmailVerificationToken verifies an email verification JWT against a single secret.
 func VerifyEmailVerificationToken(secret, token string) (*EmailVerificationPayload, error) {
 	return VerifyEmailVerificationTokenAny([]string{secret}, token)
 }
 
-// VerifyEmailVerificationTokenAny verifies an email verification JWT against
-// each candidate secret in order, supporting secret rotation: new tokens are
-// issued with the current secret while retained secrets still verify.
+// VerifyEmailVerificationTokenAny verifies against each candidate secret in order for rotation.
 func VerifyEmailVerificationTokenAny(secrets []string, token string) (*EmailVerificationPayload, error) {
 	var lastErr error
 	for _, secret := range secrets {
@@ -120,16 +97,7 @@ func VerifyEmailVerificationTokenAny(secrets []string, token string) (*EmailVeri
 	return nil, lastErr
 }
 
-// VerifyEmailTokenWithFallback accepts BOTH the upstream HS256 JWT format
-// (new) and the legacy two-part custom-HMAC format (GenerateToken) so email
-// flows can be migrated without breaking outstanding tokens. JWT is tried
-// first; the legacy path is a fallback for tokens issued before migration.
-//
-// NOTE for the api worker (auth/api/... is owned by another worker and is not
-// touched here): wire email verification/reset call sites to this helper (or
-// to VerifyEmailVerificationTokenAny + VerifyTokenAny) instead of calling
-// VerifyTokenAny alone. Outstanding legacy tokens keep working until they
-// expire; newly issued tokens should use CreateEmailVerificationToken.
+// VerifyEmailTokenWithFallback accepts both JWT (new) and legacy HMAC formats so migration never breaks outstanding tokens.
 func VerifyEmailTokenWithFallback(secrets []string, token string) (email string, err error) {
 	if payload, jwtErr := VerifyEmailVerificationTokenAny(secrets, token); jwtErr == nil {
 		return payload.Email, nil

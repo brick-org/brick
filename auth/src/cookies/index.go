@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-// Sign returns "value.hmac" where hmac is HMAC-SHA256 of value keyed with secret,
-// base64url-encoded without padding — same algorithm as better-auth.
+// Upstream cookies/index.ts
+// Sign returns "value.hmac" (HMAC-SHA256, base64url, no padding).
 func Sign(secret, value string) (string, error) {
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(value))

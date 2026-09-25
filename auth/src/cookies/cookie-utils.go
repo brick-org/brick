@@ -9,22 +9,14 @@ import (
 	"time"
 )
 
-// Cookie prefix constants mirroring
-// vendor/better-auth/packages/better-auth/src/cookies/cookie-utils.ts.
-//
-//   - SecureCookiePrefix ("__Secure-") marks cookies that must only be sent
-//     over HTTPS. Upstream prepends it whenever the secure-cookie heuristic
-//     resolves true.
-//   - HostCookiePrefix ("__Host-") is the stricter variant (Secure + Path=/ +
-//     no Domain). Upstream defines it but only applies __Secure- by default;
-//     it is exported here so callers can opt into __Host- semantics.
+// Upstream cookies/cookie-utils.ts
+// SecureCookiePrefix marks HTTPS-only cookies; HostCookiePrefix is stricter (Secure+Path=/+no Domain).
 const (
 	SecureCookiePrefix = "__Secure-"
 	HostCookiePrefix   = "__Host-"
 )
 
-// StripSecureCookiePrefix removes a leading __Secure- or __Host- prefix,
-// mirroring upstream stripSecureCookiePrefix.
+// StripSecureCookiePrefix removes a leading __Secure- or __Host- prefix.
 func StripSecureCookiePrefix(name string) string {
 	if strings.HasPrefix(name, SecureCookiePrefix) {
 		return strings.TrimPrefix(name, SecureCookiePrefix)
@@ -35,8 +27,7 @@ func StripSecureCookiePrefix(name string) string {
 	return name
 }
 
-// CookiePrefix returns name with the __Secure- prefix applied when secure is
-// true, mirroring upstream createCookieGetter (secureCookiePrefix).
+// CookiePrefix applies __Secure- prefix when secure.
 func CookiePrefix(name string, secure bool) string {
 	if secure {
 		return SecureCookiePrefix + name
@@ -44,18 +35,7 @@ func CookiePrefix(name string, secure bool) string {
 	return name
 }
 
-// ResolveSecureWithProtocol mirrors the full upstream secure-cookie
-// resolution order (createCookieGetter in cookies/index.ts):
-//
-//  1. useSecureCookies explicit override wins when non-nil.
-//  2. A dynamic baseURL protocol of "https"/"http" wins next (explicit
-//     per-request scheme for object baseURL configs; "auto"/"" falls
-//     through because the request scheme is unknown at init time).
-//  3. Otherwise a static baseURL starting with "https://" enables secure.
-//  4. Otherwise fall back to isProduction (NODE_ENV === "production").
-//
-// The production flag is passed in because net/http has no process-wide
-// NODE_ENV equivalent; callers typically derive it from their environment.
+// ResolveSecureWithProtocol resolves secure-cookie order: override, protocol, baseURL, production.
 func ResolveSecureWithProtocol(useSecureCookies *bool, baseURL, protocol string, isProduction bool) bool {
 	if useSecureCookies != nil {
 		return *useSecureCookies
@@ -72,17 +52,12 @@ func ResolveSecureWithProtocol(useSecureCookies *bool, baseURL, protocol string,
 	return isProduction
 }
 
-// ResolveSecure mirrors the upstream secure-cookie resolution for static
-// string baseURLs (no dynamic protocol). It delegates to
-// ResolveSecureWithProtocol with an empty protocol.
+// ResolveSecure resolves secure for static baseURLs.
 func ResolveSecure(useSecureCookies *bool, baseURL string, isProduction bool) bool {
 	return ResolveSecureWithProtocol(useSecureCookies, baseURL, "", isProduction)
 }
 
-// CookieName builds the wire cookie name for cookieName under prefix,
-// applying the __Secure- prefix when secure. It mirrors upstream
-// createCookie: `${secureCookiePrefix}${prefix}.${cookieName}` (or a
-// per-cookie override name when customName is set).
+// CookieName builds wire name with __Secure- prefix when secure.
 func CookieName(prefix, cookieName string, secure bool, customName string) string {
 	name := customName
 	if name == "" {
@@ -94,12 +69,7 @@ func CookieName(prefix, cookieName string, secure bool, customName string) strin
 	return CookiePrefix(name, secure)
 }
 
-// ResolveDomain mirrors the upstream crossSubDomainCookies handling: when
-// enabled, the cookie Domain is the explicit domain override or the hostname
-// of the static baseURL. It returns an error when cross-subdomain cookies are
-// enabled but no domain can be determined, matching the upstream
-// BetterAuthError ("baseURL is required when crossSubdomainCookies are
-// enabled").
+// ResolveDomain resolves cross-subdomain Domain or errors when undeterminable.
 func ResolveDomain(crossSubDomainEnabled bool, domainOverride, baseURL string) (string, error) {
 	if !crossSubDomainEnabled {
 		return "", nil
@@ -115,13 +85,7 @@ func ResolveDomain(crossSubDomainEnabled bool, domainOverride, baseURL string) (
 	return "", fmt.Errorf("baseURL is required when crossSubdomainCookies are enabled")
 }
 
-// Attributes describes the Set-Cookie attributes for a Better Auth cookie.
-// It mirrors better-call CookieOptions as used by upstream createCookie:
-// Secure, SameSite (default "lax"), Path (default "/"), HttpOnly (default
-// true), plus optional Domain (cross-subdomain), MaxAge, Expires, and
-// Partitioned (CHIPS). Per-cookie attribute overrides win over defaults,
-// matching the upstream spread order (defaults, then overrideAttributes,
-// then advanced.cookies[name].attributes).
+// Attributes describes Set-Cookie attributes; per-cookie overrides win over defaults.
 type Attributes struct {
 	Secure      bool
 	SameSite    http.SameSite
@@ -135,8 +99,7 @@ type Attributes struct {
 	Partitioned bool
 }
 
-// DefaultAttributes returns the upstream createCookie attribute defaults for
-// the given secure/domain resolution.
+// DefaultAttributes returns attribute defaults.
 func DefaultAttributes(secure bool, domain string) Attributes {
 	return Attributes{
 		Secure:   secure,
@@ -147,12 +110,7 @@ func DefaultAttributes(secure bool, domain string) Attributes {
 	}
 }
 
-// WithOverrides returns attrs with non-zero override fields applied on top,
-// mirroring the upstream attribute spread order. SameSiteStrictMode,
-// SameSiteLaxMode, and SameSiteNoneMode override the default; SameSiteDefaultMode
-// leaves it unchanged. A Partitioned=true override forces Secure (Partitioned
-// cookies are rejected by browsers without Secure, and SameSite=None likewise
-// requires Secure), mirroring the upstream secure-prefix invariant.
+// WithOverrides applies non-zero overrides; Partitioned/SameSite=None force Secure (browsers reject otherwise).
 func (a Attributes) WithOverrides(o Attributes) Attributes {
 	out := a
 	if o.Path != "" {
@@ -190,15 +148,7 @@ func (a Attributes) WithOverrides(o Attributes) Attributes {
 	return out
 }
 
-// Serialize renders a wire-accurate Set-Cookie line, mirroring better-call
-// serializeCookie where it differs from net/http: Max-Age is emitted even
-// when 0 provided MaxAgeSet (upstream expireCookie emits Max-Age=0;
-// net/http omits Max-Age for MaxAge==0 and only emits Max-Age=0 for
-// MaxAge<0). Attribute order matches net/http (Path, Domain, Expires,
-// Max-Age, HttpOnly, Secure, SameSite, Partitioned) so sizing via
-// MaxValueSizeFor stays in sync. Invalid Expires (zero+Set, mirroring JS
-// Invalid Date) is omitted; routes already emit MaxAge:-1+epoch for expiry,
-// so route wire behavior is unchanged — this fixes the helper path only.
+// Serialize renders wire-accurate Set-Cookie; Max-Age emits even when 0 if set (net/http omits it).
 func (a Attributes) Serialize(name, value string) string {
 	var sb strings.Builder
 	sb.WriteString(name)
@@ -236,7 +186,7 @@ func (a Attributes) Serialize(name, value string) string {
 	return sb.String()
 }
 
-// ToHTTPCookie converts Attributes to a *http.Cookie for name=value.
+// ToHTTPCookie converts Attributes to *http.Cookie.
 func (a Attributes) ToHTTPCookie(name, value string) *http.Cookie {
 	c := &http.Cookie{
 		Name:        name,
@@ -257,9 +207,7 @@ func (a Attributes) ToHTTPCookie(name, value string) *http.Cookie {
 	return c
 }
 
-// ParseSameSite parses an upstream-style SameSite attribute value
-// ("strict" | "lax" | "none", case-insensitive) into http.SameSite,
-// mirroring parseSetCookieHeader. Unknown values yield SameSiteDefaultMode.
+// ParseSameSite parses upstream SameSite value; unknown yields DefaultMode.
 func ParseSameSite(s string) http.SameSite {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "strict":
@@ -273,8 +221,7 @@ func ParseSameSite(s string) http.SameSite {
 	}
 }
 
-// SameSiteString renders an http.SameSite back to its upstream attribute
-// spelling.
+// SameSiteString renders SameSite spelling.
 func SameSiteString(s http.SameSite) string {
 	switch s {
 	case http.SameSiteStrictMode:
@@ -288,25 +235,9 @@ func SameSiteString(s http.SameSite) string {
 	}
 }
 
-// Request-cookie parsing and session-cookie lookup, mirroring
-// vendor/better-auth/packages/better-auth/src/cookies/cookie-utils.ts
-// (parseCookies) and the getSessionCookie helper in cookies/index.ts.
-//
-// Wire behavior of issued cookies is unchanged; these helpers only read the
-// Cookie request header with upstream's tolerance rules.
+// Request-cookie parsing only reads headers with upstream tolerance.
 
-// ParseRequestCookies parses a Cookie request header into name/value pairs,
-// mirroring upstream parseCookies:
-//
-//   - Pairs are split on ";" (the single space mandated by RFC 6265 §4.2.1 is
-//     tolerated when missing, since proxies commonly strip it).
-//   - Chunks without "=" are dropped; names and values are trimmed of OWS
-//     (space / horizontal tab only, per RFC 7230 §3.2.3).
-//   - Optional surrounding double-quotes are stripped per RFC 6265 §4.1.1.
-//   - Entries whose name violates the RFC 7230 token set or whose value
-//     violates the RFC 6265 cookie-octet set (plus space and comma) are
-//     silently dropped; surviving values are percent-decoded with malformed
-//     escapes passed through verbatim (tryDecode).
+// ParseRequestCookies parses Cookie header; invalid names/values dropped, malformed escapes pass through.
 func ParseRequestCookies(header string) map[string]string {
 	out := map[string]string{}
 	if len(header) < 2 {
@@ -327,19 +258,7 @@ func ParseRequestCookies(header string) map[string]string {
 	return out
 }
 
-// GetSessionCookie returns the session-token cookie value from parsed request
-// cookies, mirroring upstream getSessionCookie:
-//
-//   - Both "." and "-" separators are accepted
-//     ("<prefix>.<name>" and "<prefix>-<name>"); writers always emit ".".
-//   - A "__Secure-" prefixed cookie is preferred over a non-secure leftover
-//     with the same name.
-//   - An empty "__Secure-" value does NOT fall back to the non-secure
-//     leftover for the same separator (upstream nullish semantics); lookup
-//     then continues with the "-" separator variant.
-//
-// Empty prefix defaults to "better-auth" and an empty cookieName to
-// "session_token", matching upstream defaults.
+// GetSessionCookie returns session cookie; __Secure- preferred, empty __Secure- does NOT fall back (nullish).
 func GetSessionCookie(cookies map[string]string, prefix, cookieName string) (string, bool) {
 	if prefix == "" {
 		prefix = "better-auth"
@@ -356,8 +275,7 @@ func GetSessionCookie(cookies map[string]string, prefix, cookieName string) (str
 	return "", false
 }
 
-// preferSecureCookie returns the "__Secure-" variant when present (even when
-// empty, mirroring upstream "??" nullish semantics), else the bare name.
+// preferSecureCookie prefers __Secure- variant even when empty (nullish).
 func preferSecureCookie(cookies map[string]string, name string) (string, bool) {
 	if v, ok := cookies[SecureCookiePrefix+name]; ok {
 		return v, true
@@ -368,15 +286,12 @@ func preferSecureCookie(cookies map[string]string, name string) (string, bool) {
 	return "", false
 }
 
-// trimOWS trims leading/trailing OWS (space / horizontal tab) per RFC 7230
-// §3.2.3. Narrower than strings.TrimSpace, which would strip CR/LF and let
-// CTLs escape validCookieValue.
+// trimOWS trims space/tab only; wider TrimSpace would let CTLs escape validation.
 func trimOWS(s string) string {
 	return strings.Trim(s, " \t")
 }
 
-// unquoteCookieValue strips one pair of surrounding double-quotes per
-// RFC 6265 §4.1.1 quoted-string form.
+// unquoteCookieValue strips one surrounding quote pair.
 func unquoteCookieValue(value string) string {
 	if len(value) < 2 || !strings.HasPrefix(value, `"`) || !strings.HasSuffix(value, `"`) {
 		return value
@@ -384,8 +299,7 @@ func unquoteCookieValue(value string) string {
 	return value[1 : len(value)-1]
 }
 
-// validCookieName reports whether name is a valid cookie-name token per
-// RFC 7230 §3.2.6 (upstream cookieNameRegex).
+// validCookieName reports RFC 7230 token validity.
 func validCookieName(name string) bool {
 	if name == "" {
 		return false
@@ -403,8 +317,7 @@ func validCookieName(name string) bool {
 	return true
 }
 
-// validCookieValue reports whether value uses only cookie-octets per
-// RFC 6265 §4.1.1 plus space and comma (upstream cookieValueRegex).
+// validCookieValue reports cookie-octet validity plus space/comma.
 func validCookieValue(value string) bool {
 	for i := 0; i < len(value); i++ {
 		c := value[i]
@@ -417,35 +330,21 @@ func validCookieValue(value string) bool {
 	return true
 }
 
-// tryDecodeCookieValue percent-decodes value, returning it verbatim when it
-// holds no "%" or the escapes are malformed (upstream tryDecode).
+// tryDecodeCookieValue percent-decodes; malformed escapes pass through.
 func tryDecodeCookieValue(value string) string {
 	if !strings.Contains(value, "%") {
 		return value
 	}
-	// PathUnescape decodes %XX without treating "+" as space, matching
-	// decodeURIComponent semantics for cookie values.
+	// PathUnescape matches decodeURIComponent (no "+" as space).
 	if decoded, err := url.PathUnescape(value); err == nil {
 		return decoded
 	}
 	return value
 }
 
-// Set-Cookie response parsing and request-cookie writes, mirroring
-// vendor/better-auth/packages/better-auth/src/cookies/cookie-utils.ts
-// (splitSetCookieHeader, parseSetCookieHeader, toCookieOptions,
-// setRequestCookie, applySetCookies) and the expireCookie helper in
-// cookies/index.ts.
-//
-// The request-header writers operate on serialized Cookie header strings
-// (net/http has no JS-Headers equivalent here) with order-preserving
-// parse-mutate-serialize semantics matching the upstream Map-based merge.
+// Set-Cookie parsing and header writers preserve order like upstream Map merge.
 
-// SetCookieAttributes is one parsed Set-Cookie line, mirroring upstream
-// CookieAttributes: the decoded value plus the recognized attributes.
-// Unknown attributes are preserved in Extra (lowercased names; flag-style
-// attributes map to "true"), mirroring upstream keeping them in the parse
-// map. ToAttributes drops them, matching upstream toCookieOptions.
+// SetCookieAttributes is one parsed Set-Cookie line; unknown attrs preserved in Extra.
 type SetCookieAttributes struct {
 	Value       string
 	MaxAge      int
@@ -461,18 +360,13 @@ type SetCookieAttributes struct {
 	Extra       map[string]string
 }
 
-// SetCookieEntry pairs a cookie name with its parsed attributes, preserving
-// wire order for multi-cookie headers.
+// SetCookieEntry pairs name with attributes in wire order.
 type SetCookieEntry struct {
 	Name string
 	Attr SetCookieAttributes
 }
 
-// SplitSetCookieHeader splits a comma-joined Set-Cookie header into
-// individual cookie strings, mirroring upstream splitSetCookieHeader: a
-// comma starts a new cookie only when the text after it (past spaces) runs
-// to "=" before any ";" or "," — so Expires dates ("Mon, 02 Mar ... GMT;
-// ...") never split.
+// SplitSetCookieHeader splits joined Set-Cookie; Expires commas never split.
 func SplitSetCookieHeader(setCookie string) []string {
 	if setCookie == "" {
 		return nil
@@ -509,8 +403,7 @@ func SplitSetCookieHeader(setCookie string) []string {
 	return result
 }
 
-// parseSetCookieList parses a Set-Cookie header into ordered entries,
-// mirroring upstream parseSetCookieHeader before its Map assembly.
+// parseSetCookieList parses Set-Cookie into ordered entries.
 func parseSetCookieList(setCookie string) []SetCookieEntry {
 	var out []SetCookieEntry
 	for _, line := range SplitSetCookieHeader(setCookie) {
@@ -602,11 +495,7 @@ func parseSetCookieList(setCookie string) []SetCookieEntry {
 	return out
 }
 
-// ParseSetCookieHeader parses a Set-Cookie header into name/attributes
-// pairs, mirroring upstream parseSetCookieHeader. Values are unquoted per
-// RFC 6265 §4.1.1 quoted-string form and percent-decoded (malformed escapes
-// pass through verbatim). Duplicate names resolve last-wins, matching the
-// upstream Map assembly.
+// ParseSetCookieHeader parses Set-Cookie; duplicates last-wins.
 func ParseSetCookieHeader(setCookie string) map[string]SetCookieAttributes {
 	out := map[string]SetCookieAttributes{}
 	for _, e := range parseSetCookieList(setCookie) {
@@ -615,8 +504,7 @@ func ParseSetCookieHeader(setCookie string) map[string]SetCookieAttributes {
 	return out
 }
 
-// ToAttributes converts parsed Set-Cookie attributes into cookie options,
-// mirroring upstream toCookieOptions.
+// ToAttributes converts to cookie options.
 func (a SetCookieAttributes) ToAttributes() Attributes {
 	return Attributes{
 		Path:        a.Path,
@@ -632,8 +520,7 @@ func (a SetCookieAttributes) ToAttributes() Attributes {
 	}
 }
 
-// setCookieDateLayouts parses the Expires formats upstream accepts via
-// `new Date(...)`: IMF-fixdate (RFC 1123), the RFC 850 variant, and asctime.
+// setCookieDateLayouts parses Expires formats upstream accepts.
 var setCookieDateLayouts = []string{
 	time.RFC1123,
 	time.RFC850,
@@ -650,9 +537,7 @@ func parseSetCookieDate(s string) (time.Time, bool) {
 	return time.Time{}, false
 }
 
-// parseJSInt parses an integer with JavaScript parseInt(s, 10) semantics:
-// leading whitespace, an optional sign, then the longest leading digit run.
-// It returns ok=false when no digits follow (NaN upstream).
+// parseJSInt parses with JS parseInt semantics; no digits yields ok=false.
 func parseJSInt(s string) (int, bool) {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -681,9 +566,7 @@ type cookiePair struct {
 	value string
 }
 
-// parseRequestPairs parses a Cookie header into ordered, decoded pairs with
-// a name index, mirroring upstream parseCookies plus Map insertion order
-// (duplicate names update in place, keeping first position).
+// parseRequestPairs parses ordered pairs; duplicates update in place.
 func parseRequestPairs(header string) ([]cookiePair, map[string]int) {
 	index := map[string]int{}
 	if len(header) < 2 {
@@ -719,10 +602,7 @@ func serializeCookiePairs(pairs []cookiePair) string {
 	return strings.Join(parts, "; ")
 }
 
-// EncodeCookieValue percent-encodes a semantic cookie value for the Cookie
-// wire header, mirroring encodeURIComponent on write (upstream
-// setRequestCookie/applySetCookies): every byte outside the unreserved set
-// becomes %XX (uppercase hex), including UTF-8 continuation bytes.
+// EncodeCookieValue percent-encodes like encodeURIComponent (%XX uppercase).
 func EncodeCookieValue(s string) string {
 	const unreserved = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.!~*'()"
 	var sb strings.Builder
@@ -741,12 +621,7 @@ func EncodeCookieValue(s string) string {
 	return sb.String()
 }
 
-// SetRequestCookieHeader adds or replaces name in the Cookie request header,
-// mirroring upstream setRequestCookie: existing pairs are preserved in order
-// (RFC 6265 "; " join), a same-name entry is replaced in place, malformed
-// pairs are dropped, and the value is percent-encoded on serialize. Names
-// outside the RFC 7230 token set are ignored (the header is still rebuilt
-// from the surviving pairs).
+// SetRequestCookieHeader adds/replaces name in place; malformed pairs dropped.
 func SetRequestCookieHeader(header, name, value string) string {
 	pairs, index := parseRequestPairs(header)
 	if validCookieName(name) {
@@ -759,11 +634,7 @@ func SetRequestCookieHeader(header, name, value string) string {
 	return serializeCookiePairs(pairs)
 }
 
-// ApplySetCookiesHeader merges Set-Cookie header values into the Cookie
-// request header, mirroring upstream applySetCookies: only name=value lands
-// (attributes stripped), last-wins on duplicate names keeping first
-// position, values re-encoded on the wire join, and quoted-string wrapping
-// stripped via the Set-Cookie parse.
+// ApplySetCookiesHeader merges Set-Cookie values; attributes stripped, last-wins.
 func ApplySetCookiesHeader(header string, setCookies []string) string {
 	pairs, index := parseRequestPairs(header)
 	for _, sc := range setCookies {
@@ -782,13 +653,7 @@ func ApplySetCookiesHeader(header string, setCookies []string) string {
 	return serializeCookiePairs(pairs)
 }
 
-// ExpireCookie builds the expiry cookie for name (empty value, MaxAge=0,
-// attributes preserved), mirroring upstream expireCookie's setCookie call
-// (maxAge:0). The struct keeps MaxAge==0 for backward compatibility;
-// net/http omits Max-Age for 0 (only MaxAge<0 renders Max-Age=0), so callers
-// needing the explicit upstream wire attribute must render via
-// Attributes.Serialize, which emits Max-Age=0 when MaxAgeSet. Route expiry
-// already uses MaxAge:-1+epoch and is unchanged.
+// ExpireCookie builds expiry cookie; render via Serialize for explicit Max-Age=0 (net/http omits it).
 func ExpireCookie(name string, attrs Attributes) *http.Cookie {
 	expired := attrs
 	expired.MaxAge = 0
@@ -796,10 +661,7 @@ func ExpireCookie(name string, attrs Attributes) *http.Cookie {
 	return expired.ToHTTPCookie(name, "")
 }
 
-// ScrubSetCookieEntries removes prior Set-Cookie entries for name and its
-// chunked variants ("<name>.<i>") from serialized entries, mirroring the
-// collapsed-header fallback of upstream removeSetCookieEntries (used when
-// Headers.getSetCookie is unavailable). Survivors keep wire order.
+// ScrubSetCookieEntries removes prior entries for name and chunks; survivors keep order.
 func ScrubSetCookieEntries(entries []string, name string) []string {
 	exact, chunk := name+"=", name+"."
 	out := make([]string, 0, len(entries))

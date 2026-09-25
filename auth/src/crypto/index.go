@@ -1,32 +1,6 @@
 // Package crypto implements the Better Auth cryptography surface.
-//
-// Upstream: vendor/better-auth/packages/better-auth/src/crypto/
-// (buffer.ts, index.ts, jwt.ts, password.ts, random.ts).
-//
-// File map:
-//   - index.go mirrors crypto/index.ts (XChaCha20 symmetricEncrypt /
-//     symmetricDecrypt with "$ba$" version envelopes).
-//   - buffer.go mirrors crypto/buffer.ts (constant-time comparison).
-//   - jwt.go mirrors the JWT-plugin surface (EdDSA/ES*/RS*/PS* + JWKS,
-//     kid-selected fail-closed); the crypto/jwt.ts HS256 sign/verify used by
-//     core lives in email-verification.go (short-secret-safe stdlib HMAC)
-//     and cookies/jwt.go (session-cache JWT codec), not here.
-//   - jwe.go carries the JWE key derivation and thumbprint helpers used by
-//     the session/account cookie codecs.
-//   - password.go mirrors crypto/password.ts (scrypt hash/verify).
-//   - random.go mirrors crypto/random.ts (identifier and token randomness).
-
-// GO-ONLY EXTENSIONS (no upstream counterpart in
-// packages/better-auth/src/crypto/): email-verification.go (email-token JWT
-// helpers consumed by the API routes), jwe.go (portable HKDF/thumbprint
-// helpers factored out of jwt.go), pkce.go (S256 challenge/verify; upstream
-// threads PKCE through the OAuth2 flow in src/oauth2/state.ts and the
-// provider layer — see ../../oauth2/utils.go), and token.go (legacy HMAC and
-// AES-GCM token helpers kept as a migration bridge).
+// Upstream crypto/
 package crypto
-
-// --- implementation (upstream crypto/index.ts; moved from symmetric.go,
-// same package, no behavior change) ---
 
 import (
 	"crypto/cipher"
@@ -40,43 +14,20 @@ import (
 	"golang.org/x/crypto/chacha20poly1305"
 )
 
-// GO-ONLY EXTENSION (auth/SOURCE_LAYOUT_MOVE_LIST.md Cryptography): upstream
-// exposes this wire format through crypto/index.ts (symmetricEncrypt /
-// symmetricDecrypt); it is kept as a separate Go file boundary.
-//
-// Upstream encryption wire format
-// (vendor/better-auth/packages/better-auth/src/crypto/index.ts):
-//
-//   - Key derivation: SHA-256(secret) bytes.
-//   - Cipher: XChaCha20-Poly1305 with a managed (random, prepended) 24-byte
-//     nonce. Ciphertext is hex-encoded as nonce || ciphertext+tag.
-//   - String keys produce a bare-hex payload (rawEncrypt).
-//   - SecretConfig keys produce an envelope: "$ba$<version>$<hex>"
-//     (formatEnvelope), with legacy bare-hex payloads decryptable via the
-//     legacy secret (symmetricDecrypt).
-//
-// The pre-existing EncryptString/DecryptString pair in token.go instead uses
-// AES-256-GCM with a base64url nonce||ciphertext payload under a "$brick$"
-// prefix. The formats DIFFER: neither side reads the other's ciphertext.
-// The helpers below implement the upstream format; DecryptString keeps reading
-// "$brick$" payloads and now falls back to the upstream format so both old
-// and new ciphertexts verify (never break existing reads).
+// XChaCha20 with SHA-256(secret) key, random 24-byte nonce, "$ba$" envelopes; "$brick$" AES-GCM differs and reads via DecryptStringCompatible so old ciphertexts verify.
 const (
 	// EnvelopePrefix is the upstream "$ba$" envelope marker.
 	EnvelopePrefix = "$ba$"
 )
 
-// SecretConfig mirrors the upstream SecretConfig (secret rotation): versioned
-// keys with a current version plus an optional legacy secret for bare-hex
-// payloads issued before rotation.
+// SecretConfig mirrors upstream rotation: versioned keys plus optional legacy secret.
 type SecretConfig struct {
 	Keys           map[int]string
 	CurrentVersion int
 	LegacySecret   string
 }
 
-// ParseEnvelope splits a "$ba$<version>$<ciphertext>" envelope, mirroring
-// upstream parseEnvelope. It returns ok=false for non-envelope payloads.
+// ParseEnvelope splits a "$ba$<version>$<ciphertext>" envelope; returns ok=false for non-envelopes.
 //
 // DEVIATION (fail-closed STRICTER, kept — do not weaken): upstream uses
 // parseInt(slice, 10), which accepts a numeric prefix (parseInt("1abc",10)
@@ -100,15 +51,12 @@ func ParseEnvelope(data string) (version int, ciphertext string, ok bool) {
 	return version, rest[sep+1:], true
 }
 
-// FormatEnvelope builds a "$ba$<version>$<ciphertext>" envelope, mirroring
-// upstream formatEnvelope.
+// FormatEnvelope builds a "$ba$<version>$<ciphertext>" envelope.
 func FormatEnvelope(version int, ciphertext string) string {
 	return EnvelopePrefix + strconv.Itoa(version) + "$" + ciphertext
 }
 
-// SymmetricEncrypt encrypts data with key, mirroring upstream
-// symmetricEncrypt. key is either a string (bare-hex payload) or a
-// SecretConfig (versioned "$ba$" envelope using the current version).
+// SymmetricEncrypt encrypts data with a string (bare-hex) or SecretConfig (versioned envelope).
 func SymmetricEncrypt(key any, data string) (string, error) {
 	switch k := key.(type) {
 	case string:
@@ -136,10 +84,7 @@ func SymmetricEncrypt(key any, data string) (string, error) {
 	}
 }
 
-// SymmetricDecrypt decrypts data with key, mirroring upstream
-// symmetricDecrypt. String keys decrypt bare-hex payloads; SecretConfig keys
-// decrypt "$ba$" envelopes via the matching version and legacy bare-hex
-// payloads via the legacy secret.
+// SymmetricDecrypt decrypts bare-hex (string) or envelope/legacy (SecretConfig) payloads.
 func SymmetricDecrypt(key any, data string) (string, error) {
 	switch k := key.(type) {
 	case string:
@@ -169,10 +114,7 @@ func SymmetricDecrypt(key any, data string) (string, error) {
 	}
 }
 
-// SymmetricDecryptAny tries each secret in order against the upstream
-// (XChaCha20) format, supporting rotation for versioned and bare-hex
-// payloads. Envelope payloads select their version directly; bare-hex
-// payloads are tried against every secret.
+// SymmetricDecryptAny tries each secret in order for rotation.
 func SymmetricDecryptAny(secrets []string, data string) (string, error) {
 	if version, ciphertext, ok := ParseEnvelope(data); ok {
 		for _, secret := range secrets {
@@ -180,8 +122,7 @@ func SymmetricDecryptAny(secrets []string, data string) (string, error) {
 			if secret == "" {
 				continue
 			}
-			// Envelope versions index into SecretConfig, not a bare list; for
-			// a bare secret list every entry is a candidate for the payload.
+			// Bare-list entries cannot index versions, so every entry is a candidate.
 			if plain, err := rawDecrypt(secret, ciphertext); err == nil {
 				return plain, nil
 			}
@@ -205,10 +146,7 @@ func SymmetricDecryptAny(secrets []string, data string) (string, error) {
 	return "", lastErr
 }
 
-// DecryptStringCompatible decrypts ciphertext in EITHER the legacy "$brick$"
-// AES-GCM format or the upstream XChaCha20 format, trying "$brick$" first so
-// existing reads never break. secrets[0] is the current secret; retained
-// secrets support rotation.
+// DecryptStringCompatible decrypts "$brick$" or upstream formats, trying "$brick$" first so existing reads never break.
 func DecryptStringCompatible(secrets []string, ciphertext string) (string, error) {
 	if strings.HasPrefix(ciphertext, "$brick$") {
 		for _, secret := range secrets {

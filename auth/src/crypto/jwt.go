@@ -15,35 +15,23 @@ import (
 	"github.com/go-jose/go-jose/v4/jwt"
 )
 
-// DefaultJWTAlg is the default signing algorithm, matching better-auth
-// (EdDSA with an Ed25519 key).
+// Upstream plugins/jwt
+// DefaultJWTAlg is the default signing algorithm (EdDSA with Ed25519).
 const DefaultJWTAlg = "EdDSA"
 
-// Session-cookie-cache JWT constants mirroring
-// vendor/better-auth/packages/better-auth/src/cookies/jwt.ts. The compact,
-// JWT, and JWE cache strategies are wired (compact in cookies/cache.go,
-// JWT/JWE in cookies/jwt.go, custom JWKS signer at the route layer
-// via the JWT plugin); these constants pin the exact upstream type,
-// audience, issuer, and clock tolerance for the custom-signer path instead
-// of re-deriving them.
+// Session-cookie-cache constants pin upstream typ/aud/iss/tolerance for the custom-signer path.
 const (
-	// SessionCookieJWTType is the JWS "typ" header required of
-	// session-cache JWTs (SESSION_COOKIE_JWT_TYPE).
+	// SessionCookieJWTType is the JWS "typ" header for session-cache JWTs.
 	SessionCookieJWTType = "better-auth.session-cache+jwt"
-	// SessionCookieJWTAudience is the required "aud" claim
-	// (SESSION_COOKIE_JWT_AUDIENCE).
+	// SessionCookieJWTAudience is the required "aud" claim.
 	SessionCookieJWTAudience = "better-auth:session-cache"
-	// SessionCookieJWTIssuer is the fallback "iss" claim when no baseURL is
-	// configured (SESSION_COOKIE_JWT_ISSUER).
+	// SessionCookieJWTIssuer is the fallback "iss" claim.
 	SessionCookieJWTIssuer = "better-auth:session-cache"
-	// SessionCookieJWTClockToleranceSeconds is the clock-skew tolerance
-	// applied when verifying session-cache JWTs and JWE payloads
-	// (clockTolerance: 15 in getSessionCookieJwtVerifyOptions/jwtDecryptOpts).
+	// SessionCookieJWTClockToleranceSeconds is the clock-skew tolerance (15).
 	SessionCookieJWTClockToleranceSeconds = 15
 )
 
-// supportedJWTAlgs lists the algorithms accepted when parsing a token. Mirrors
-// better-auth's JWKOptions union (jwt/types.ts).
+// supportedJWTAlgs lists accepted algorithms.
 var supportedJWTAlgs = []jose.SignatureAlgorithm{
 	jose.EdDSA,
 	jose.ES256,
@@ -52,19 +40,14 @@ var supportedJWTAlgs = []jose.SignatureAlgorithm{
 	jose.RS256,
 }
 
-// PublicKey holds a stored JWKS public key plus the metadata needed to expose
-// and verify it. PublicJWKJSON is the serialised public JSON Web Key without a
-// kid; the kid is the database row id (matching better-auth, which spreads the
-// stored publicKey and overrides kid with the row id).
+// PublicKey holds a stored JWKS public key; kid is the database row id.
 type PublicKey struct {
 	Kid           string
 	Alg           string
 	PublicJWKJSON string
 }
 
-// GenerateKeyPair creates a new signing key pair for alg and returns the public
-// and private keys serialised as JWK JSON, plus the curve name where applicable.
-// An empty alg defaults to EdDSA.
+// GenerateKeyPair creates a signing key pair as JWK JSON.
 func GenerateKeyPair(alg string) (publicJWK, privateJWK, crv string, err error) {
 	if alg == "" {
 		alg = DefaultJWTAlg
@@ -111,9 +94,7 @@ func GenerateKeyPair(alg string) (publicJWK, privateJWK, crv string, err error) 
 	return string(pubBytes), string(privBytes), crv, nil
 }
 
-// SignJWT signs claims into a compact JWS using the private JWK JSON. The kid is
-// written into the protected header so verifiers can select the matching public
-// key. An empty alg defaults to EdDSA.
+// SignJWT signs claims into a compact JWS with kid in the header.
 func SignJWT(privateJWKJSON, alg, kid string, claims map[string]any) (string, error) {
 	if alg == "" {
 		alg = DefaultJWTAlg
@@ -139,8 +120,7 @@ func SignJWT(privateJWKJSON, alg, kid string, claims map[string]any) (string, er
 	return token, nil
 }
 
-// BuildJWKS assembles a JSON Web Key Set ({"keys": [...]}) from stored public
-// keys, injecting each key's kid. The result is ready to JSON-encode at /jwks.
+// BuildJWKS assembles a JWKS from stored public keys.
 func BuildJWKS(keys []PublicKey) (map[string]any, error) {
 	out := make([]map[string]any, 0, len(keys))
 	for _, k := range keys {
@@ -161,22 +141,14 @@ func BuildJWKS(keys []PublicKey) (map[string]any, error) {
 type VerifyOptions struct {
 	Issuer   string
 	Audience []string
-	// LeewaySeconds tolerates clock skew when checking exp/nbf claims: a
-	// token is expired only when now is past exp+leeway, and not-yet-valid
-	// only when now is before nbf-leeway. It mirrors the clockTolerance
-	// option of jose's jwtVerify (upstream session-cache/JWE paths use 15;
-	// see SessionCookieJWTClockToleranceSeconds). Zero preserves strict
-	// validation; negative values are treated as zero.
+	// LeewaySeconds tolerates clock skew on exp/nbf; negative values are treated as zero.
 	LeewaySeconds int64
 }
 
 // ErrJWTVerification is returned when a token fails signature or claim validation.
 var ErrJWTVerification = errors.New("crypto: jwt verification failed")
 
-// SelectKey returns the public key whose Kid matches kid, implementing the
-// upstream kid-selected verification contract (plugins/jwt/verify.ts,
-// cookies/jwt.ts verifySessionCookieJwtWithJwks): exact kid match, no
-// fallback. Rotation works by publishing the full key set — retired kids
+// SelectKey returns the key whose Kid matches kid: exact match, no fallback.
 // fail closed here so callers must keep grace-period keys published (the
 // plugins/jwt JWKS endpoint already filters with a 30-day default grace).
 func SelectKey(keys []PublicKey, kid string) (*PublicKey, error) {
@@ -191,9 +163,7 @@ func SelectKey(keys []PublicKey, kid string) (*PublicKey, error) {
 	return nil, fmt.Errorf("%w: no key for kid %q", ErrJWTVerification, kid)
 }
 
-// VerifyJWT verifies a compact JWS against the provided public keys (selected by
-// the token's kid header) and validates issuer/audience/expiry. It returns the
-// decoded claims on success.
+// VerifyJWT verifies a compact JWS and returns claims on success.
 func VerifyJWT(token string, keys []PublicKey, opts VerifyOptions) (map[string]any, error) {
 	parsed, err := jwt.ParseSigned(token, supportedJWTAlgs)
 	if err != nil {

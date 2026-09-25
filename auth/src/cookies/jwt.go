@@ -16,39 +16,14 @@ import (
 	"github.com/brick-org/brick/auth/src/crypto"
 )
 
-// JWT/JWE session-data cookie strategies, mirroring
-// vendor/better-auth/packages/better-auth/src/cookies/index.ts
-// (setCookieCache/decodeCookieCache) with crypto/jwt.ts:
-//
-//   - StrategyJWT ("jwt", the default-secret path): the cache payload is a
-//     compact HS256 JWT signed with the auth secret
-//     (signSecretJWT/verifySecretJWT: header {alg HS256}, claims
-//     {session, user, updatedAt, version?, iat, exp}). No typ/aud/iss binding
-//     on this path — claim binding (typ/sub/sid/aud/iss) only applies to the
-//     custom-JWKS signer path owned by the JWT plugin
-//     (cookies/jwt.ts verifySessionCookieJwtWithJwks).
-//   - StrategyJWE ("jwe"): the cache payload is an EncryptJWT JWE
-//     (symmetricEncodeJWT/symmetricDecodeJWT): direct key management ("dir"),
-//     A256CBC-HS512 content encryption over the HKDF-derived session key
-//     (crypto.DeriveEncryptionSecret with the session salt), the key's JWK
-//     SHA-256 thumbprint as kid for rotation-aware selection, iat/exp/jti
-//     claims, and a 15s clock tolerance on decrypt. Decrypt also accepts
-//     A256GCM payloads, matching jwtDecryptOpts.
-//
+// Upstream cookies/index.ts + crypto/jwt.ts
+// JWT=HS256, JWE=dir/A256CBC-HS512 with HKDF key and thumbprint kid; custom-signer tokens verify at route layer only.
 // Secret rotation: verify tries every candidate secret in order (JWT) or
 // selects by kid thumbprint across candidates (JWE, with a kid-less fallback
 // across candidates). Unknown kids, wrong keys, tampered values, and expired
 // tokens fail closed — callers fall through to the authoritative store.
-//
-// The functions below implement the default-secret paths. Tokens minted by a
-// custom cookieCacheSigner (JWT plugin) are verified by that signer at the
-// route layer (cachedSessionFromRequestFull); they are never accepted here,
-// so a custom-signer deployment cannot be downgraded to secret verification.
 
-// SessionCacheData is the decoded JWT/JWE session-cache payload: the cached
-// session/user pair plus the stamped version. ExpiresAt is the outer cache
-// window in milliseconds since the epoch (the JWT exp claim or the JWE exp
-// claim), mirroring decodeCookieCache's {session, expiresAt} pair.
+// SessionCacheData is the decoded cache payload; ExpiresAt is millis since epoch.
 type SessionCacheData struct {
 	Session   map[string]any
 	User      map[string]any
@@ -56,12 +31,10 @@ type SessionCacheData struct {
 	ExpiresAt int64
 }
 
-// defaultSessionCacheMaxAge mirrors the upstream caller default
-// (cookies/index.ts passes `maxAge || 60 * 5` into both JWT and JWE issuance).
+// defaultSessionCacheMaxAge mirrors upstream `maxAge || 60 * 5`.
 const defaultSessionCacheMaxAge = 5 * time.Minute
 
-// sessionCacheMaxAgeSecs normalizes the issuance window, applying the
-// upstream default for non-positive inputs.
+// sessionCacheMaxAgeSecs normalizes window with upstream default.
 func sessionCacheMaxAgeSecs(maxAge time.Duration) int64 {
 	if maxAge <= 0 {
 		maxAge = defaultSessionCacheMaxAge
@@ -69,8 +42,7 @@ func sessionCacheMaxAgeSecs(maxAge time.Duration) int64 {
 	return int64(maxAge / time.Second)
 }
 
-// jwtCacheClaims is the JWT claim set: the CookieCachePayload fields merged
-// with iat/exp, exactly as jose's SignJWT(payload) serializes them.
+// jwtCacheClaims is the claim set with iat/exp.
 type jwtCacheClaims struct {
 	Session   map[string]any `json:"session"`
 	User      map[string]any `json:"user"`
@@ -80,18 +52,13 @@ type jwtCacheClaims struct {
 	Expires   int64          `json:"exp"`
 }
 
-// jweCacheClaims extends the claim set with the jti EncryptJWT always sets
-// (symmetricEncodeJWT sets issued-at, expiry, and a random jti).
+// jweCacheClaims adds the jti EncryptJWT always sets.
 type jweCacheClaims struct {
 	jwtCacheClaims
 	JTI string `json:"jti"`
 }
 
-// CreateSessionCacheJWT issues a StrategyJWT session-data cookie value for
-// session/user, mirroring the jwt branch of upstream setCookieCache with the
-// default secret signer: HS256 over the auth secret, outer window maxAge.
-// version stamps the resolved cookie-cache version ("" stays unstamped and
-// reads back as the default at the route layer).
+// CreateSessionCacheJWT issues HS256 cache JWT; empty version stays unstamped.
 func CreateSessionCacheJWT(secret string, session, user map[string]any, version string, maxAge time.Duration) (string, error) {
 	if secret == "" {
 		return "", fmt.Errorf("cookies: secret is required for the jwt cookie cache")
@@ -108,9 +75,7 @@ func CreateSessionCacheJWT(secret string, session, user map[string]any, version 
 	if err != nil {
 		return "", err
 	}
-	// jose SignJWT serializes the header as {"alg":"HS256"} with typ JWT;
-	// byte order inside the JSON object is irrelevant because verification
-	// recomputes over the received segments.
+	// Header byte order is irrelevant; verification recomputes over segments.
 	header, err := json.Marshal(map[string]string{"alg": "HS256", "typ": "JWT"})
 	if err != nil {
 		return "", err
@@ -122,8 +87,7 @@ func CreateSessionCacheJWT(secret string, session, user map[string]any, version 
 	return unsigned + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
 }
 
-// VerifySessionCacheJWT validates a StrategyJWT value against each candidate
-// secret (rotation) and returns the payload plus the outer expiry in
+// VerifySessionCacheJWT validates HS256 cache JWT with rotation.
 // milliseconds. The header algorithm is pinned to HS256 — anything else
 // (including "none") fails closed. Expiry is strict (upstream jwtVerify runs
 // without a clock tolerance on this path); missing or non-numeric exp, and
@@ -177,20 +141,14 @@ func VerifySessionCacheJWT(secrets []string, value string) (SessionCacheData, in
 	if claims.Session == nil || claims.User == nil {
 		return SessionCacheData{}, 0, fmt.Errorf("cookies: invalid jwt cache payload")
 	}
-	// Schema validation runs AFTER signature verification (upstream
-	// parseCookieCachePayload order): a correctly-signed but
-	// schema-invalid payload is a miss, reported with the sentinel so
-	// callers can Logf-warn + fall through to the database instead of
-	// throwing. Wrong-typed core fields (including explicit JSON nulls,
-	// which decode to nil) fail here; unknown keys stay allowed.
+	// Schema runs AFTER signature: correctly-signed but invalid payloads report the sentinel for warn+miss.
 	if err := ValidateCachePayloadSchema(claims.Session, claims.User); err != nil {
 		return SessionCacheData{}, 0, fmt.Errorf("cookies: invalid jwt cache payload schema: %w", err)
 	}
 	if claims.Expires == 0 {
 		return SessionCacheData{}, 0, fmt.Errorf("cookies: jwt cache has no expiry")
 	}
-	// Strict like jose's jwtVerify on this path (no clock tolerance): the
-	// token is expired once now reaches exp.
+	// Strict expiry (no clock tolerance): expired once now reaches exp.
 	if time.Now().Unix() >= claims.Expires {
 		return SessionCacheData{}, 0, fmt.Errorf("cookies: jwt cache expired")
 	}
@@ -202,11 +160,7 @@ func VerifySessionCacheJWT(secrets []string, value string) (SessionCacheData, in
 	}, claims.Expires * 1000, nil
 }
 
-// CreateSessionCacheJWE issues a StrategyJWE session-data cookie value,
-// mirroring the jwe branch of upstream setCookieCache
-// (symmetricEncodeJWT with the "better-auth-session" salt): dir/A256CBC-HS512
-// over the HKDF-derived key, kid set to the key thumbprint, iat/exp/jti
-// claims, outer window maxAge.
+// CreateSessionCacheJWE issues dir/A256CBC-HS512 cache JWE with thumbprint kid.
 func CreateSessionCacheJWE(secret string, session, user map[string]any, version string, maxAge time.Duration) (string, error) {
 	if secret == "" {
 		return "", fmt.Errorf("cookies: secret is required for the jwe cookie cache")
@@ -251,17 +205,13 @@ func CreateSessionCacheJWE(secret string, session, user map[string]any, version 
 	return object.CompactSerialize()
 }
 
-// VerifySessionCacheJWE decrypts a StrategyJWE value and returns the payload
-// plus the outer expiry in milliseconds, mirroring symmetricDecodeJWT: the
+// VerifySessionCacheJWE decrypts cache JWE and returns payload plus expiry.
 // kid selects the secret whose derived key thumbprint matches (unknown kids
 // fail closed with no fallback); kid-less tokens are tried against every
-// candidate. Expiry enforces the upstream 15s clock tolerance; A256GCM
-// payloads are accepted like jwtDecryptOpts (with the derived key truncated
+// candidate. Expiry uses 15s tolerance; A256GCM truncates
 // to 32 bytes). Payloads without session/user objects fail closed.
 func VerifySessionCacheJWE(secrets []string, value string) (SessionCacheData, int64, error) {
-	// jwtDecryptOpts accepts dir key management with A256CBC-HS512 (issued)
-	// or A256GCM (legacy compat) content encryption; anything else fails at
-	// parse time.
+	// Only dir/A256CBC-HS512 (issued) or A256GCM (legacy) accepted.
 	object, err := jose.ParseEncrypted(value,
 		[]jose.KeyAlgorithm{jose.DIRECT},
 		[]jose.ContentEncryption{jose.A256CBC_HS512, jose.A256GCM})
@@ -327,19 +277,14 @@ func VerifySessionCacheJWE(secrets []string, value string) (SessionCacheData, in
 	if claims.Session == nil || claims.User == nil {
 		return SessionCacheData{}, 0, fmt.Errorf("cookies: invalid jwe cache payload")
 	}
-	// Schema validation runs AFTER decryption (upstream
-	// parseCookieCachePayload order): a correctly-decrypted but
-	// schema-invalid payload is a miss, reported with the sentinel so
-	// callers can Logf-warn + fall through to the database instead of
-	// throwing. Wrong-typed core fields (including explicit JSON nulls,
-	// which decode to nil) fail here; unknown keys stay allowed.
+	// Schema runs AFTER decryption: correctly-decrypted but invalid payloads report the sentinel for warn+miss.
 	if err := ValidateCachePayloadSchema(claims.Session, claims.User); err != nil {
 		return SessionCacheData{}, 0, fmt.Errorf("cookies: invalid jwe cache payload schema: %w", err)
 	}
 	if claims.Expires == 0 {
 		return SessionCacheData{}, 0, fmt.Errorf("cookies: jwe cache has no expiry")
 	}
-	// Upstream jwtDecryptOpts clockTolerance: 15.
+	// Upstream clockTolerance: 15.
 	if time.Now().Unix() > claims.Expires+crypto.JWEClockToleranceSeconds {
 		return SessionCacheData{}, 0, fmt.Errorf("cookies: jwe cache expired")
 	}
@@ -351,15 +296,13 @@ func VerifySessionCacheJWE(secrets []string, value string) (SessionCacheData, in
 	}, claims.Expires * 1000, nil
 }
 
-// derivedCacheKey pairs an HKDF-derived session key with its kid thumbprint.
+// derivedCacheKey pairs HKDF key with kid.
 type derivedCacheKey struct {
 	key []byte
 	kid string
 }
 
-// decryptionKeys selects the decryption key bytes for a content-encryption
-// algorithm: the full 64-byte derived key, truncated to 32 bytes for the
-// A256GCM payloads jwtDecryptOpts still accepts.
+// decryptionKeys uses full 64-byte key, truncated to 32 for A256GCM.
 func decryptionKeys(key []byte, enc string) [][]byte {
 	if jose.ContentEncryption(enc) == jose.A256GCM && len(key) >= 32 {
 		return [][]byte{key[:32]}
@@ -367,9 +310,7 @@ func decryptionKeys(key []byte, enc string) [][]byte {
 	return [][]byte{key}
 }
 
-// jweContentEncryption reads the "enc" protected-header parameter from a
-// compact JWE without a JOSE round-trip (go-jose surfaces only merged
-// signature headers, not the content-encryption selector).
+// jweContentEncryption reads "enc" without a JOSE round-trip.
 func jweContentEncryption(value string) (string, error) {
 	parts := strings.Split(value, ".")
 	if len(parts) != 5 {
@@ -388,9 +329,7 @@ func jweContentEncryption(value string) (string, error) {
 	return header.Enc, nil
 }
 
-// newCacheJTI mints the random jti claim EncryptJWT sets on every payload.
-// Uniqueness is transport-only: neither upstream nor this runtime tracks jtis
-// for replay.
+// newCacheJTI mints the random jti claim.
 func newCacheJTI() string {
 	var nonce [16]byte
 	if _, err := rand.Read(nonce[:]); err != nil {

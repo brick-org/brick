@@ -11,7 +11,7 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-// These parameters match @better-auth/utils/password in Better Auth v1.7.5.
+// Upstream crypto/password.ts; scrypt N=16384 r=16 p=1 keyLen=64 saltLen=16.
 const (
 	scryptN       = 16384
 	scryptR       = 16
@@ -21,15 +21,13 @@ const (
 )
 
 // HashPassword returns Better Auth's `hex(salt):hex(scrypt-key)` format.
-// Passwords are NFKC-normalized to match the upstream implementation.
 func HashPassword(password string) (string, error) {
 	salt := make([]byte, scryptSaltLen)
 	if _, err := rand.Read(salt); err != nil {
 		return "", err
 	}
 	saltHex := hex.EncodeToString(salt)
-	// Better Auth passes the hex-encoded salt string to scrypt rather than the
-	// decoded random bytes. Preserve that detail for cross-language hashes.
+	// Hex-encoded (not raw) salt feeds scrypt for cross-language hashes.
 	key, err := scrypt.Key([]byte(norm.NFKC.String(password)), []byte(saltHex), scryptN, scryptR, scryptP, scryptKeyLen)
 	if err != nil {
 		return "", err
@@ -37,24 +35,8 @@ func HashPassword(password string) (string, error) {
 	return saltHex + ":" + hex.EncodeToString(key), nil
 }
 
-// UpgradeHashIfNeeded verifies password against storedHash and, when the
-// hash is a legacy bcrypt bridge entry ($2a$/$2b$/$2y$) that verifies, mints
-// a fresh upstream scrypt hash for rotation (P11-GAP-1).
-//
-// Returns ("", false) when no upgrade applies: verification failed,
-// malformed hash, or the hash is already the upstream scrypt format.
-// Scrypt hashes never rehash here (upstream verify-only; no rehash-on-verify
-// cost change). A hashing failure also yields ("", false) so callers keep
-// the verified legacy hash rather than persisting an empty one.
-//
-// Merge owner (sign-in.go, NOT wired here — another agent owns that file):
-//
-//	if newHash, upgraded := crypto.UpgradeHashIfNeeded(storedHash, password); upgraded {
-//	    // persist newHash to the credential account (UPDATE account SET password=newHash)
-//	}
-//
-// Removal policy: keep the bcrypt bridge until no stored credential hash
-// carries a $2* prefix; then delete the bridge and this helper together.
+// UpgradeHashIfNeeded mints a fresh scrypt hash when a legacy bcrypt hash verifies.
+// Scrypt hashes never rehash here; failures yield ("", false) so callers keep the verified hash.
 func UpgradeHashIfNeeded(storedHash, password string) (newHash string, upgraded bool) {
 	if !strings.HasPrefix(storedHash, "$2a$") && !strings.HasPrefix(storedHash, "$2b$") && !strings.HasPrefix(storedHash, "$2y$") {
 		return "", false
@@ -69,9 +51,7 @@ func UpgradeHashIfNeeded(storedHash, password string) (newHash string, upgraded 
 	return fresh, true
 }
 
-// VerifyPassword verifies Better Auth scrypt hashes. Bcrypt verification is
-// retained as a migration bridge for hashes created by the pre-parity Go port;
-// all newly generated hashes use the upstream scrypt format.
+// VerifyPassword verifies scrypt hashes; bcrypt remains only as a migration bridge.
 func VerifyPassword(hash, password string) bool {
 	if strings.HasPrefix(hash, "$2a$") || strings.HasPrefix(hash, "$2b$") || strings.HasPrefix(hash, "$2y$") {
 		return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
