@@ -3,13 +3,13 @@ package testutil
 // AUTH-V10-02 — adversarial and cross-language conformance (tests only).
 //
 // Both-directions golden consumers for the Wave 10 shared vectors in
-// auth/testdata: redirect-trust decisions (wave10_redirects.json, shared
+// auth/src/testdata: redirect-trust decisions (wave10_redirects.json, shared
 // with any TypeScript trusted-origins reader) and DCR redirect-URI validity
 // shapes (wave10_registration.json, shared with the OAuth Provider
 // register.ts rules and consumed in full by
 // plugins/oauthprovider/wave10_stress_test.go).
 //
-// Provenance for both fixtures is recorded in auth/testdata/provenance.json.
+// Provenance for both fixtures is recorded in auth/src/testdata/provenance.json.
 // All hermetic: no network.
 
 import (

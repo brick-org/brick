@@ -94,12 +94,13 @@ owners are deferred as high-churn, behavior-neutral (see `index.go`).
 
 - `setPassword` has no HTTP route upstream (`createAuthEndpoint.serverOnly`);
   Go exposes server-only `routes.SetPassword` instead (tested).
-- `sendOnSignUp: false` + `requireEmailVerification` still sends: needs
-  `SendOnSignUp *bool` tri-state; `types` is frozen for v1, recorded here
-  instead of implemented.
+- `sendOnSignUp: false` + `requireEmailVerification` does not send:
+  `SendOnSignUp *bool` tri-state (nil follows requireEmailVerification),
+  closed post-v1-unfreeze and pinned by `TestF1_SendOnSignUpExplicitFalse`.
 - Huma schema-validation failures are 422 vs upstream 400 (framework-wide
   convention, not per-route drift).
-- Chunked multi-cookie writes: read path only (safe degradation).
+- Chunked multi-cookie writes are wired (`BuildChunkedCookies`); reads
+  recover upstream/custom/chunked names.
 
 - Session `ipAddress`/`userAgent` are directly resolved (XFF leftmost →
   X-Real-IP → RemoteAddr host → `""`; UA verbatim → `""`). Full upstream
@@ -109,7 +110,8 @@ owners are deferred as high-churn, behavior-neutral (see `index.go`).
 - Get-session null-shape: upstream answers 200 `null` for missing/expired
   sessions; Go answers 401/400 fail-closed (pinned). G1/G3/G5 recorded as
   intentional deviations, not gaps.
-- Explicit `updateAge: 0` (always-refresh) is not distinguished from unset
-  (needs `*int` tri-state; `types` frozen) — open post-v1 gap.
+- Explicit `updateAge: 0` (always-refresh) is distinguished from unset
+  (`UpdateAge *int` tri-state; `types` unfrozen post-v1) — closed and pinned
+  by `TestF4_UpdateAgeTriState`.
 - Unknown-only update-session bodies pass through (union semantics, pinned)
   instead of upstream 400 — accepted divergence.

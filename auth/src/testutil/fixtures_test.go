@@ -1,6 +1,6 @@
 package testutil
 
-// Both-directions fixture tests for the wire formats in auth/testdata.
+// Both-directions fixture tests for the wire formats in auth/src/testdata.
 // TS-write/Go-read loads each checked-in vector through the Go verifier;
 // Go-write/TS-read mints a fresh value with the Go helper and asserts the
 // exact wire shape a TypeScript reader expects. Malformed inputs fail

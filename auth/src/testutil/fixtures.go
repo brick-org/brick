@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// TestdataDir returns the absolute path of auth/testdata.
+// TestdataDir returns the absolute path of auth/src/testdata.
 func TestdataDir(t *testing.T) string {
 	t.Helper()
 	_, file, _, ok := runtime.Caller(0)

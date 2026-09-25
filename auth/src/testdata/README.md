@@ -1,4 +1,4 @@
-# auth/testdata — upstream golden fixtures (AUTH-R5-04)
+# auth/src/testdata — upstream golden fixtures (AUTH-R5-04)
 
 Wire-compatibility vectors shared with the pinned TypeScript implementation.
 Waves 1–4 proved behavior with inline constants; this directory checks the
