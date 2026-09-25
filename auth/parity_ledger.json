@@ -1151,9 +1151,37 @@
         {
           "case": "should work with compact strategy",
           "goTest": "TestFilterV1_CompactStrategy (superset)"
+        },
+        {
+          "case": "should reconstruct chunked cookies correctly",
+          "goTest": "TestTriageV1_ChunkedCompactCacheReadRoundTrip (READ leg; writes excluded)"
+        },
+        {
+          "case": "should securely parse the signed cookies with padding",
+          "goTest": "TestTriageV1_ParseCookiesPaddedSignedValues"
+        },
+        {
+          "case": "parseCookies tolerates mixed `;`, `; `, and `;\\t` separators",
+          "goTest": "TestTriageV1_ParseCookiesMixedSeparators (tab leg)"
+        },
+        {
+          "case": "rejects names containing characters outside RFC 7230 token",
+          "goTest": "TestTriageV1_ParseCookiesRejectBadNames"
+        },
+        {
+          "case": "rejects values containing control chars, double-quote, or backslash",
+          "goTest": "TestTriageV1_ParseCookiesRejectBadValues"
+        },
+        {
+          "case": "splits on first `=` only, preserving subsequent `=` in value",
+          "goTest": "TestTriageV1_ParseCookiesSplitsOnFirstEquals"
+        },
+        {
+          "case": "rejects entries with CR/LF in raw key or value (no trim escape)",
+          "goTest": "TestTriageV1_ParseCookiesRejectCRLFEntries"
         }
       ],
-      "notes": "Set-Cookie parse/serialize, expiry, separator, cache-expiry, and JWE-rotation legs covered by setcookie_v1/cacheexpiry_v1 suites; chunked multi-cookie writes excluded per SCOPE (read path only); route-integration and JWT-plugin legs out of scope."
+      "notes": "Full 118-case triage done: 72 cited (34 recorded + 38 to pre-existing suites), 7 ported (triage_v1_cookies), 17 excluded (chunk writes x5, JWKS x4, route-legs x4, social x2, JS-interop x2), 1 FEATURE-GAP open (G1 post-signature payload-schema validation)."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/crypto/password.test.ts",
