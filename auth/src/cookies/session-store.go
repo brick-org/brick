@@ -97,12 +97,13 @@ func BuildChunkedCookies(name, value string, attrs Attributes) ([]*http.Cookie, 
 
 // MaxValueSizeFor estimates the largest value that keeps the serialized
 // Set-Cookie for name within MaxCookieSize, mirroring upstream
-// getMaxCookieValueSize. The overhead is measured with the real http.Cookie
-// serializer so it stays in sync with the wire; the estimate sizes against
+// getMaxCookieValueSize/serializeCookie. The overhead is measured with
+// Attributes.Serialize (wire-accurate, matching upstream serializeCookie)
+// so it stays in sync with the wire; the estimate sizes against
 // the worst-case chunk name ("<name>.99") so chunked cookies never overflow.
 func MaxValueSizeFor(name string, attrs Attributes) int {
 	worst := name + ".99"
-	overhead := len(attrs.ToHTTPCookie(worst, "").String())
+	overhead := len(attrs.Serialize(worst, ""))
 	return MaxCookieSize - overhead
 }
 

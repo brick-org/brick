@@ -3,10 +3,12 @@ package routes
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"reflect"
 	"time"
 
+	"github.com/brick-org/brick/auth/src/api/state"
 	"github.com/brick-org/brick/auth/src/cookies"
 	"github.com/brick-org/brick/auth/src/types"
 )
@@ -618,15 +620,44 @@ func issueSessionCookieWithContext(ctx context.Context, opts types.Options, head
 	return cookie, nil
 }
 
-// newSessionDataCookieWithContext mints the session_data cache cookie with
+// sessionDataCookieAttributes maps the request-aware session_data config plus
+// the computed cache expiry to cookie Attributes for chunked issuance.
+// Sizing budgets derive from Attributes.Serialize (upstream serializeCookie),
+// never ToHTTPCookie.String(). Wire preserves the legacy issuance shape:
+// Path "/", HttpOnly, SameSite Lax with Domain/Secure from the request-aware
+// config (matching the pre-chunk single-cookie wire).
+func sessionDataCookieAttributes(cfg resolvedSessionCookieConfig, expiresAt time.Time) cookies.Attributes {
+	maxAgeSecs := int(time.Until(expiresAt).Seconds())
+	if maxAgeSecs < 0 {
+		maxAgeSecs = 0
+	}
+	return cookies.Attributes{
+		Path:       "/",
+		Domain:     cfg.Domain,
+		Secure:     cfg.Secure,
+		HttpOnly:   true,
+		SameSite:   http.SameSiteLaxMode,
+		Expires:    expiresAt,
+		ExpiresSet: true,
+		MaxAge:     maxAgeSecs,
+		MaxAgeSet:  true,
+	}
+}
+
+// mintSessionDataValueWithContext mints the raw session_data cache value with
 // request-aware naming/attributes and the custom JWKS signer when present
 // (upstream setCookieCache jwt branch with cookieCacheSigner, including key
 // rotation via the plugin's live keys, typ/kid/aud/iss/sub/sid claim
 // binding, and authoritative fallback on any failure).
-func newSessionDataCookieWithContext(ctx context.Context, opts types.Options, session types.Session, user types.User, sessionOpts types.SessionOptions, now time.Time, dontRememberMe bool) (http.Cookie, error) {
+//
+// It returns the value plus the wire name and Attributes for chunked issuance
+// via cookies.BuildChunkedCookies (upstream session-store chunkCookie with
+// <name>.<i> naming). Sizing uses Attributes.Serialize through
+// MaxValueSizeFor, matching upstream serializeCookie.
+func mintSessionDataValueWithContext(ctx context.Context, opts types.Options, session types.Session, user types.User, sessionOpts types.SessionOptions, now time.Time, dontRememberMe bool) (string, string, cookies.Attributes, error) {
 	version, err := resolveCookieCacheVersion(session, user, sessionOpts)
 	if err != nil {
-		return http.Cookie{}, err
+		return "", "", cookies.Attributes{}, err
 	}
 	// Cookie-cache field filtering (upstream setCookieCache, cookies/index.ts:
 	// 169-174): schema-declared returned:false additional fields are stripped
@@ -660,78 +691,107 @@ func newSessionDataCookieWithContext(ctx context.Context, opts types.Options, se
 			}
 			custom, cerr := signViaCustomSigner(ctx, effective, signer, session, user, version, window)
 			if cerr != nil {
-				return http.Cookie{}, cerr
+				return "", "", cookies.Attributes{}, cerr
 			}
 			value = custom
 		} else {
 			sm, err := cacheStructMap(session)
 			if err != nil {
-				return http.Cookie{}, err
+				return "", "", cookies.Attributes{}, err
 			}
 			um, err := cacheStructMap(user)
 			if err != nil {
-				return http.Cookie{}, err
+				return "", "", cookies.Attributes{}, err
 			}
 			filterCookieCacheMaps(sm, um, opts, sessionOpts)
 			value, err = cookies.CreateSessionCacheJWT(opts.CurrentSecret(), sm, um, version, time.Until(expiresAt))
 			if err != nil {
-				return http.Cookie{}, err
+				return "", "", cookies.Attributes{}, err
 			}
 		}
 	} else if strategy == cookies.StrategyJWE {
 		sm, err := cacheStructMap(session)
 		if err != nil {
-			return http.Cookie{}, err
+			return "", "", cookies.Attributes{}, err
 		}
 		um, err := cacheStructMap(user)
 		if err != nil {
-			return http.Cookie{}, err
+			return "", "", cookies.Attributes{}, err
 		}
 		filterCookieCacheMaps(sm, um, opts, sessionOpts)
 		value, err = cookies.CreateSessionCacheJWE(opts.CurrentSecret(), sm, um, version, time.Until(expiresAt))
 		if err != nil {
-			return http.Cookie{}, err
+			return "", "", cookies.Attributes{}, err
 		}
 	} else {
 		// Compact uses the frozen secret-envelope codec; route callers
 		// pass the current secret (rotation reads accept older secrets).
 		// session/user were filtered for returned:false above, so the
 		// delegated frozen issuance carries a clean payload.
-		// Wire name stays the legacy Go cookie (sessionDataCookieName) for
-		// backward compatibility; reads accept the upstream and custom
-		// names via sessionDataCookieValue. Only re-attribute Domain/Secure
-		// from the request-aware config.
 		single, err := newSessionDataCookie(opts.CurrentSecret(), session, user, opts, sessionOpts, now, dontRememberMe)
 		if err != nil {
-			return http.Cookie{}, err
+			return "", "", cookies.Attributes{}, err
 		}
-		cfg := resolveSessionDataCookieConfigWithContext(ctx, opts, CookieRequestHeaders{})
-		single.Domain = cfg.Domain
-		single.Secure = cfg.Secure
-		return single, nil
+		value = single.Value
 	}
-	// JWT/JWE issuance likewise keeps the legacy wire name for
-	// compatibility (reads recover upstream/custom names + chunks).
+	// JWT/JWE issuance keeps the legacy wire name for compatibility (reads
+	// recover upstream/custom names + chunks); compact always keeps it.
+	// Only re-attribute Domain/Secure from the request-aware config.
 	name := sessionDataCookieName
 	cfg := resolveSessionDataCookieConfigWithContext(ctx, opts, CookieRequestHeaders{})
-	if override, ok := opts.Advanced.Cookies[sessionDataCookieBase]; ok && override.Name != "" {
-		name = cfg.Name
+	if strategy != cookies.StrategyCompact {
+		if override, ok := opts.Advanced.Cookies[sessionDataCookieBase]; ok && override.Name != "" {
+			name = cfg.Name
+		}
 	}
-	maxAgeSecs := int(time.Until(expiresAt).Seconds())
-	if maxAgeSecs < 0 {
-		maxAgeSecs = 0
+	attrs := sessionDataCookieAttributes(cfg, expiresAt)
+	// Compact keeps the legacy wire name; Domain/Secure already in attrs.
+	return value, name, attrs, nil
+}
+
+// newSessionDataCookiesWithContext mints the session_data cache as one or more
+// Set-Cookie entries via cookies.BuildChunkedCookies (upstream chunkCookie,
+// session-store.ts:84-131, with <name>.<i> naming). Values fitting the
+// Serialize-sized budget emit a single cookie under the bare name; larger
+// values split into indexed chunks. A >100-chunk overflow warns and errors so
+// callers serve authoritative with no cache (upstream warn-and-skip).
+func newSessionDataCookiesWithContext(ctx context.Context, opts types.Options, session types.Session, user types.User, sessionOpts types.SessionOptions, now time.Time, dontRememberMe bool) ([]http.Cookie, error) {
+	value, name, attrs, err := mintSessionDataValueWithContext(ctx, opts, session, user, sessionOpts, now, dontRememberMe)
+	if err != nil {
+		return nil, err
 	}
-	return http.Cookie{
-		Name:     name,
-		Value:    value,
-		Path:     "/",
-		Domain:   cfg.Domain,
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		Secure:   cfg.Secure,
-		Expires:  expiresAt,
-		MaxAge:   maxAgeSecs,
-	}, nil
+	chunked, err := cookies.BuildChunkedCookies(name, value, attrs)
+	if err != nil {
+		Logf(opts, "warn", "session_data too large to store even after chunking; skipping cookie cache")
+		return nil, err
+	}
+	out := make([]http.Cookie, 0, len(chunked))
+	for _, c := range chunked {
+		out = append(out, *c)
+	}
+	return out, nil
+}
+
+// newSessionDataCookieWithContext mints the session_data cache cookie with
+// request-aware naming/attributes and the custom JWKS signer when present
+// (upstream setCookieCache jwt branch with cookieCacheSigner, including key
+// rotation via the plugin's live keys, typ/kid/aud/iss/sub/sid claim
+// binding, and authoritative fallback on any failure).
+//
+// Chunked issuance lives in newSessionDataCookiesWithContext; this
+// single-cookie wrapper preserves the legacy call shape (session.go readOnly
+// path, filter tests) for values fitting one cookie. Values requiring
+// chunking error so callers fall back to the plural helper or serve
+// authoritative with no cache.
+func newSessionDataCookieWithContext(ctx context.Context, opts types.Options, session types.Session, user types.User, sessionOpts types.SessionOptions, now time.Time, dontRememberMe bool) (http.Cookie, error) {
+	all, err := newSessionDataCookiesWithContext(ctx, opts, session, user, sessionOpts, now, dontRememberMe)
+	if err != nil {
+		return http.Cookie{}, err
+	}
+	if len(all) == 1 {
+		return all[0], nil
+	}
+	return http.Cookie{}, fmt.Errorf("auth: session_data requires %d chunked cookies; use newSessionDataCookiesWithContext", len(all))
 }
 
 // issueSessionCookiesWithContext mints the full issuance set with request
@@ -761,11 +821,21 @@ func issueSessionCookiesWithContext(ctx context.Context, authOpts types.Options,
 		})
 	}
 	if sessionOpts.CookieCache.Enabled {
-		cacheCookie, err := newSessionDataCookieWithContext(ctx, authOpts, session, user, sessionOpts, now, dontRememberMe)
-		if err != nil {
-			return nil, err
+		value, name, attrs, merr := mintSessionDataValueWithContext(ctx, authOpts, session, user, sessionOpts, now, dontRememberMe)
+		if merr != nil {
+			return nil, merr
 		}
-		out = append(out, cacheCookie)
+		chunked, cerr := cookies.BuildChunkedCookies(name, value, attrs)
+		if cerr != nil {
+			// Upstream warn-and-skip (session-store.ts:106-112): the value
+			// cannot fit even after chunking (>100 chunks), so serve
+			// authoritative with no cache.
+			Logf(authOpts, "warn", "session_data too large to store even after chunking; skipping cookie cache")
+			return out, nil
+		}
+		for _, c := range chunked {
+			out = append(out, *c)
+		}
 	}
 	return out, nil
 }
@@ -802,18 +872,23 @@ func expiredSessionCookiesWithContext(ctx context.Context, authOpts types.Option
 			Expires:  time.Unix(0, 0).UTC(),
 		}
 		out = append(out, base)
-		// Expire any chunked variants present in the request so a
-		// shrunken cache cannot leave stale chunks behind.
+		// Chunk enumeration lives in cookies.ExpiredChunks (upstream clean()):
+		// expire the bare name plus every "<name>.<index>" chunk present so a
+		// shrunken cache cannot leave stale chunks behind. Results map to the
+		// route wire shape (MaxAge -1 + epoch, pinned by stalecache tests).
 		if cookieHeader != "" {
 			parsed := cookies.ParseRequestCookies(cookieHeader)
-			for name := range parsed {
-				for _, candidate := range sessionDataCookieLookupNames(authOpts) {
-					if idx, ok := cookies.ParseChunkIndex(candidate, name); ok && idx >= 0 {
-						chunk := base
-						chunk.Name = name
-						out = append(out, chunk)
-						break
+			attrs := cookies.Attributes{Path: "/", Domain: dataCfg.Domain, Secure: dataCfg.Secure, HttpOnly: true, SameSite: http.SameSiteLaxMode}
+			seen := map[string]struct{}{dataCfg.Name: {}}
+			for _, candidate := range sessionDataCookieLookupNames(authOpts) {
+				for _, expired := range cookies.ExpiredChunks(parsed, candidate, attrs) {
+					if _, dup := seen[expired.Name]; dup {
+						continue
 					}
+					seen[expired.Name] = struct{}{}
+					chunk := base
+					chunk.Name = expired.Name
+					out = append(out, chunk)
 				}
 			}
 		}
@@ -861,25 +936,15 @@ func expiredStaleSessionDataCookies(ctx context.Context, opts types.Options, hea
 	seen := map[string]struct{}{dataCfg.Name: {}}
 	if cookieHeader != "" {
 		parsed := cookies.ParseRequestCookies(cookieHeader)
-		candidates := sessionDataCookieLookupNames(opts)
-		for name := range parsed {
-			if _, dup := seen[name]; dup {
-				continue
-			}
-			matched := false
-			for _, candidate := range candidates {
-				if name == candidate {
-					matched = true
-					break
+		attrs := cookies.Attributes{Path: "/", Domain: dataCfg.Domain, Secure: dataCfg.Secure, HttpOnly: true, SameSite: http.SameSiteLaxMode}
+		// Single enumeration via cookies.ExpiredChunks (upstream clean()).
+		for _, candidate := range sessionDataCookieLookupNames(opts) {
+			for _, expired := range cookies.ExpiredChunks(parsed, candidate, attrs) {
+				if _, dup := seen[expired.Name]; dup {
+					continue
 				}
-				if _, ok := cookies.ParseChunkIndex(candidate, name); ok {
-					matched = true
-					break
-				}
-			}
-			if matched {
-				seen[name] = struct{}{}
-				out = append(out, expire(name))
+				seen[expired.Name] = struct{}{}
+				out = append(out, expire(expired.Name))
 			}
 		}
 	}
@@ -888,8 +953,12 @@ func expiredStaleSessionDataCookies(ctx context.Context, opts types.Options, hea
 
 // maybeRefreshCookieCacheWithContext re-issues the stateless cache with
 // request context (same threshold/ShouldRefresh gates as
-// maybeRefreshCookieCache).
+// maybeRefreshCookieCache, plus the per-request shouldSkipSessionRefresh
+// gate per upstream session.ts:201-204,342-344).
 func maybeRefreshCookieCacheWithContext(ctx context.Context, authOpts types.Options, headers CookieRequestHeaders, token string, payload *sessionCookieCachePayload, now time.Time, dontRememberMe bool) []http.Cookie {
+	if state.GetShouldSkipSessionRefresh(ctx) {
+		return nil
+	}
 	rc := authOpts.Session.CookieCache.RefreshCache
 	threshold, ok := cookies.CookieCacheRefreshThreshold(rc.Enabled, rc.UpdateAge, authOpts.Session.CookieCacheMaxAgeDuration())
 	if !ok {
