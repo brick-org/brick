@@ -1352,6 +1352,9 @@ func TestSignOut_AdvancedCookieOptionsApplied(t *testing.T) {
 		t.Fatalf("new request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	// F6 requireHeaders parity: headerless sign-out 401s; a garbage cookie
+	// passes the gate while still exercising cookie-clear attributes.
+	req.Header.Set("Cookie", "better-auth.session_token=garbage-token")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -1395,6 +1398,8 @@ func TestSignOut_CrossSubDomainCookieUsesTrustedProxyHost(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Forwarded-Host", "auth.proxy.example.com")
 	req.Header.Set("X-Forwarded-Proto", "https")
+	// F6 requireHeaders parity (see above).
+	req.Header.Set("Cookie", "better-auth.session_token=garbage-token")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
