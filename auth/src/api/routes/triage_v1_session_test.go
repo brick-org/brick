@@ -1,9 +1,9 @@
 package routes
 
 // Triage ports for vendor session-api.test.ts (Better Auth v1.7.5 @ 5468e6bf).
-// Each test below names the upstream case it pins. PROBE tests (prefix
-// TestTriageProbe_) assert upstream behavior that is expected to FAIL on the
-// v1 tree; they are removed before finalizing and reported as FEATURE-GAP.
+// Each test below names the upstream case it pins. Cases needing prod-code
+// fixes were reported as FEATURE-GAPs instead of kept tests; every test in
+// this file passes on the v1 tree.
 
 import (
 	"context"
