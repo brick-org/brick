@@ -68,6 +68,7 @@ Upstream module → Go counterpart. Splits are documented, never phantom:
 - `api/routes/account.ts` → `src/api/routes/account.go` (list-accounts)
 - `api/routes/update-user.ts` → `src/api/routes/account.go` (UpdateUser,
   ChangeEmail, DeleteUser) + `delete-user-callback.go` (DeleteUserCallback)
+  + `password.go` (ChangePassword lives here, not in `account.go`)
 - `api/routes/callback.ts` → `src/api/routes/callback.go` (v1-excluded stub;
   social `CallbackOAuth` never registered)
 - `api/routes/email-verification.ts` → `email-verification.go`
@@ -108,10 +109,11 @@ owners are deferred as high-churn, behavior-neutral (see `index.go`).
   issuance stores the directly resolved address.
 
 - Get-session null-shape: upstream answers 200 `null` for missing/expired
-  sessions; Go answers 401/400 fail-closed (pinned). G1/G3/G5 recorded as
-  intentional deviations, not gaps.
+  sessions; Go matches since B14 (200 null + `Cache-Control: no-store`),
+  pinned by `TestB14_*`. Internal resolver keeps the error contract.
 - Explicit `updateAge: 0` (always-refresh) is distinguished from unset
   (`UpdateAge *int` tri-state; `types` unfrozen post-v1) — closed and pinned
   by `TestF4_UpdateAgeTriState`.
-- Unknown-only update-session bodies pass through (union semantics, pinned)
-  instead of upstream 400 — accepted divergence.
+- Unknown-only update-session bodies 400 ("No fields to update") per
+  upstream `parseSessionInput` since B2 — the union-passthrough divergence
+  is closed. Output-side unknown fields still pass through.
