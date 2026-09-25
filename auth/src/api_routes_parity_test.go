@@ -123,8 +123,8 @@ func TestParity_VerifyEmailGetReturnsUserWithoutCallback(t *testing.T) {
 	if err := json.NewDecoder(getResp.Body).Decode(&body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if !body.Status || body.User == nil || body.User.Email != "parity-verify-json@example.com" || !body.User.EmailVerified {
-		t.Fatalf("expected verified user object, got %#v", body)
+	if !body.Status || body.User != nil {
+		t.Fatalf("fresh verify must return user:null, got %#v", body)
 	}
 }
 
@@ -169,8 +169,8 @@ func TestParity_VerifyEmailPostAliasStillWorks(t *testing.T) {
 	if err := json.NewDecoder(postResp.Body).Decode(&body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if !body.Status || body.User == nil || !body.User.EmailVerified {
-		t.Fatalf("expected verified user object, got %#v", body)
+	if !body.Status || body.User != nil {
+		t.Fatalf("fresh verify must return user:null, got %#v", body)
 	}
 }
 

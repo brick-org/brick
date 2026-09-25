@@ -375,9 +375,9 @@ func TestTriageV1_ChangePasswordIgnoresCookieCache(t *testing.T) {
 		t.Fatalf("change with cache header = %d, want 200 status:true: %s", resp.Code, resp.Body.String())
 	}
 	// The raw (cache-less) token is revoked: without the stale cache to
-	// serve from, the session reads as upstream 200 null.
+	// serve from, the session reads as upstream 200 literal null.
 	sess := api.Get("/api/auth/get-session", "Cookie: "+signedSessionHeader(t, opts, token))
-	if sess.Code != 200 || !strings.Contains(sess.Body.String(), `"session":null`) || !strings.Contains(sess.Body.String(), `"user":null`) {
+	if sess.Code != 200 || strings.TrimSpace(sess.Body.String()) != "null" {
 		t.Fatalf("revoked session must read 200 null, got %d: %s", sess.Code, sess.Body.String())
 	}
 }
@@ -592,7 +592,7 @@ func TestTriageV1_ResetRevokesSessionsWhenEnabled(t *testing.T) {
 		t.Fatalf("reset = %d: %s", resp.Code, resp.Body.String())
 	}
 	for i, cookie := range []string{cookieA, cookieB} {
-		if sess := api.Get("/api/auth/get-session", "Cookie: "+cookie); sess.Code != 200 || !strings.Contains(sess.Body.String(), `"session":null`) {
+		if sess := api.Get("/api/auth/get-session", "Cookie: "+cookie); sess.Code != 200 || strings.TrimSpace(sess.Body.String()) != "null" {
 			t.Fatalf("session %d must be revoked (200 null), got %d: %s", i, sess.Code, sess.Body.String())
 		}
 	}

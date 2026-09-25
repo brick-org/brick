@@ -34,6 +34,19 @@ type getSessionInput struct {
 	CookieRequestHeaders
 }
 
+type getSessionBody struct {
+	// Pointer fields so a missing/expired session serializes as
+	// upstream's 200 literal null (session.ts:94-112,287-303,
+	// ctx.json(null)) instead of an error. The Body itself is nil
+	// for the null case so Huma marshals literal `null`.
+	User    *types.User    `json:"user"`
+	Session *types.Session `json:"session"`
+	// NeedsRefresh is set only on deferred GET reads (DeferSessionRefresh
+	// without POST): the database is never written, so the refresh need
+	// is reported for the client to act on (upstream session.ts:350-365).
+	NeedsRefresh *bool `json:"needsRefresh,omitempty"`
+}
+
 type getSessionOutput struct {
 	SetCookie []http.Cookie `header:"Set-Cookie"`
 	// Upstream pins cache-control: no-store + pragma: no-cache on the
@@ -42,17 +55,7 @@ type getSessionOutput struct {
 	// unauthenticated response as well (upstream test:2735-2745).
 	CacheControl string `header:"Cache-Control"`
 	Pragma       string `header:"Pragma"`
-	Body         struct {
-		// Pointer fields so a missing/expired session serializes as
-		// upstream's 200 null shape ({"session":null,"user":null},
-		// session.ts:94-112,287-303) instead of an error.
-		User    *types.User    `json:"user"`
-		Session *types.Session `json:"session"`
-		// NeedsRefresh is set only on deferred GET reads (DeferSessionRefresh
-		// without POST): the database is never written, so the refresh need
-		// is reported for the client to act on (upstream session.ts:350-365).
-		NeedsRefresh *bool `json:"needsRefresh,omitempty"`
-	}
+	Body         *getSessionBody
 }
 
 // GetSession registers GET and POST /get-session.
@@ -79,18 +82,20 @@ func GetSession(api huma.API, basePath string, opts types.Options) {
 			readOnly:       !isPost && opts.Session.DeferSessionRefresh,
 		})
 		if err != nil {
-			// B14 (upstream session.ts:94-112,287-303): a missing or expired
-			// session answers 200 null instead of failing closed. The
-			// internal resolveGetSession contract still returns the
-			// FAILED_TO_GET_SESSION / SESSION_EXPIRED errors (kept for
-			// middleware callers via GetSessionFromRequest); only this HTTP
-			// layer maps them to the null shape. Operational failures (500s)
-			// and other codes keep their error status.
+			// B14 (upstream session.ts:94-112,287-303, ctx.json(null)): a
+			// missing, expired, or user-missing session answers 200 literal
+			// null instead of failing closed. The internal resolveGetSession
+			// contract still returns the FAILED_TO_GET_SESSION /
+			// SESSION_EXPIRED errors (kept for middleware callers via
+			// GetSessionFromRequest); only this HTTP layer maps them to the
+			// null shape (Body nil marshals to literal `null`). Operational
+			// failures (500s) and other codes keep their error status.
 			if res != nil && isNullSessionError(err) {
 				out := &getSessionOutput{}
 				out.SetCookie = res.cookies
 				out.CacheControl = "no-store"
 				out.Pragma = "no-cache"
+				// Body stays nil for literal null.
 				return out, nil
 			}
 			// P05-GAP-1: surface the retired session_data cleanup (Max-Age=0
@@ -110,9 +115,11 @@ func GetSession(api huma.API, basePath string, opts types.Options) {
 		out.SetCookie = res.cookies
 		out.CacheControl = "no-store"
 		out.Pragma = "no-cache"
-		out.Body.User = &res.user
-		out.Body.Session = &res.session
-		out.Body.NeedsRefresh = res.needsRefresh
+		out.Body = &getSessionBody{
+			User:         &res.user,
+			Session:      &res.session,
+			NeedsRefresh: res.needsRefresh,
+		}
 		return out, nil
 	}
 	registerAuthOperation(api, huma.Operation{
@@ -162,12 +169,13 @@ type getSessionResult struct {
 // cookie-cache fast path (unless ?disableCookieCache), authoritative
 // database read, then refresh/cookie policy.
 //
-// B14 (upstream session.ts:94-112,287-303 returns 200 null for
-// missing/expired sessions): the null shape is served at the HTTP layer
-// (GetSession maps the FAILED_TO_GET_SESSION / SESSION_EXPIRED errors below
-// to a 200 null body); this resolver keeps returning those errors so
-// middleware callers via GetSessionFromRequest see the failure. Only the
-// stale-cleanup cookie emission on failure changed here (P05-GAP-1).
+// B14 (upstream session.ts:94-112,287-303 returns 200 literal null for
+// missing/expired/user-missing sessions): the null shape is served at the
+// HTTP layer (GetSession maps the FAILED_TO_GET_SESSION / SESSION_EXPIRED
+// errors below to a 200 literal-null body); this resolver keeps returning
+// those errors so middleware callers via GetSessionFromRequest see the
+// failure. Only the stale-cleanup cookie emission on failure changed here
+// (P05-GAP-1).
 //
 // The fast path is context-aware (AUTH-C7-01): chunk/name recovery across
 // the Go legacy, configured, and upstream defaults, plus the JWT plugin
@@ -234,15 +242,18 @@ func resolveGetSession(ctx context.Context, opts types.Options, req getSessionRe
 		// when the session read fails; fallback.test.ts:91-136). Callers
 		// surface res.cookies even when err != nil (see GetSession huma
 		// header append and GetSessionFromRequest cookie return).
-		// G4: on EXPIRED/invalid session_token failures also emit the
-		// expired session_token cleanup alongside the session_data cleanup
-		// (upstream deleteSessionCookie clears both; session.ts:291,380).
-		// DB row deletion already happened in the loader; this only clears
-		// the browser copy. User-missing/DB errors keep the token: the
-		// token itself is valid there.
+		// G4 + session minors: on EXPIRED/invalid/user-missing failures also
+		// emit the expired session_token cleanup alongside the session_data
+		// cleanup, plus the dont_remember marker expiry (upstream
+		// deleteSessionCookie clears all three by default; session.ts:291,380
+		// with cookies/index.ts:506-542). DB row deletion already happened in
+		// the loader; this only clears the browser copy. Upstream findSession
+		// returns null when the user row is missing, so user-missing joins
+		// the null path (not 404). DB/operational errors keep the token.
 		failedCookies := staleCleanup
-		if req.token != "" && (errors.Is(err, errSessionExpired) || errors.Is(err, errUnauthorized)) {
+		if req.token != "" && (errors.Is(err, errSessionExpired) || errors.Is(err, errUnauthorized) || errors.Is(err, errUserMissing)) {
 			failedCookies = append([]http.Cookie{expiredSessionTokenCleanupCookie(ctx, opts, headers)}, failedCookies...)
+			failedCookies = append(failedCookies, expiredDontRememberCleanupCookie(ctx, opts, headers))
 		}
 		failed := &getSessionResult{cookies: failedCookies}
 		switch {
@@ -251,7 +262,7 @@ func resolveGetSession(ctx context.Context, opts types.Options, req getSessionRe
 		case errors.Is(err, errUnauthorized):
 			return failed, sessionRouteError(types.ErrFailedToGetSession)
 		case errors.Is(err, errUserMissing):
-			return failed, sessionRouteError(types.ErrUserNotFound)
+			return failed, sessionRouteError(types.ErrFailedToGetSession)
 		default:
 			return failed, sessionInternalError(types.ErrFailedToGetSession)
 		}
@@ -882,8 +893,11 @@ func newSessionDataCookie(secret string, session types.Session, user types.User,
 		expiresAt = session.ExpiresAt.UTC()
 	}
 	// Strategy-aware encoding (upstream setCookieCache strategy branch):
-	// compact keeps the Go signed-envelope codec; jwt issues an HS256 JWT
-	// and jwe a dir/A256CBC-HS512 JWE via the cookies package.
+	// compact uses the upstream base64url+HMAC envelope via
+	// cookies.CreateCompactCookieCache (so Go values verify upstream and
+	// TS-issued values hit); jwt issues an HS256 JWT and jwe a
+	// dir/A256CBC-HS512 JWE via the cookies package. The legacy Go
+	// signed-envelope codec stays as a read fallback in compactCachePayload.
 	var value string
 	switch cookieCacheStrategy(opts) {
 	case cookies.StrategyJWT:
@@ -913,17 +927,22 @@ func newSessionDataCookie(secret string, session types.Session, user types.User,
 			return http.Cookie{}, err
 		}
 	default:
-		payload, err := json.Marshal(sessionCookieCachePayload{
-			Session:   session,
-			User:      user,
-			ExpiresAt: expiresAt,
-			Version:   version,
-		})
+		sessionMap, err := cacheStructMap(session)
 		if err != nil {
 			return http.Cookie{}, err
 		}
-		encodedPayload := base64.RawURLEncoding.EncodeToString(payload)
-		value, err = cookies.Sign(secret, encodedPayload)
+		userMap, err := cacheStructMap(user)
+		if err != nil {
+			return http.Cookie{}, err
+		}
+		filterCookieCacheMaps(sessionMap, userMap, fullOpts, opts)
+		sessionData := map[string]any{
+			"session":   sessionMap,
+			"user":      userMap,
+			"updatedAt": now.UnixMilli(),
+			"version":   version,
+		}
+		value, err = cookies.CreateCompactCookieCache(secret, sessionData, time.Until(expiresAt))
 		if err != nil {
 			return http.Cookie{}, err
 		}
@@ -1076,6 +1095,28 @@ func expiredDontRememberCookie(authOpts types.Options, headers CookieRequestHead
 	}
 }
 
+// expiredDontRememberCleanupCookie builds the request-aware expired
+// dont_remember cleanup emitted alongside the session_token cleanup on
+// EXPIRED/invalid/user-missing get-session failures (upstream
+// deleteSessionCookie clears it by default; session.ts:291,380 with
+// cookies/index.ts:506-542). Request-aware naming/attributes mirror the
+// issuance path via resolveDontRememberCookieConfigWithContext (owned by
+// session-c701.go; this session.go call site only consumes it).
+func expiredDontRememberCleanupCookie(ctx context.Context, opts types.Options, headers CookieRequestHeaders) http.Cookie {
+	cfg := resolveDontRememberCookieConfigWithContext(ctx, opts, headers)
+	return http.Cookie{
+		Name:     cfg.Name,
+		Value:    "",
+		Path:     cfg.Path,
+		Domain:   cfg.Domain,
+		HttpOnly: cfg.HTTPOnly,
+		SameSite: cfg.SameSite,
+		Secure:   cfg.Secure,
+		MaxAge:   -1,
+		Expires:  time.Unix(0, 0).UTC(),
+	}
+}
+
 // resolveDontRememberCookieConfig mirrors the session-cookie attribute
 // pipeline (secure resolution, cross-subdomain domain, default attributes,
 // per-cookie overrides) for the dont_remember marker name.
@@ -1207,16 +1248,43 @@ func cachedSessionFromRequest(cookieHeader string, secrets []string, token strin
 	return payload, true
 }
 
-// compactCachePayload decodes the compact outer envelope: signed value,
-// base64url JSON, then the typed payload. Signature verification comes
-// first; the typed unmarshal alone is not a shape check (it silently coerces
-// e.g. null `emailVerified` to `false`), so the decoded bytes are also
-// validated as raw maps against the shared cookie-cache contract
-// (upstream parseCookieCachePayload, cookies/cache.ts:20-39). A
+// compactCachePayload decodes the compact strategy with upstream interop:
+// the upstream base64url envelope (cookies/cache.go VerifyCompactCookieCache,
+// mirroring setCookieCache/decodeCookieCache compact branch) is tried first
+// so TS-issued values hit; the Go legacy signed-envelope codec stays as a
+// fallback so pre-migration cookies still read. Signature verification comes
+// first in both paths; the typed unmarshal alone is not a shape check (it
+// silently coerces e.g. null `emailVerified` to `false`), so the decoded
+// bytes are also validated as raw maps against the shared cookie-cache
+// contract (upstream parseCookieCachePayload, cookies/cache.ts:20-39). A
 // schema-invalid payload surfaces the shared sentinel — callers must treat
 // it as a miss (Logf-warn through the configured logger + fall through to
 // the database, never throw), exactly like the codec-level verdict.
 func compactCachePayload(value string, secrets []string) (*sessionCookieCachePayload, error) {
+	// Upstream compact first (TS-issued values hit; Go values verify upstream).
+	if sessionData, outerMs, verr := cookies.VerifyCompactCookieCache(secrets, value); verr == nil {
+		innerSession, _ := sessionData["session"].(map[string]any)
+		innerUser, _ := sessionData["user"].(map[string]any)
+		version, _ := sessionData["version"].(string)
+		data := cookies.SessionCacheData{
+			Session:   innerSession,
+			User:      innerUser,
+			Version:   version,
+			ExpiresAt: outerMs,
+		}
+		if typed, terr := typedCachePayload(data); terr == nil {
+			return typed, nil
+		} else if errors.Is(terr, cookies.ErrCachePayloadSchema) {
+			return nil, terr
+		}
+		// Conversion failure (non-schema) falls through to legacy attempt
+		// below so a corrupt-but-signed upstream value still misses cleanly.
+	} else if errors.Is(verr, cookies.ErrCachePayloadSchema) {
+		// Correctly-signed but schema-invalid upstream payload: miss with
+		// sentinel (warn at the session layer), never legacy fallback.
+		return nil, verr
+	}
+	// Legacy Go signed-envelope fallback.
 	raw, ok := cookies.VerifyAny(secrets, value)
 	if !ok {
 		return nil, errors.New("auth: invalid compact cache signature")
@@ -1292,12 +1360,13 @@ func typedCachePayload(data cookies.SessionCacheData) (*sessionCookieCachePayloa
 	}, nil
 }
 
-// isNullSessionError reports whether err is a missing/expired-session
-// failure that the get-session HTTP layer answers with the upstream 200 null
-// shape (session.ts:94-112,287-303): 401 FAILED_TO_GET_SESSION (no/invalid
-// token) and 400 SESSION_EXPIRED. Operational failures reuse the same code at
-// 500 via sessionInternalError and must NOT map to null; other codes
-// (USER_NOT_FOUND, METHOD_NOT_ALLOWED_*, ...) keep their error status.
+// isNullSessionError reports whether err is a missing/expired/user-missing
+// failure that the get-session HTTP layer answers with the upstream 200
+// literal null (session.ts:94-112,287-303, ctx.json(null)): 401
+// FAILED_TO_GET_SESSION (no/invalid token, plus user-missing which
+// findSession surfaces as null) and 400 SESSION_EXPIRED. Operational failures
+// reuse the same code at 500 via sessionInternalError and must NOT map to
+// null; other codes (METHOD_NOT_ALLOWED_*, ...) keep their error status.
 func isNullSessionError(err error) bool {
 	var statusErr huma.StatusError
 	if !errors.As(err, &statusErr) {
@@ -1336,9 +1405,10 @@ func isNullSessionError(err error) bool {
 //     below — StatusForCode must not launder them into 401s (and the 500
 //     variant never maps to null).
 //   - USER_NOT_FOUND resolves to 404 (majority throw-site status). Upstream
-//     findSession returns null when the user row is missing; this port
-//     surfaces an error instead, so the canonical 404 applies (previously
-//     401 here).
+//     findSession returns null when the user row is missing, so the
+//     get-session resolver maps user-missing to FAILED_TO_GET_SESSION (401)
+//     for the 200 literal-null path above; this 404 mapping remains for the
+//     non-get-session callers that surface USER_NOT_FOUND directly.
 //   - METHOD_NOT_ALLOWED_DEFER_SESSION_REQUIRED resolves to 405, matching
 //     the upstream throw status (session.ts:79-84).
 func sessionRouteError(code string) error {

@@ -160,7 +160,7 @@ func TestG5_ResetWithRevokePurgesSecondary(t *testing.T) {
 				}
 			}
 			for i, cookie := range []string{cookieA, cookieB} {
-				if sess := api.Get("/api/auth/get-session", "Cookie: "+cookie); sess.Code != 200 || !strings.Contains(sess.Body.String(), `"session":null`) {
+				if sess := api.Get("/api/auth/get-session", "Cookie: "+cookie); sess.Code != 200 || strings.TrimSpace(sess.Body.String()) != "null" {
 					t.Fatalf("session %d must be revoked (200 null), got %d: %s", i, sess.Code, sess.Body.String())
 				}
 			}

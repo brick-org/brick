@@ -2,7 +2,6 @@ package routes
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -25,17 +24,9 @@ func b14NullBody(t *testing.T, resp *httptest.ResponseRecorder) {
 	if resp.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
 	}
-	var body map[string]any
-	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode null body: %v (%s)", err, resp.Body.String())
-	}
-	session, hasSession := body["session"]
-	user, hasUser := body["user"]
-	if !hasSession || session != nil {
-		t.Fatalf("session must be null, got %v (%s)", session, resp.Body.String())
-	}
-	if !hasUser || user != nil {
-		t.Fatalf("user must be null, got %v (%s)", user, resp.Body.String())
+	// Upstream ctx.json(null): literal `null`, not {"session":null,"user":null}.
+	if got := strings.TrimSpace(resp.Body.String()); got != "null" {
+		t.Fatalf("body must be literal null, got %q", resp.Body.String())
 	}
 	if cc := resp.Header().Get("Cache-Control"); cc != "no-store" {
 		t.Fatalf("Cache-Control = %q, want no-store", cc)

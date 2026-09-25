@@ -505,7 +505,9 @@ func TestResolveGetSessionMapsErrors(t *testing.T) {
 		t.Fatalf("expired session: %d %q", status, detail)
 	}
 
-	// Session without a user row: 404 USER_NOT_FOUND.
+	// Session without a user row: upstream findSession returns null, so the
+	// resolver surfaces 401 FAILED_TO_GET_SESSION for the 200 literal-null
+	// HTTP path (not 404 USER_NOT_FOUND).
 	now := time.Now().UTC()
 	if _, err := db.Create(ctx, "session", map[string]any{
 		"id": "sess-orphan", "userId": "no-such-user", "token": "tok-orphan",
@@ -515,7 +517,7 @@ func TestResolveGetSessionMapsErrors(t *testing.T) {
 	}
 	_, err = resolveGetSession(ctx, opts, getSessionRequest{token: "tok-orphan", headers: CookieRequestHeaders{}})
 	status, detail = statusOf(t, err)
-	if status != http.StatusNotFound || !strings.Contains(detail, types.ErrUserNotFound) {
+	if status != http.StatusUnauthorized || !strings.Contains(detail, types.ErrFailedToGetSession) {
 		t.Fatalf("orphan session: %d %q", status, detail)
 	}
 }

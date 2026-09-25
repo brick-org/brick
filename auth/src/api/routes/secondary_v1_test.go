@@ -310,7 +310,7 @@ func TestSecondaryV1_RouteListRevokeSecondary(t *testing.T) {
 	if resp := api.Get("/api/auth/list-sessions", "Cookie: "+cookie); resp.Code != http.StatusUnauthorized {
 		t.Fatalf("list with revoked cookie: got %d, want 401: %s", resp.Code, resp.Body.String())
 	}
-	if resp := api.Get("/api/auth/get-session", "Cookie: "+cookie); resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), `"session":null`) {
+	if resp := api.Get("/api/auth/get-session", "Cookie: "+cookie); resp.Code != http.StatusOK || strings.TrimSpace(resp.Body.String()) != "null" {
 		t.Fatalf("revoked get-session: got %d, want 200 null: %s", resp.Code, resp.Body.String())
 	}
 	if store.has("tok-rl-1") {

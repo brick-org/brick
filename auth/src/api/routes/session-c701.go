@@ -724,10 +724,13 @@ func mintSessionDataValueWithContext(ctx context.Context, opts types.Options, se
 			return "", "", cookies.Attributes{}, err
 		}
 	} else {
-		// Compact uses the frozen secret-envelope codec; route callers
-		// pass the current secret (rotation reads accept older secrets).
-		// session/user were filtered for returned:false above, so the
-		// delegated frozen issuance carries a clean payload.
+		// Compact uses the upstream base64url+HMAC envelope via
+		// newSessionDataCookie (cookies.CreateCompactCookieCache, so Go values
+		// verify upstream and TS-issued values hit); route callers pass the
+		// current secret (rotation reads accept older secrets). Session/user
+		// were filtered for returned:false above, so the delegated issuance
+		// carries a clean payload. Legacy signed-envelope reads stay as a
+		// fallback in compactCachePayload.
 		single, err := newSessionDataCookie(opts.CurrentSecret(), session, user, opts, sessionOpts, now, dontRememberMe)
 		if err != nil {
 			return "", "", cookies.Attributes{}, err
