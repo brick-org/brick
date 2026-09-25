@@ -239,8 +239,6 @@ func CreateSessionCacheJWE(secret string, session, user map[string]any, version 
 		jose.A256CBC_HS512,
 		jose.Recipient{Algorithm: jose.DIRECT, Key: key},
 		(&jose.EncrypterOptions{}).
-			WithType("JWT").
-			WithContentType("JWT").
 			WithHeader(jose.HeaderKey("kid"), kid),
 	)
 	if err != nil {
