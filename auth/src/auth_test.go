@@ -1212,9 +1212,14 @@ func TestEmailPassword_RevokeSessionsOnPasswordResetDeletesExistingSessions(t *t
 	resetResp.Body.Close()
 
 	sessionResp := getSession(t, srv.URL, cookie)
+	var revokedBody map[string]any
+	decodeJSON(t, sessionResp, &revokedBody)
 	defer sessionResp.Body.Close()
-	if sessionResp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("expected revoked session to be unauthorized, got %d", sessionResp.StatusCode)
+	if sessionResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected revoked session to read 200 null, got %d", sessionResp.StatusCode)
+	}
+	if revokedBody["session"] != nil || revokedBody["user"] != nil {
+		t.Fatalf("expected revoked session to be null, got %v", revokedBody)
 	}
 }
 

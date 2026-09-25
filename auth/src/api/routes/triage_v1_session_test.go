@@ -99,8 +99,8 @@ func TestTriageV1_RevokeOwnSessionThenRevokeAll(t *testing.T) {
 	if revoke.Code != http.StatusOK || !strings.Contains(revoke.Body.String(), `"status":true`) {
 		t.Fatalf("revoke-session: %d %s", revoke.Code, revoke.Body.String())
 	}
-	if resp := api.Get("/api/auth/get-session", "Cookie: "+cookieA); resp.Code != http.StatusUnauthorized {
-		t.Fatalf("revoked get-session: got %d, want 401: %s", resp.Code, resp.Body.String())
+	if resp := api.Get("/api/auth/get-session", "Cookie: "+cookieA); resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), `"session":null`) {
+		t.Fatalf("revoked get-session: got %d, want 200 null: %s", resp.Code, resp.Body.String())
 	}
 	if tokens := triageListTokens(t, api, cookieB); len(tokens) != 1 || tokens[0] != "tok-tri-rev-2" {
 		t.Fatalf("expected only the survivor, got %v", tokens)
@@ -110,8 +110,8 @@ func TestTriageV1_RevokeOwnSessionThenRevokeAll(t *testing.T) {
 	if revokeAll.Code != http.StatusOK || !strings.Contains(revokeAll.Body.String(), `"status":true`) {
 		t.Fatalf("revoke-sessions: %d %s", revokeAll.Code, revokeAll.Body.String())
 	}
-	if resp := api.Get("/api/auth/get-session", "Cookie: "+cookieB); resp.Code != http.StatusUnauthorized {
-		t.Fatalf("post-revoke-all get-session: got %d, want 401: %s", resp.Code, resp.Body.String())
+	if resp := api.Get("/api/auth/get-session", "Cookie: "+cookieB); resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), `"session":null`) {
+		t.Fatalf("post-revoke-all get-session: got %d, want 200 null: %s", resp.Code, resp.Body.String())
 	}
 }
 

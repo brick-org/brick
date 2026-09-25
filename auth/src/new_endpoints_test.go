@@ -138,9 +138,14 @@ func TestRevokeSessions_RevokesAllIncludingCurrent(t *testing.T) {
 
 	for name, cookie := range map[string]string{"first": cookie1, "second": cookie2} {
 		sessionResp := getSession(t, srv.URL, cookie)
+		var nullBody map[string]any
+		decodeJSON(t, sessionResp, &nullBody)
 		sessionResp.Body.Close()
-		if sessionResp.StatusCode != http.StatusUnauthorized {
-			t.Fatalf("%s session: expected 401 after revoke-all, got %d", name, sessionResp.StatusCode)
+		if sessionResp.StatusCode != http.StatusOK {
+			t.Fatalf("%s session: expected 200 null after revoke-all, got %d", name, sessionResp.StatusCode)
+		}
+		if nullBody["session"] != nil || nullBody["user"] != nil {
+			t.Fatalf("%s session: expected null session/user after revoke-all, got %v", name, nullBody)
 		}
 	}
 
@@ -177,9 +182,14 @@ func TestRevokeOtherSessions_KeepsCurrent(t *testing.T) {
 		t.Fatalf("current session should survive, got %d", keptResp.StatusCode)
 	}
 	revokedResp := getSession(t, srv.URL, cookie2)
+	var revokedBody map[string]any
+	decodeJSON(t, revokedResp, &revokedBody)
 	revokedResp.Body.Close()
-	if revokedResp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("other session should be revoked, got %d", revokedResp.StatusCode)
+	if revokedResp.StatusCode != http.StatusOK {
+		t.Fatalf("other session: expected 200 null after revoke, got %d", revokedResp.StatusCode)
+	}
+	if revokedBody["session"] != nil || revokedBody["user"] != nil {
+		t.Fatalf("other session should be revoked (null), got %v", revokedBody)
 	}
 
 	unauthResp := postJSON(t, srv.URL+"/api/auth/revoke-other-sessions", "", `{}`)

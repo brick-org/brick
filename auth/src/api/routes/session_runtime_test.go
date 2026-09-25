@@ -212,13 +212,27 @@ func TestCookieCacheVersioning(t *testing.T) {
 		if _, ok := cachedSessionFromRequest(header, opts.AllSecrets(), "tok-func", rotated.Session); ok {
 			t.Fatal("changed func version must miss")
 		}
-		// A failing func fails closed to a miss, never a hit.
+		// A failing func is an operational failure: the get-session read 500s
+		// instead of failing closed to the authoritative database read
+		// (upstream session.ts:138-154, where the rejected version promise
+		// 500s via the endpoint catch-all). The frozen cache helper still
+		// reports a miss; resolveGetSession surfaces the 500 via
+		// cookieCacheVersionErr.
 		failing := opts
 		failing.Session.CookieCache.VersionFunc = func(types.Session, types.User) (string, error) {
 			return "", errors.New("boom")
 		}
 		if _, ok := cachedSessionFromRequest(header, opts.AllSecrets(), "tok-func", failing.Session); ok {
-			t.Fatal("failing func must miss")
+			t.Fatal("failing func must miss the frozen cache read")
+		}
+		_, err := resolveGetSession(ctx, failing, getSessionRequest{
+			token:        "tok-func",
+			cookieHeader: header,
+			headers:      CookieRequestHeaders{},
+		})
+		status, detail := statusOf(t, err)
+		if status != http.StatusInternalServerError || !strings.Contains(detail, types.ErrFailedToGetSession) {
+			t.Fatalf("failing func must 500, got %d %q", status, detail)
 		}
 	})
 }
