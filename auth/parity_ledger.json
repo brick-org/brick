@@ -530,6 +530,10 @@
         {
           "case": "should sign in with different email casing than sign-up",
           "goTest": "TestCredsV1_SignInCaseInsensitive"
+        },
+        {
+          "case": "should read the ip address and user agent from the headers",
+          "goTest": "TestIPUA_SignInStoresIPAndUserAgent"
         }
       ],
       "notes": "Warn logs, additionalFields, case-insensitivity covered; CSRF/origin/form-data legs excluded."
@@ -650,6 +654,10 @@
         {
           "case": "should have identical image key presence for real and synthetic user when image is omitted",
           "goTest": "TestCredsV1_SyntheticResponseParity"
+        },
+        {
+          "case": "should get the ipAddress and userAgent from headers",
+          "goTest": "TestIPUA_SignUpStoresIPAndUserAgent"
         }
       ],
       "notes": "Additional-fields create, synthetic parity, enumeration, URL-encoding covered by creds_v1_signup suite; CSRF/form-data/secondary-storage legs excluded."

@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/brick-org/brick/auth/src/crypto"
@@ -85,6 +88,9 @@ func persistedRowID(row map[string]any, fallback string) string {
 // Upstream TypeScript name: createSession.
 func createIssuedSession(ctx context.Context, opts types.Options, userID, token string, expiresAt, now time.Time) (types.Session, error) {
 	id, ok := mintModelID(opts, "session")
+	// Upstream stamps ipAddress/userAgent before store routing
+	// (db/internal-adapter.ts:498-518), so both legs below carry them.
+	ip, userAgent := sessionRequestMeta(ctx)
 	if opts.SecondaryStorage != nil && !opts.Session.StoreSessionInDatabase {
 		if !ok || id == "" {
 			id = crypto.GenerateID()
@@ -96,6 +102,8 @@ func createIssuedSession(ctx context.Context, opts types.Options, userID, token 
 			ExpiresAt: expiresAt,
 			CreatedAt: now,
 			UpdatedAt: now,
+			IPAddress: &ip,
+			UserAgent: &userAgent,
 		}, nil
 	}
 	if opts.DB == nil {
@@ -107,11 +115,95 @@ func createIssuedSession(ctx context.Context, opts types.Options, userID, token 
 		"expiresAt": expiresAt,
 		"createdAt": now,
 		"updatedAt": now,
+		"ipAddress": ip,
+		"userAgent": userAgent,
 	}
 	setRowID(row, id, ok)
 	created, err := opts.DB.Create(ctx, "session", row, nil)
 	if err != nil {
 		return types.Session{}, err
 	}
-	return rowToSession(created, opts), nil
+	sess := rowToSession(created, opts)
+	// rowToSession only sets the pointers for non-empty cells, but upstream
+	// returns the created object with the fields always present ("", never
+	// null). Fill from the resolved values written above so the return
+	// matches the row on both legs.
+	if sess.IPAddress == nil {
+		sess.IPAddress = &ip
+	}
+	if sess.UserAgent == nil {
+		sess.UserAgent = &userAgent
+	}
+	return sess, nil
+}
+
+// sessionRequestMeta resolves the client IP and user agent stamped onto a
+// freshly issued session, mirroring upstream createSession
+// (db/internal-adapter.ts:500-502):
+//
+//	ipAddress: headers ? getIP(headers, options) || "" : ""
+//	userAgent: headers?.get("user-agent") || ""
+//
+// The request is the middleware-reconstructed one carried on ctx
+// (StoredRequestFromStd, installed by the always-on api middleware),
+// falling back to the huma-rebuilt one (callbackRequest). Both are nil
+// outside a request (programmatic issuance), which resolves to "" for both
+// fields. Resolution order for the IP: X-Forwarded-For leftmost non-empty
+// hop, X-Real-IP, RemoteAddr host (port stripped, bare IPv6 tolerated),
+// then "". The user agent is the User-Agent header verbatim, then "".
+//
+// DOCUMENTED DEVIATION (for SCOPE.md): this intentionally does NOT replicate
+// the full upstream getIP proxy-chain semantics (trustedProxies CIDR walk,
+// ipAddressHeaders ordering, disableIpTracking, IPv6-subnet normalization,
+// dev/test localhost fallback) that api/RequestClientIP implements for rate
+// limiting. Session issuance stores the directly resolved client address.
+func sessionRequestMeta(ctx context.Context) (ip, userAgent string) {
+	req := StoredRequestFromStd(ctx)
+	if req == nil {
+		req = callbackRequest(ctx)
+	}
+	if req == nil {
+		return "", ""
+	}
+	return clientIPFromRequest(req), req.Header.Get("User-Agent")
+}
+
+// clientIPFromRequest resolves the direct client IP from req. A nil request
+// resolves to "".
+func clientIPFromRequest(req *http.Request) string {
+	if req == nil {
+		return ""
+	}
+	if hop := firstForwardedHop(req.Header.Get("X-Forwarded-For")); hop != "" {
+		return hop
+	}
+	if ip := strings.TrimSpace(req.Header.Get("X-Real-IP")); ip != "" {
+		return ip
+	}
+	return remoteAddrHost(req.RemoteAddr)
+}
+
+// firstForwardedHop returns the leftmost non-empty X-Forwarded-For hop,
+// trimmed. An empty header resolves to "".
+func firstForwardedHop(header string) string {
+	for _, hop := range strings.Split(header, ",") {
+		if hop = strings.TrimSpace(hop); hop != "" {
+			return hop
+		}
+	}
+	return ""
+}
+
+// remoteAddrHost strips a trailing :port from a RemoteAddr value, tolerating
+// bare IPv6 literals (with or without brackets) that carry no port. Empty
+// input resolves to "".
+func remoteAddrHost(remoteAddr string) string {
+	s := strings.TrimSpace(remoteAddr)
+	if s == "" {
+		return ""
+	}
+	if host, _, err := net.SplitHostPort(s); err == nil {
+		return host
+	}
+	return strings.Trim(s, "[]")
 }

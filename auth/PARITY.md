@@ -500,9 +500,9 @@ files are v1-excluded and removed from this table (previously 73 files).
 | `ba/api/routes/error.test.ts`                                     |     3 | partial        | AUTH-C7-04 |             2 | `error.go`                                                     |
 | `ba/api/routes/password.test.ts`                                  |    21 | partial        | AUTH-C7-02 |             13 | `password.go`, `password_extra.go`                             |
 | `ba/api/routes/session-api.test.ts`                               |    85 | partial        | AUTH-C7-01 |             7 | `session.go`, `session_extra.go` (+1)                          |
-| `ba/api/routes/sign-in.test.ts`                                   |    30 | partial        | AUTH-C7-02 |             3 | `sign_in.go`                                                   |
+| `ba/api/routes/sign-in.test.ts`                                   |    30 | partial        | AUTH-C7-02 |             4 | `sign_in.go`                                                   |
 | `ba/api/routes/sign-out.test.ts`                                  |    10 | partial        | AUTH-C7-01 |             2 | `sign_out.go`                                                  |
-| `ba/api/routes/sign-up.test.ts`                                   |    40 | partial        | AUTH-C7-02 |             8 | `sign_up.go`                                                   |
+| `ba/api/routes/sign-up.test.ts`                                   |    40 | partial        | AUTH-C7-02 |             9 | `sign_up.go`                                                   |
 | `ba/api/routes/update-user.test.ts`                               |    35 | partial        | AUTH-C7-02 |             15 | `account.go`                                                   |
 | `ba/cookies/cookies.test.ts`                                      |   118 | partial        | AUTH-C7-01 |            27 | `cookies.go`, `attributes.go` (+1)                             |
 | `ba/crypto/password.test.ts`                                      |    14 | partial        | AUTH-C7-02 |             8 | `password.go`                                                  |

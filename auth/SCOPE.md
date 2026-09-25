@@ -99,3 +99,8 @@ owners are deferred as high-churn, behavior-neutral (see `index.go`).
 - Huma schema-validation failures are 422 vs upstream 400 (framework-wide
   convention, not per-route drift).
 - Chunked multi-cookie writes: read path only (safe degradation).
+
+- Session `ipAddress`/`userAgent` are directly resolved (XFF leftmost →
+  X-Real-IP → RemoteAddr host → `""`; UA verbatim → `""`). Full upstream
+  `getIP` proxy-chain semantics are intentionally not replicated; session
+  issuance stores the directly resolved address.
