@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/mail"
 	"net/url"
 	"strings"
 	"time"
@@ -35,12 +36,57 @@ type signInInput struct {
 
 type signInOutput struct {
 	SetCookie []http.Cookie `header:"Set-Cookie"`
-	Body      struct {
-		Token    string     `json:"token"`
-		Redirect bool       `json:"redirect"`
-		URL      *string    `json:"url,omitempty"`
+	// Location echoes a present, trusted callbackURL (upstream
+	// sign-in.ts:625-627). Empty (absent or untrusted) emits no header:
+	// huma skips empty string headers.
+	Location string `header:"Location"`
+	Body     struct {
+		Token    string   `json:"token"`
+		Redirect bool     `json:"redirect"`
+		URL      *string  `json:"url,omitempty"`
 		User     flatUser `json:"user"`
 	}
+}
+
+// isValidSignInEmail mirrors the upstream email-format gate (z.email(),
+// sign-in.ts:522-525): a single @, a non-empty dotless-free local part,
+// and a multi-label domain. Rejections answer 400 INVALID_EMAIL before any
+// user lookup, so the format gate never leaks existence.
+func isValidSignInEmail(email string) bool {
+	if email == "" || len(email) > 254 {
+		return false
+	}
+	if strings.ContainsAny(email, " \t\r\n") {
+		return false
+	}
+	parts := strings.Split(email, "@")
+	if len(parts) != 2 {
+		return false
+	}
+	local, domain := parts[0], parts[1]
+	if local == "" || domain == "" {
+		return false
+	}
+	if strings.HasPrefix(local, ".") || strings.HasSuffix(local, ".") || strings.Contains(local, "..") {
+		return false
+	}
+	labels := strings.Split(domain, ".")
+	if len(labels) < 2 {
+		return false
+	}
+	for _, label := range labels {
+		if label == "" || len(label) > 63 {
+			return false
+		}
+		if strings.HasPrefix(label, "-") || strings.HasSuffix(label, "-") {
+			return false
+		}
+	}
+	parsed, err := mail.ParseAddress(email)
+	if err != nil || parsed.Address != email {
+		return false
+	}
+	return true
 }
 
 // SignInEmail registers POST /sign-in/email.
@@ -54,6 +100,13 @@ func SignInEmail(api huma.API, basePath string, opts types.Options) {
 	}, opts, func(ctx context.Context, input *signInInput) (*signInOutput, error) {
 		if !opts.EmailAndPassword.Enabled {
 			return nil, huma.Error400BadRequest("email/password sign-in is not enabled")
+		}
+
+		// Upstream sign-in.ts:522-525 rejects a malformed email format with
+		// 400 INVALID_EMAIL before any user lookup, so malformed input
+		// never reaches the credential checks and cannot leak existence.
+		if !isValidSignInEmail(input.Body.Email) {
+			return nil, huma.NewError(types.StatusForCode(types.ErrInvalidEmail), types.ErrInvalidEmail)
 		}
 
 		email := strings.ToLower(input.Body.Email)
@@ -121,7 +174,9 @@ func SignInEmail(api huma.API, basePath string, opts types.Options) {
 
 		// ValidateUserInfo sign-in seam (upstream internalAdapter sign-in path,
 		// method email-password, action sign-in). Programmatic flow: rejection
-		// surfaces its 403 code verbatim.
+		// surfaces its 403 code verbatim. The upstream email leg
+		// (sign-in.ts:505-637) has no equivalent call — this Go-only
+		// fail-closed extension is kept intentionally.
 		if err := assertValidUserInfoLocal(ctx, opts, map[string]any{
 			"email": email, "id": userID,
 		}, types.ValidateUserInfoSource{
@@ -161,7 +216,10 @@ func SignInEmail(api huma.API, basePath string, opts types.Options) {
 		user := rowToUser(userRow, opts)
 		// Mirror the pair into secondary storage when configured (upstream
 		// createSession mirroring, internal-adapter.ts:520-564). A failing
-		// mirror fails issuance loudly, like the database create above.
+		// mirror fails issuance loudly, like the database create above. The
+		// upstream email leg has no equivalent failure mode here — this
+		// fail-closed 500 (canonical status for FAILED_TO_CREATE_SESSION)
+		// is kept intentionally.
 		if err := writeSecondarySession(opts, session, user); err != nil {
 			return nil, huma.NewError(types.StatusForCode(types.ErrFailedToCreateSession), types.ErrFailedToCreateSession)
 		}
@@ -173,10 +231,21 @@ func SignInEmail(api huma.API, basePath string, opts types.Options) {
 		out.Body.Token = token
 		// callbackURL drives the redirect/url pair (upstream
 		// sign-in.ts:625-637): redirect is set and url echoes the
-		// callbackURL only when one was supplied.
+		// callbackURL only when one was supplied. A present, trusted
+		// callbackURL additionally sets the Location response header
+		// (upstream sign-in.ts:625-627); an untrusted absolute URL keeps
+		// the body pair but emits no header (no open redirect). The stored
+		// request (when present) is authoritative for the trust decision.
 		if input.Body.CallbackURL != nil && *input.Body.CallbackURL != "" {
 			out.Body.Redirect = true
 			out.Body.URL = input.Body.CallbackURL
+			reqForTrust := StoredRequestFromStd(ctx)
+			if reqForTrust == nil {
+				reqForTrust = callbackRequest(ctx)
+			}
+			if types.IsTrustedRedirect(*input.Body.CallbackURL, opts, reqForTrust) {
+				out.Location = *input.Body.CallbackURL
+			}
 		} else {
 			out.Body.Redirect = false
 		}
