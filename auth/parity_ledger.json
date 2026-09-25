@@ -1182,7 +1182,7 @@
         },
         {
           "case": "should use the configured logger for an invalid signed compact cookie",
-          "goTest": "TestSchemaV1_CompactRejectsNullEmailVerified (codec) + TestSchemaV1_InvalidCacheWarnsAndMisses (route warn+miss); JWT/JWE analogs TestSchemaV1_JWT/JWERejectsNullEmailVerified"
+          "goTest": "TestSchemaV1_CompactRejectsNullEmailVerified (codec) + TestSchemaV1_InvalidCacheWarnsAndMisses (route warn+miss) + TestSchemaV1_JWTRejectsNullEmailVerified + TestSchemaV1_JWERejectsNullEmailVerified"
         }
       ],
       "notes": "Full triage done (118 ledger blocks = 97 it-headings + 21 describe containers; 115 runtime-expanded its): 72 cited (34 recorded + 38 to pre-existing suites), 7 ported (triage_v1_cookies), 17 excluded (chunk writes x5, JWKS x4, route-legs x4, social x2, JS-interop x2), 1 FEATURE-GAP open (G1 post-signature payload-schema validation)."

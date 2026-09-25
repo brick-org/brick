@@ -266,9 +266,6 @@ func signViaCustomSigner(ctx context.Context, opts types.Options, signer any, se
 	return token, nil
 }
 
-// verifyViaCustomSigner verifies a session_data value through the JWT
-// plugin's custom signer, converting the verified payload into the shared
-// cache shape. Any failure is a miss (authoritative fallback).
 // warnCacheSchemaIssue routes schema-invalid cache payloads to the
 // configured logger (upstream parseCookieCachePayload warn in
 // cookies/cache.ts:32-35). All such payloads miss regardless — the warn is
