@@ -3,6 +3,7 @@
 Pinned upstream: Better Auth **v1.7.5** at `vendor/better-auth` commit `5468e6bfcdff799848537cf5ad06ebab15aad9dd`.
 Scope: `SCOPE.md` (email/password + session; no plugins/providers/social/oauth).
 Method: 20 read-only review parts (V3-01..V3-20), TS vs Go at pin with file:line refs.
+Fix round F1-F11 (this section): 11 fixers merged, one commit each; ledger 218 -> 226.
 V2 (`PARITY_V2.md`) untouched; this file is the v1-release audit.
 
 ## Stats
@@ -119,6 +120,23 @@ Extra method: POST `/verify-email` (Go alias, no upstream counterpart).
 All `src/plugins/*` (27), `oauth-provider`, `social-providers` + `oauth2`
 flows, 17 OAuth helper paths, client/framework integrations, adapters beyond
 Bun/SQLite/PG, custom JWKS signer, `integrations/*`, `test-utils/*` harness.
+
+## Fix round results (F1-F11, merged)
+
+- F1 gap 1 CLOSED (non-revoke user). F2 gaps 2/12/13 CLOSED (fresh-null +
+  7 pin realigns, updateTo reuse, fan-out log-only). F3 gap 11 CLOSED
+  (JWE header exact). F4 gaps 4/7 CLOSED (flat extras, live-only revoke).
+  F5 gaps 3/5/6 CLOSED (literal null, compact interop, user-missing) +
+  7 pin realigns + dont_remember expiry. F6 gap 8 core CLOSED (body +
+  requireHeaders; provider flow stays excluded). F7a/b gap 9 CLOSED
+  (403 trust, F2-leg realign) + sign-up minors (disabled code, synthetic
+  scope, mint-before-send). F8 gap 10 CLOSED (stateless defu + baseURL
+  warn). F10 gap 14 helpers CLOSED (reserve, typed duplicate, consume
+  fallback helper; route call-site swap left for routes owner). F11 gap
+  15 CLOSED (GetDate, TimeString, IsAPIError; keccak/clone excluded).
+  Full gate 13/13 green. Remaining: F10 route call-site swap
+  (password.go, account.go, email-verification.go ->
+  db.ConsumeOneWithFallback), B8 docs/renames.
 
 ## Proposed fix batches (v1 release)
 

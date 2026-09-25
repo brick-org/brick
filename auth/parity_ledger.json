@@ -280,6 +280,14 @@
         {
           "case": "already-verified answers {status:true,user:null} (GET+POST, redirect unchanged)",
           "goTest": "TestB3_AlreadyVerified* (process/post/get/redirect/fresh)"
+        },
+        {
+          "case": "fresh plain verify answers {status:true,user:null} (GET+POST+process)",
+          "goTest": "TestF2_FreshPlainVerifyReturnsNull + root parity pins"
+        },
+        {
+          "case": "updateTo reuses pre-update activeSession token; fan-out post-commit log-only",
+          "goTest": "TestF2_UpdateToReusesPreUpdateToken + FanOutFailureStillSucceeds"
         }
       ],
       "notes": "Auto-sign-in (+session reuse), expiresIn, hooks, encoding (incl. change-email resends), case-insensitivity covered; already-verified null-shape held by existing pin; body-consumption JS semantics excluded."
@@ -677,6 +685,14 @@
         {
           "case": "updateSession unknown-only bodies 400 (parseSessionInput parity)",
           "goTest": "TestB2_UpdateSessionUnknownOnly400 + DeclaredAdditionalPasses"
+        },
+        {
+          "case": "get-session 200 literal null; user-missing null; compact interop both directions",
+          "goTest": "TestF5_* (null literal, user-missing, compact read/write)"
+        },
+        {
+          "case": "update-session extras flat top-level; revoke-other live-only, no cookies",
+          "goTest": "TestF4_UpdateSessionFlatTheme + RevokeOtherLiveOnlyNoCookies"
         }
       ],
       "notes": "Full 85-case triage done: 38 cited to pre-existing suites, 16 ported (triage_v1_session), 10 excluded (JWKS x5, plugin authority, returnHeaders, plugin-endpoint freshness, client-concurrency x2), 3 fail-closed deviations (null-shape), 1 accepted divergence (unknown-only update passes through). updateAge:0 closed via *int (F9); VersionFunc-500 held by existing fail-closed pin."
@@ -762,6 +778,10 @@
         {
           "case": "should accept form-urlencoded content type",
           "goTest": "TestG2_SignInFormURLEncoded + FormValidationParity"
+        },
+        {
+          "case": "untrusted callbackURL 403 on sign-in/sign-up (global middleware parity)",
+          "goTest": "TestF7A_SignInUntrustedCallback403 + SignUpUntrustedCallback403"
         }
       ],
       "notes": "Cookie header, resend on/off, format gate, Location header, lowercase storage covered; social-callback legs excluded. Origin/CSRF enforcement now wired (F10); TestOriginMiddleware_NoCookie* realigned to upstream validateFormCsrf."
@@ -795,6 +815,10 @@
         {
           "case": "should clear local session cookie when reading the session fails",
           "goTest": "TestCredsV1_SignOutClearsCookiesOnUnreadableSession"
+        },
+        {
+          "case": "sign-out requireHeaders 401 + optional body parsed (provider excluded)",
+          "goTest": "TestF6_SignOut*"
         }
       ],
       "notes": "Core sign-out legs covered; provider-logout URL legs v1-excluded (no social providers)."
@@ -1088,6 +1112,14 @@
         {
           "case": "delete-user invalid/wrong-owner token 404 (callback parity on POST path)",
           "goTest": "TestC5_DeleteUserInvalidTokenNotFound + WrongOwnerBurnsToken"
+        },
+        {
+          "case": "change-password non-revoke returns {token:null,user} (status compat kept)",
+          "goTest": "TestF1_ChangePasswordNonRevokeReturnsNullTokenAndUser"
+        },
+        {
+          "case": "change-email/delete-user/reset-callback untrusted callbackURL 403",
+          "goTest": "TestF7b_* (3 legs)"
         }
       ],
       "notes": "Change-password rotation (+replacement Set-Cookie), delete-disabled, cache-bypass, secondary purge on all delete paths covered; concurrent-delete race not deterministically pinnable on the mem adapter (DBs serialize)."
