@@ -1,15 +1,10 @@
 package routes
 
 // B5: HTTP-level concurrent same-token reset pin.
-//
 // Upstream: password.test.ts:217-266 @5468e6bf — Promise.all, exactly 1x200
 // + rest 400, winner signs in.
-//
 // Fires N=8 concurrent POST /reset-password with the same single-use token
 // over real HTTP (httptest.Server over the huma adapter, like upstream
-// fetch), asserting exactly 1x200 and 7x400 with the winner's new password
-// signing in. Each racer uses a distinct newPassword so the winner is
-// identifiable.
 
 import (
 	"fmt"
@@ -46,9 +41,6 @@ func b5PostJSON(url, body string) (int, string, error) {
 }
 
 // TestResetPasswordRace_ConcurrentSameTokenResetPin fires 8 concurrent POST
-// /reset-password with the same token: exactly one must win (200) and the
-// other seven must be rejected (400 INVALID_TOKEN); the winner's password
-// must then sign in.
 func TestResetPasswordRace_ConcurrentSameTokenResetPin(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)

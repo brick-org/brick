@@ -60,9 +60,6 @@ func setCookiesOf(t *testing.T, resp *httptest.ResponseRecorder) map[string]stri
 }
 
 // TestSignUpRememberMe pins upstream createSession/session-cookie parity
-// (internal-adapter.ts:509, cookies/index.ts:388-395): rememberMe=false
-// shortens the session to 1 day and mints the signed dont_remember marker;
-// the default keeps the full session lifetime with no marker.
 func TestSignUpRememberMe(t *testing.T) {
 	boot := func(t *testing.T) (humatest.TestAPI, *parityMemAdapter, types.Options) {
 		db := newParityMemAdapter()
@@ -112,8 +109,6 @@ func TestSignUpRememberMe(t *testing.T) {
 		if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil || body.Token == nil {
 			t.Fatalf("sign-up must return a session token: %s (%v)", resp.Body.String(), err)
 		}
-		// The helper configures a 1-hour session lifetime: a persistent
-		// sign-up must keep it (not the 1-day non-persistent window).
 		if got := sessionExpiryOf(t, context.Background(), db, *body.Token); got.Before(before.Add(30*time.Minute)) || got.After(before.Add(2*time.Hour)) {
 			t.Fatalf("persistent session must keep the configured lifetime, got %v", got)
 		}
@@ -123,8 +118,6 @@ func TestSignUpRememberMe(t *testing.T) {
 	})
 }
 
-// TestSignInRememberMeAndCallback pins the sign-in creation parity:
-// rememberMe=false shortens + mints, and callbackURL drives the
 // redirect/url response pair (sign-in.ts:603-637).
 func TestSignInRememberMeAndCallback(t *testing.T) {
 	db := newParityMemAdapter()
@@ -180,10 +173,7 @@ func TestSignInRememberMeAndCallback(t *testing.T) {
 	}
 }
 
-// TestCreationMirrorsSecondaryStorage pins the Wave 1 carry-over: sign-up and
 // sign-in issuance mirror the pair into secondary storage (upstream
-// createSession mirroring, internal-adapter.ts:520-564), so a secondary-only
-// read serves the fresh session without a database fallback.
 func TestCreationMirrorsSecondaryStorage(t *testing.T) {
 	ctx := context.Background()
 	db := newParityMemAdapter()
@@ -239,9 +229,6 @@ func mustFindUserID(t *testing.T, ctx context.Context, db *parityMemAdapter, ema
 }
 
 // TestSignOutSecondaryAware pins secondary-aware sign-out (upstream
-// deleteSession across both stores, internal-adapter.ts:849-913): the token
-// leaves secondary storage, and preserve mode ends (not deletes) the
-// database row while still clearing the marker cookies.
 func TestSignOutSecondaryAware(t *testing.T) {
 	ctx := context.Background()
 
@@ -288,8 +275,6 @@ func TestSignOutSecondaryAware(t *testing.T) {
 }
 
 // TestExpiredRowDeletion pins upstream expiry cleanup (session.ts:297-301):
-// a non-deferred read deletes the expired row, while a deferred GET keeps
-// the store untouched.
 func TestExpiredRowDeletion(t *testing.T) {
 	ctx := context.Background()
 
@@ -319,7 +304,6 @@ func TestExpiredRowDeletion(t *testing.T) {
 }
 
 // TestGetSessionNoStore pins the upstream no-store contract
-// (session.ts:72-73) on the get-session response.
 func TestGetSessionNoStore(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := sessionTestOptions(db)
@@ -339,8 +323,6 @@ func TestGetSessionNoStore(t *testing.T) {
 }
 
 // TestListSessionsFreshness pins the upstream fresh-session gate on
-// list-sessions (freshSessionMiddleware, session.ts:598-616): stale sessions
-// are rejected with SESSION_NOT_FRESH, and FreshAge=0 disables the check.
 func TestListSessionsFreshness(t *testing.T) {
 	seedStale := func(t *testing.T, db *parityMemAdapter, email, token string) {
 		t.Helper()
@@ -388,11 +370,7 @@ func TestListSessionsFreshness(t *testing.T) {
 	})
 }
 
-// TestUpdateSessionFullSchema pins the FullSchema migration for update fields
 // (upstream parseSessionInput semantics): validators/transforms execute,
-// input:false rejects truthy values with FIELD_NOT_ALLOWED, unknown fields
-// are dropped (unknown-only bodies 400), and snake spellings normalize to
-// logical names.
 func TestUpdateSessionFullSchema(t *testing.T) {
 	ctx := context.Background()
 
@@ -453,9 +431,6 @@ func TestUpdateSessionFullSchema(t *testing.T) {
 		if stringField(row, "nick") != "BOB" {
 			t.Fatalf("transformed nick not stored: %+v", row)
 		}
-		// Upstream parseInputData drops unknown keys: only the declared
-		// field reaches the store; the fake adapter normalizes physical
-		// spellings on write, so check both spellings for absence.
 		if stringField(row, "brand_new_field", "brandNewField") == "kept" {
 			t.Fatalf("unknown field must be dropped (upstream): %+v", row)
 		}
@@ -507,8 +482,6 @@ func TestUpdateSessionFullSchema(t *testing.T) {
 }
 
 // TestRowToSessionFullSchema pins the output-side migration: option-declared
-// additional fields surface on reads even with no plugin schema (the legacy
-// plugin-only allow-list dropped them), while returned:false stays stripped.
 func TestRowToSessionFullSchema(t *testing.T) {
 	opts := parityTestOptions(newParityMemAdapter())
 	opts.Session.Model.AdditionalFields = map[string]types.FieldAttribute{
@@ -532,8 +505,6 @@ func TestRowToSessionFullSchema(t *testing.T) {
 }
 
 // TestStrategyCachesRoundTrip pins JWT/JWE cookie-cache issuance and reads
-// through the route layer: a minted cache serves the session, rotation misses
-// back to the database, and foreign secrets never verify.
 func TestStrategyCachesRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	for _, strategy := range []types.SessionCookieCacheStrategy{
@@ -551,7 +522,6 @@ func TestStrategyCachesRoundTrip(t *testing.T) {
 		}
 		session, user := rowToSession(sessionRow, opts), rowToUser(userRow, opts)
 		now := time.Now().UTC()
-		// Issuance must succeed for both strategies (previously fail-closed).
 		issued, err := newSessionCookies(opts, CookieRequestHeaders{}, "tok-"+string(strategy), session, user, opts.Session, now)
 		if err != nil {
 			t.Fatalf("%s: issuance: %v", strategy, err)
@@ -567,11 +537,9 @@ func TestStrategyCachesRoundTrip(t *testing.T) {
 		if cached.Session.Token != "tok-"+string(strategy) {
 			t.Fatalf("%s: wrong session: %+v", strategy, cached.Session)
 		}
-		// Foreign secrets never verify: miss, not trust.
 		if _, ok := cachedSessionFromRequest(header, []string{"foreign-secret"}, "tok-"+string(strategy), opts.Session); ok {
 			t.Fatalf("%s: foreign secret must miss", strategy)
 		}
-		// Version rotation invalidates.
 		rotated := opts.Session
 		rotated.CookieCache.Version = "2"
 		if _, ok := cachedSessionFromRequest(header, opts.AllSecrets(), "tok-"+string(strategy), rotated); ok {
@@ -581,8 +549,6 @@ func TestStrategyCachesRoundTrip(t *testing.T) {
 }
 
 // TestRefreshDefaults pins the upstream session-config defaults
-// (create-context.ts:308-350): 7-day lifetime, 24h update age, and a 20%
-// cookie-cache refresh threshold.
 func TestRefreshDefaults(t *testing.T) {
 	opts := parityTestOptions(newParityMemAdapter())
 	if got := opts.Session.ExpiresInDuration(); got != 7*24*time.Hour {

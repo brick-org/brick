@@ -5,7 +5,6 @@ package routes
 //     explicitly-set-but-empty (&DefaultErrorPageOptions{}) renders.
 //   - B7: errorURL already carrying error params preserves them verbatim
 //     (raw append like upstream appendQueryParams) instead of collapsing
-//     duplicates via q.Set.
 
 import (
 	"net/http"
@@ -18,7 +17,6 @@ import (
 func TestErrorPageBounce_NilBouncesEmptyRenders(t *testing.T) {
 	t.Setenv("NODE_ENV", "production")
 
-	// Nil (unset) bounces to / with safe params.
 	apiNil := newErrorTestAPI(t, types.Options{})
 	respNil := apiNil.Get("/api/auth/error?error=access_denied")
 	if respNil.Code != http.StatusFound {
@@ -28,8 +26,6 @@ func TestErrorPageBounce_NilBouncesEmptyRenders(t *testing.T) {
 		t.Fatalf("nil location = %q, want bounce to /", loc)
 	}
 
-	// Explicitly-set-but-empty renders (upstream !customizeDefaultErrorPage
-	// is false for {} — only nil/undefined bounces).
 	emptyOpts := types.Options{}
 	emptyOpts.OnAPIError.CustomizeDefaultErrorPage = &types.DefaultErrorPageOptions{}
 	apiEmpty := newErrorTestAPI(t, emptyOpts)
@@ -51,8 +47,6 @@ func TestErrorPageBounce_DupKeyErrorURLPreservedVerbatim(t *testing.T) {
 		t.Fatalf("status = %d, want 302", resp.Code)
 	}
 	loc := resp.Header().Get("Location")
-	// Upstream appendQueryParams concatenates raw query text: existing
-	// duplicates survive verbatim in order, new params appended.
 	if !strings.Contains(loc, "error=old1&error=old2") {
 		t.Fatalf("dup error params not preserved verbatim: %q", loc)
 	}
@@ -62,7 +56,6 @@ func TestErrorPageBounce_DupKeyErrorURLPreservedVerbatim(t *testing.T) {
 	if !strings.Contains(loc, "foo=bar") {
 		t.Fatalf("existing foo param missing: %q", loc)
 	}
-	// Both old duplicates plus the new one must be present (3 error keys).
 	if n := strings.Count(loc, "error="); n < 3 {
 		t.Fatalf("want >=3 error= occurrences (2 old + 1 new), got %d in %q", n, loc)
 	}

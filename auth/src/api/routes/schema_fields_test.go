@@ -46,7 +46,6 @@ func TestParseInputData_CreateAppliesDefaultsAndRequires(t *testing.T) {
 	} else if !strings.Contains(err.Error(), "name") {
 		t.Fatalf("missing-field error must name the field: %v", err)
 	}
-	// Update never enforces required/defaults.
 	got, err = ParseInputData(map[string]any{"email": "e"}, fields, "update")
 	if err != nil {
 		t.Fatalf("update must succeed: %v", err)
@@ -61,7 +60,6 @@ func TestParseInputData_InputFalse(t *testing.T) {
 		"emailVerified": {Type: types.FieldTypeBoolean, Input: boolPtr(false)},
 		"role":          {Type: types.FieldTypeString, Input: boolPtr(false), DefaultValue: "user"},
 	}
-	// Falsy values for input:false are dropped silently (upstream behavior).
 	got, err := ParseInputData(map[string]any{"emailVerified": false}, fields, "create")
 	if err != nil {
 		t.Fatalf("falsy input:false must be dropped: %v", err)
@@ -69,11 +67,9 @@ func TestParseInputData_InputFalse(t *testing.T) {
 	if _, ok := got["emailVerified"]; ok {
 		t.Fatalf("input:false field must be dropped: %v", got)
 	}
-	// Default applies on create for input:false with a default.
 	if got["role"] != "user" {
 		t.Fatalf("input:false default must apply on create: %v", got)
 	}
-	// Truthy values for input:false are rejected.
 	if _, err := ParseInputData(map[string]any{"emailVerified": true}, fields, "update"); err == nil {
 		t.Fatal("truthy input:false must be rejected")
 	}
@@ -113,7 +109,6 @@ func TestParseInputData_ValidatorAndTransform(t *testing.T) {
 	if _, err := ParseInputData(map[string]any{"age": 1, "email": "a", "upper": "z"}, fields, "create"); err == nil {
 		t.Fatal("transform error must abort")
 	}
-	// Unknown keys are ignored (upstream iterates schema fields).
 	got, err = ParseInputData(map[string]any{"age": 1, "email": "a", "unknown": 1}, fields, "create")
 	if err != nil {
 		t.Fatalf("unknown keys must be ignored: %v", err)
@@ -146,8 +141,6 @@ func TestFilterOutputFields_DropsReturnedFalseOnly(t *testing.T) {
 	if _, ok := got["code"]; ok {
 		t.Fatal("returned:false must be stripped")
 	}
-	// input:false alone does not strip output; unknown keys pass through
-	// untouched (upstream keeps everything except returned:false).
 	for _, k := range []string{"token", "secret", "role", "undeclared"} {
 		if _, ok := got[k]; !ok {
 			t.Fatalf("key %q must survive output filtering", k)
@@ -182,11 +175,9 @@ func TestExtractAdditionalFieldsFull_SupersetOfLegacy(t *testing.T) {
 
 func TestFilterSessionUpdateFieldsFull_SafeMigration(t *testing.T) {
 	fields := testSessionFullFields()
-	// Known fields get full-schema semantics: input:false rejected when truthy.
 	if _, err := FilterSessionUpdateFieldsFull(map[string]any{"secret": "x"}, fields); err == nil {
 		t.Fatal("truthy input:false must be rejected under the full schema")
 	}
-	// Falsy input:false dropped.
 	got, err := FilterSessionUpdateFieldsFull(map[string]any{"secret": ""}, fields)
 	if err != nil {
 		t.Fatalf("falsy input:false must be dropped: %v", err)
@@ -194,9 +185,6 @@ func TestFilterSessionUpdateFieldsFull_SafeMigration(t *testing.T) {
 	if _, ok := got["secret"]; ok {
 		t.Fatalf("input:false must be dropped: %v", got)
 	}
-	// Undeclared fields are dropped per upstream parseInputData (unknown
-	// keys never copied); known fields still pass (unknown-only bodies 400
-	// at the route layer with "No fields to update").
 	got, err = FilterSessionUpdateFieldsFull(map[string]any{"brand_new_field": "v", "role": "r"}, fields)
 	if err != nil {
 		t.Fatalf("filter must succeed: %v", err)
@@ -207,7 +195,6 @@ func TestFilterSessionUpdateFieldsFull_SafeMigration(t *testing.T) {
 	if got["role"] != "r" {
 		t.Fatalf("known fields must pass: %v", got)
 	}
-	// Core columns are never writable.
 	got, err = FilterSessionUpdateFieldsFull(map[string]any{"token": "x", "userId": "u"}, fields)
 	if err != nil {
 		t.Fatalf("core-only body must succeed: %v", err)
@@ -215,7 +202,6 @@ func TestFilterSessionUpdateFieldsFull_SafeMigration(t *testing.T) {
 	if len(got) != 0 {
 		t.Fatalf("core columns must be dropped: %v", got)
 	}
-	// Physical/snake spellings of known non-core fields resolve to logical names.
 	snakeFields := map[string]types.FieldAttribute{
 		"displayName": {Type: types.FieldTypeString, Required: boolPtr(false)},
 	}

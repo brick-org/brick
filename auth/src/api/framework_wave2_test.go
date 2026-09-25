@@ -1,18 +1,6 @@
 package api
 
-// Wave 2 Agent C (framework context and options) router tests.
-//
-// Pins upstream behavior from the pinned Better Auth v1.7.5 source:
-//   - Named plugin endpoints register via CollectPluginEndpoints
-//     (core/src/types/plugin.ts endpoints map form).
-//   - TS route hooks run around handlers with header apply
-//     (better-auth/src/api/dispatch.ts runBeforeHooks/runAfterHooks,
-//     mergeResponseHeaders: set-cookie appends, others replace).
-//   - Endpoint-conflict detection (api/index.ts checkEndpointConflicts,
-//     check-endpoint-conflicts.test.ts).
-//   - Trailing-slash variant registration (api/index.ts skipTrailingSlashes).
-//   - Schema-check gate ordering (router onRequest checkSchema).
-//   - Exact response-header merge ordering on the wire.
+// framework_wave2_test.go: upstream conformance (Better Auth v1.7.5).
 
 import (
 	"context"
@@ -27,7 +15,6 @@ import (
 )
 
 // wave2StubPlugin implements types.Plugin plus the optional named-endpoint
-// and TS-hook providers.
 type wave2StubPlugin struct {
 	id        string
 	endpoints []types.Endpoint
@@ -156,8 +143,6 @@ func TestWave2TSBeforeHookAbortsRoute(t *testing.T) {
 	}
 	opts := wave2BaseOptions()
 	opts.Plugins = []types.Plugin{plugin}
-	// A legacy global before hook proves the TS abort short-circuits before
-	// the handler: it runs first and must still fire.
 	opts.Hooks.Before = func(ctx huma.Context) (huma.Context, error) {
 		ranHandler = true
 		return ctx, nil
@@ -228,7 +213,6 @@ func TestWave2EndpointConflicts(t *testing.T) {
 			endpoints: []types.Endpoint{{Method: method, Path: path, OperationID: id + "-ep"}},
 		}
 	}
-	// Same path + same method conflicts.
 	conflicts := FindEndpointConflicts("/api/auth", []types.Plugin{
 		mk("p1", "/shared", http.MethodGet),
 		mk("p2", "/shared", http.MethodGet),
@@ -242,14 +226,12 @@ func TestWave2EndpointConflicts(t *testing.T) {
 	if len(conflicts[0].Plugins) != 2 {
 		t.Fatalf("conflict plugins = %v", conflicts[0].Plugins)
 	}
-	// Same path + different methods is fine.
 	if out := FindEndpointConflicts("/api/auth", []types.Plugin{
 		mk("p1", "/shared", http.MethodGet),
 		mk("p2", "/shared", http.MethodPost),
 	}); len(out) != 0 {
 		t.Fatalf("different methods must not conflict, got %+v", out)
 	}
-	// Wildcard (missing method) conflicts with any method.
 	if out := FindEndpointConflicts("/api/auth", []types.Plugin{
 		mk("p1", "/wild", ""),
 		mk("p2", "/wild", http.MethodGet),
@@ -281,7 +263,6 @@ func TestWave2TrailingSlashVariants(t *testing.T) {
 	if resp := testAPI.Get("/api/auth/ok/"); resp.Code != http.StatusOK {
 		t.Fatalf("slash variant status = %d, want 200", resp.Code)
 	}
-	// Disabled by default: the slash spelling 404s.
 	plain := Router(humatest.NewAdapter(), "/api/auth", wave2BaseOptions())
 	plainTest := humatest.Wrap(t, plain)
 	if resp := plainTest.Get("/api/auth/ok/"); resp.Code != http.StatusNotFound {
@@ -298,7 +279,6 @@ func TestWave2SchemaCheckGate(t *testing.T) {
 	if resp := testAPI.Get("/api/auth/ok"); resp.Code != http.StatusInternalServerError {
 		t.Fatalf("failing schema check must fail closed, got %d: %s", resp.Code, resp.Body.String())
 	}
-	// Nil check passes through.
 	okOpts := wave2BaseOptions()
 	okAPI := Router(humatest.NewAdapter(), "/api/auth", okOpts)
 	if resp := humatest.Wrap(t, okAPI).Get("/api/auth/ok"); resp.Code != http.StatusOK {
@@ -362,7 +342,6 @@ func TestWave2DynamicBaseURLResolution(t *testing.T) {
 	if got, err := ResolveDynamicBaseURLForRequest(newReq("example.com", "https://example.com/x"), dynOpts); err != nil || got != "https://example.com/api/auth" {
 		t.Fatalf("allowed host must resolve, got %q (%v)", got, err)
 	}
-	// Loopback hosts resolve to http under the unset protocol.
 	loopOpts := wave2BaseOptions()
 	loopOpts.BaseURL = ""
 	loopOpts.DynamicBaseURL = &types.DynamicBaseURLConfig{AllowedHosts: []string{"localhost"}}
@@ -371,7 +350,6 @@ func TestWave2DynamicBaseURLResolution(t *testing.T) {
 	if got, err := ResolveDynamicBaseURLForRequest(loopReq, loopOpts); err != nil || got != "http://localhost:3000/api/auth" {
 		t.Fatalf("loopback must resolve to http, got %q (%v)", got, err)
 	}
-	// Unlisted hosts fail without a fallback and use it when present.
 	if _, err := ResolveDynamicBaseURLForRequest(newReq("evil.com", "https://evil.com/x"), dynOpts); err == nil {
 		t.Fatal("unlisted host without fallback must fail")
 	}
@@ -384,7 +362,6 @@ func TestWave2DynamicBaseURLResolution(t *testing.T) {
 	if got, err := ResolveDynamicBaseURLForRequest(newReq("evil.com", "https://evil.com/x"), fallbackOpts); err != nil || got != "https://fallback.example.com/api/auth" {
 		t.Fatalf("fallback must cover unlisted hosts, got %q (%v)", got, err)
 	}
-	// Forwarded hosts apply only under the trusted-proxy opt-in.
 	proxyOpts := wave2BaseOptions()
 	proxyOpts.BaseURL = ""
 	proxyOpts.DynamicBaseURL = &types.DynamicBaseURLConfig{AllowedHosts: []string{"public.example.com"}}

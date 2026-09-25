@@ -1,14 +1,6 @@
 package types
 
-// Wave 4 conformance: remaining upstream trusted-origin cases, fuzz targets,
-// race tests, and malformed-input limits.
-//
-// Upstream reference: vendor/better-auth/packages/better-auth/src/auth/
-// trusted-origins.test.ts at the pinned v1.7.5 commit. Cases already covered
-// by public_trusted_origins_test.go are not duplicated here; this file ports
-// the remainder (tilde relative paths, standards-compliant relative URLs,
-// query-embedded wildcard hosts, non-web schemes, long control-char inputs)
-// and adds the Wave 4 fuzz/race/limit coverage.
+// wave4_conformance_test.go: upstream conformance (Better Auth v1.7.5).
 
 import (
 	"net/http"
@@ -17,12 +9,8 @@ import (
 	"testing"
 )
 
-// --- Ported upstream cases (trusted-origins.test.ts) ---
 
 // Upstream: "should reject relative paths with tildes when relative paths
-// are disabled" and "should allow relative paths with tildes"
-// (better-auth#10022). Tildes are valid pchar characters, so they are safe
-// only when relative paths are explicitly allowed.
 func TestWave4_RelativeTildePaths(t *testing.T) {
 	allowed := []string{"/my-team/~settings/account", "/~settings?next=/~account"}
 	for _, raw := range allowed {
@@ -39,8 +27,6 @@ func TestWave4_RelativeTildePaths(t *testing.T) {
 }
 
 // Upstream: "should allow standards-compliant relative URLs". These exercise
-// sub-delims, non-ASCII, and encoded separators confined to the query or
-// fragment (legal there) rather than the path.
 func TestWave4_StandardsCompliantRelativeURLs(t *testing.T) {
 	allowed := []string{
 		"/docs/!$&'()*+,;=:@~",
@@ -58,7 +44,6 @@ func TestWave4_StandardsCompliantRelativeURLs(t *testing.T) {
 }
 
 // Upstream: "should reject urls with malicious domain with wildcard trusted
-// origins" — a query string must not smuggle a wildcard match.
 func TestWave4_MaliciousWildcardQueryHost(t *testing.T) {
 	if MatchesOriginPattern("malicious.com?.example.com", "*.example.com") {
 		t.Fatal("query-embedded wildcard suffix must not match")
@@ -69,7 +54,6 @@ func TestWave4_MaliciousWildcardQueryHost(t *testing.T) {
 }
 
 // Upstream: "should reject urls with encoded malicious content" (non-web
-// scheme entries). javascript:/data: URLs have no web origin and must fail.
 func TestWave4_NonWebSchemesRejected(t *testing.T) {
 	for _, raw := range []string{
 		"javascript:alert('xss')",
@@ -85,7 +69,6 @@ func TestWave4_NonWebSchemesRejected(t *testing.T) {
 }
 
 // Upstream: "should reject control characters in custom-scheme URLs" — a
-// long fragment run followed by newlines must fail closed.
 func TestWave4_CustomSchemeLongControlFragment(t *testing.T) {
 	raw := "myapp://callback?" + strings.Repeat("#", 10000) + "\n\n"
 	if MatchesOriginPattern(raw, "myapp://callback") {
@@ -94,7 +77,6 @@ func TestWave4_CustomSchemeLongControlFragment(t *testing.T) {
 }
 
 // Upstream: "should trust any host for a host-less custom-scheme pattern"
-// (Expo dev `exp://`, deep-link `myapp://`).
 func TestWave4_HostlessCustomSchemeTrustsAnyHost(t *testing.T) {
 	for _, raw := range []string{
 		"exp://192.168.1.5:8081/--/",
@@ -116,10 +98,6 @@ func TestWave4_HostlessCustomSchemeTrustsAnyHost(t *testing.T) {
 }
 
 // Upstream: "should still allow hosts with explicit protocol in the host
-// string" and loopback http/https pairing are dynamic-baseURL expansion
-// behavior (getTrustedOrigins), which lives outside this pure matcher; the
-// matcher-level contract those tests rely on is default-port
-// canonicalization.
 func TestWave4_DefaultPortCanonicalization(t *testing.T) {
 	cases := []struct{ raw, pattern string }{
 		{"http://example.com:80/", "http://example.com"},
@@ -136,12 +114,7 @@ func TestWave4_DefaultPortCanonicalization(t *testing.T) {
 	}
 }
 
-// --- Cross-language golden vectors ---
-//
-// TS-shaped fixtures: (rawURL, pattern, want) triples transcribed from the
-// pinned upstream trusted-origins.test.ts expectations. They are static data
-// (no network) so any runtime implementing the same contract — TypeScript or
-// Go — must agree cell by cell.
+// Cross-language golden vectors
 
 var wave4OriginGoldenVectors = []struct {
 	name    string
@@ -210,12 +183,7 @@ func TestWave4_OriginGoldenVectors(t *testing.T) {
 	}
 }
 
-// --- Malformed-input limits ---
-//
-// The matcher is a security boundary: oversized or hostile inputs must fail
-// closed (false) and terminate. There is no explicit byte cap by design
-// (origins are short in practice); these tests pin fail-closed behavior and
-// termination on adversarial shapes.
+// Malformed-input limits
 
 func TestWave4_MatcherMalformedInputLimits(t *testing.T) {
 	huge := strings.Repeat("a", 1<<20)
@@ -244,7 +212,7 @@ func TestWave4_MatcherMalformedInputLimits(t *testing.T) {
 	}
 }
 
-// --- Race tests ---
+// Race tests
 
 func TestWave4_MatcherConcurrentUse(t *testing.T) {
 	opts := Options{
@@ -277,7 +245,7 @@ func TestWave4_MatcherConcurrentUse(t *testing.T) {
 	wg.Wait()
 }
 
-// --- Fuzz targets ---
+// Fuzz targets
 
 func FuzzMatchesOriginPattern(f *testing.F) {
 	seeds := [][2]string{
@@ -296,7 +264,6 @@ func FuzzMatchesOriginPattern(f *testing.F) {
 	}
 	f.Fuzz(func(t *testing.T, rawURL, pattern string) {
 		got := MatchesOriginPattern(rawURL, pattern)
-		// Fail-closed invariants shared by every branch.
 		if rawURL == "" || pattern == "" {
 			if got {
 				t.Fatalf("empty input must never match: %q %q", rawURL, pattern)
@@ -306,7 +273,6 @@ func FuzzMatchesOriginPattern(f *testing.F) {
 		if strings.HasPrefix(rawURL, "/") && got {
 			t.Fatalf("relative URL must never match without allowRelativePaths: %q", rawURL)
 		}
-		// Determinism: the pure matcher must agree with itself.
 		if again := MatchesOriginPattern(rawURL, pattern); again != got {
 			t.Fatalf("nondeterministic match for %q %q", rawURL, pattern)
 		}
@@ -359,10 +325,6 @@ func FuzzWildcardMatch(f *testing.F) {
 	}
 	f.Fuzz(func(t *testing.T, pattern, str string) {
 		got := WildcardMatch(pattern, str)
-		// Differential check against the reference matcher on small
-		// inputs (the naive version is exponential without memo hits on
-		// hostile shapes; cap length so the fuzzer spends time in the
-		// real implementation, not the oracle).
 		if len(pattern)+len(str) <= 96 {
 			if want := naiveWildcardMatch(pattern, str); got != want {
 				t.Fatalf("WildcardMatch(%q, %q) = %v, reference = %v", pattern, str, got, want)
@@ -373,8 +335,6 @@ func FuzzWildcardMatch(f *testing.F) {
 
 func TestWave4_WildcardLiteralStarBacktrack(t *testing.T) {
 	t.Parallel()
-	// Fuzzer-found regression: a literal '*' in the input at a wildcard
-	// position must not swallow the wildcard's backtrack state.
 	cases := map[string]bool{
 		"*|*0":       true, // pattern "*", input "*0"
 		"*|*":        true,

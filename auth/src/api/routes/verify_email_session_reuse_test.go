@@ -13,9 +13,6 @@ import (
 )
 
 // R5: POST verify must merge like GET — preserve the real request
-// (URL/Host/RemoteAddr/headers), only filling Cookie/Authorization when the
-// input carries them. The synthetic bare POST / shadows StoredRequestFromStd
-// so hooks observe POST / instead of the real URL.
 func TestVerifySessionReuse_PostVerifyPreservesRealRequest(t *testing.T) {
 	realReq, _ := http.NewRequest(http.MethodPost, "https://example.com/api/auth/verify-email", nil)
 	realReq.Host = "example.com"
@@ -121,7 +118,6 @@ func g6CookieCarries(cookiesOut []http.Cookie, opts types.Options, token string)
 	return false
 }
 
-// G6: change-email-verification leg must reuse a live matching session
 // (upstream TS:371-414 reuses activeSession when present).
 func TestVerifySessionReuse_ChangeEmailVerificationReusesMatchingSession(t *testing.T) {
 	db := newParityMemAdapter()
@@ -165,8 +161,6 @@ func TestVerifySessionReuse_ChangeEmailVerificationMintsOnMismatch(t *testing.T)
 	if err != nil {
 		t.Fatalf("issue: %v", err)
 	}
-	// sessionEmail "" skips the INVALID_USER gate (POST shape) so the
-	// mismatch surfaces as mint, mirroring the plain-leg mismatch test.
 	user, cookiesOut, errCode, _ := processVerifyEmailWithSession(ctx, opts, token, CookieRequestHeaders{}, "/", "")
 	if errCode != "" {
 		t.Fatalf("expected success, got %s", errCode)
@@ -183,7 +177,6 @@ func TestVerifySessionReuse_ChangeEmailVerificationMintsOnMismatch(t *testing.T)
 	}
 }
 
-// G6: legacy (default updateTo, no requestType) must reuse on match
 // (upstream TS:421-478 reuses activeSession when present).
 func TestVerifySessionReuse_LegacyUpdateToReusesMatchingSession(t *testing.T) {
 	db := newParityMemAdapter()

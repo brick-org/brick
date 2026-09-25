@@ -30,7 +30,6 @@ func TestConsumeResetPasswordToken_SingleUse(t *testing.T) {
 	if errCode != "" || userID != "user-1" {
 		t.Fatalf("first consume must win with user-1, got %q/%s", userID, errCode)
 	}
-	// The row is gone: racers and replays get INVALID_TOKEN.
 	if _, _, errCode, status := consumeResetPasswordToken(context.Background(), opts, "tok-single"); errCode != types.ErrInvalidToken || status != 400 {
 		t.Fatalf("second consume must be INVALID_TOKEN/400, got %s/%d", errCode, status)
 	}

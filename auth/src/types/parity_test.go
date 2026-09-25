@@ -7,7 +7,6 @@ import (
 )
 
 // stubProvider implements OAuthProvider plus the optional refresh, revoke,
-// and end-session capabilities.
 type stubProvider struct{}
 
 func (stubProvider) ID() string   { return "stub" }
@@ -49,8 +48,6 @@ func TestOptionalProviderCapabilitiesDoNotBreakCoreInterface(t *testing.T) {
 	if core.ID() != "stub" {
 		t.Fatalf("stub provider ID = %q", core.ID())
 	}
-	// Optional capabilities are discovered via type assertion, so a plain
-	// core-only provider keeps compiling without them.
 	if _, ok := core.(RefreshableProvider); !ok {
 		t.Fatal("stub provider should satisfy RefreshableProvider")
 	}

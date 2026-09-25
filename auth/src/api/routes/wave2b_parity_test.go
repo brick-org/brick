@@ -29,8 +29,6 @@ func TestProcessVerifyEmail_HS256JWTMarksVerified(t *testing.T) {
 	if errCode != "" {
 		t.Fatalf("expected success, got %s (%d)", errCode, status)
 	}
-	// Upstream fresh plain verify answers {status:true,user:null}
-	// (realigned by F2); row check below proves verification.
 	if user != nil {
 		t.Fatalf("fresh verify must return null user, got %#v", user)
 	}
@@ -113,8 +111,6 @@ func TestSendVerificationEmailForUser_RequestVariantPrecedence(t *testing.T) {
 		t.Fatalf("request-aware variant must win, got %#v", order)
 	}
 }
-
-// --- request-aware delete hooks + background dispatch ---
 
 func TestFinishDeleteUser_HookOrderAndRequestPrecedence(t *testing.T) {
 	db := newParityMemAdapter()
@@ -215,8 +211,6 @@ func TestRunBackgroundOrAwait_HandlerDeferred(t *testing.T) {
 	}
 }
 
-// --- delete-account token lifecycle ---
-
 func TestDeleteAccountIdentifier_UpstreamSpelling(t *testing.T) {
 	if got := deleteAccountIdentifier("tok"); got != "delete-account-tok" {
 		t.Fatalf("must match upstream `delete-account-${token}`, got %q", got)
@@ -257,7 +251,6 @@ func TestConsumeDeleteAccountToken_WrongOwnerBurned(t *testing.T) {
 	if storedUserID == "user-b" {
 		t.Fatal("owner check happens at the call site")
 	}
-	// The token is burned even though the owner mismatched: no replay.
 	if _, err := consumeDeleteAccountToken(ctx, opts, token); err == nil {
 		t.Fatal("wrong-owner token must be burned on first consume")
 	}
@@ -268,8 +261,6 @@ func TestConsumeDeleteAccountToken_ExpiredBurned(t *testing.T) {
 	opts := parityTestOptions(db)
 	ctx := context.Background()
 
-	// Insert an already-expired row directly (negative TTL configs keep the
-	// 24h default in createDeleteAccountVerification).
 	now := time.Now().UTC()
 	token := "tok-expired"
 	if _, err := db.Create(ctx, "verification", map[string]any{
@@ -329,8 +320,6 @@ func TestConsumeDeleteAccountToken_SecondaryOnly(t *testing.T) {
 		t.Fatal("secondary consume must be single-use")
 	}
 }
-
-// --- change-email creation storage modes ---
 
 func TestCreateChangeEmailVerification_SecondaryMirror(t *testing.T) {
 	store := newMapSecondaryStorage(true)
@@ -396,8 +385,6 @@ func TestCreateChangeEmailVerification_HashedIdentifier(t *testing.T) {
 		t.Fatal("stored identifier must be the hashed form")
 	}
 }
-
-// --- reset-password secondary storage + cleanup modes ---
 
 func TestCreateConsumeResetVerification_SecondaryOnly(t *testing.T) {
 	store := newMapSecondaryStorage(true)
@@ -480,8 +467,6 @@ func TestFindResetVerification_SweepHonorsDisableCleanup(t *testing.T) {
 		t.Fatal("DisableCleanup must preserve expired rows")
 	}
 }
-
-// --- update-user input parity ---
 
 func TestNullableStringUnmarshal(t *testing.T) {
 	var absent struct {

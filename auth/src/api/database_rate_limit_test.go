@@ -14,8 +14,6 @@ import (
 var errEmptyDatabaseIncrement = errors.New("auth: increment requires a non-empty increment or set")
 
 // fakeRateLimitAdapter is a minimal in-memory types.Adapter with comparison
-// operator support, mirroring the upstream database rate-limit row contract
-// (key/count/lastRequest with ms-epoch lastRequest).
 type fakeRateLimitAdapter struct {
 	mu     sync.Mutex
 	tables map[string][]map[string]any
@@ -63,7 +61,6 @@ func fakeWhereMatches(row map[string]any, where []types.Where) bool {
 			gotStr, _ := got.(string)
 			if op == types.OpEq && clause.Value != nil {
 				if gotStr != want && got != clause.Value {
-					// Numeric comparison fallback.
 					gotNum, gotOk := fakeNumber(got)
 					wantNum, wantOk := fakeNumber(clause.Value)
 					if !gotOk || !wantOk || gotNum != wantNum {
@@ -329,9 +326,6 @@ func TestDatabaseRateLimitStorage_GuardedIncrementNeverExceedsMax(t *testing.T) 
 	db := newFakeRateLimitAdapter()
 	storage := DatabaseRateLimitStorage{DB: db}
 	window := 10 * time.Second
-	// A burst larger than max: exactly max pass, the rest are limited, and
-	// the stored count never exceeds max (the guarded increment does not
-	// overshoot under contention).
 	allowed := 0
 	for i := 0; i < 10; i++ {
 		if _, limited := storage.Consume("k-burst", window, 4); !limited {
@@ -372,7 +366,6 @@ func TestDatabaseRateLimitStorage_PruneKeepsLongWindowRows(t *testing.T) {
 	if _, err := db.FindOne(context.Background(), "rateLimit", []types.Where{{Field: "key", Value: longKey}}, nil); err != nil {
 		t.Fatal(err)
 	} else {
-		// Re-read explicitly: the 120s-window row must survive a 10s consume.
 		row, _ := db.FindOne(context.Background(), "rateLimit", []types.Where{{Field: "key", Value: longKey}}, nil)
 		if row == nil {
 			t.Fatal("active long-window row must survive pruning")
@@ -417,7 +410,6 @@ func TestLongestConfiguredRateLimitWindow_CoversRules(t *testing.T) {
 	if got := longestConfiguredRateLimitWindow(opts); got != 120 {
 		t.Fatalf("longest window = %d, want 120", got)
 	}
-	// Default special rules (60s) beat a smaller global window.
 	def := testRateLimitOptions()
 	def.RateLimit.Enabled = &enabled
 	if got := longestConfiguredRateLimitWindow(def); got != 60 {

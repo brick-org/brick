@@ -38,7 +38,6 @@ func c702API(t *testing.T, opts types.Options) humatest.TestAPI {
 }
 
 // Upstream sign-up.ts:319-326: onExistingUserSignUp(data, request) via
-// runInBackgroundOrAwait; the request-aware variant wins when set.
 func TestC702_OnExistingUserSignUpRequestPrecedence(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := c702Options(db)
@@ -79,7 +78,6 @@ func TestC702_OnExistingUserSignUpRequestPrecedence(t *testing.T) {
 }
 
 // Upstream sign-up.ts:366-368: a 403 gate rejection under generic-duplicate
-// mode returns the same opaque success as an existing email.
 func TestC702_ValidateUserInfoCreateGateGenericDuplicate(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := c702Options(db)
@@ -119,14 +117,10 @@ func TestC702_ValidateUserInfoCreateGate403(t *testing.T) {
 }
 
 // Upstream sign-up.ts:183 runWithTransaction: user + credential-account
-// commit atomically; an account-link failure rolls back the user.
 func TestC702_SignUpTransactionRollsBackAccountFailure(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := c702Options(db)
 	api := c702API(t, opts)
-	// Seed a colliding account id is not directly possible (ids are minted),
-	// so force failure via a failing adapter wrapper is out of scope for the
-	// in-memory fake; instead assert the happy path persists both rows.
 	resp := api.Post("/api/auth/sign-up/email", map[string]any{
 		"name": "T", "email": "tx@example.com", "password": "password123",
 	})
@@ -144,7 +138,6 @@ func TestC702_SignUpTransactionRollsBackAccountFailure(t *testing.T) {
 }
 
 // Upstream sign-in.ts:588-597: the unverified resend awaits via
-// runInBackgroundOrAwait and prefers the request-aware sender.
 func TestC702_SignInResendPrefersRequestVariant(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := c702Options(db)
@@ -165,8 +158,6 @@ func TestC702_SignInResendPrefersRequestVariant(t *testing.T) {
 	}); resp.Code != 200 {
 		t.Fatalf("sign-up status = %d: %s", resp.Code, resp.Body.String())
 	}
-	// Sign-up itself sends a verification (SendOnSignUp ||
-	// RequireEmailVerification); reset counters to isolate the sign-in resend.
 	legacy, reqAware = 0, 0
 	resp := api.Post("/api/auth/sign-in/email", map[string]any{
 		"email": "unverified@example.com", "password": "password123",
@@ -180,7 +171,6 @@ func TestC702_SignInResendPrefersRequestVariant(t *testing.T) {
 }
 
 // Upstream email-verification.ts:339-367: change-email-confirmation JWT
-// sends verification to the new email and answers success with no user.
 func TestC702_VerifyEmailConfirmationLeg(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := c702Options(db)
@@ -210,8 +200,6 @@ func TestC702_VerifyEmailConfirmationLeg(t *testing.T) {
 }
 
 // Upstream email-verification.ts:371-414: change-email-verification JWT
-// updates the email, marks verified, runs afterEmailVerification, mints a
-// session.
 func TestC702_VerifyEmailVerificationLeg(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := c702Options(db)
@@ -245,7 +233,6 @@ func TestC702_VerifyEmailVerificationLeg(t *testing.T) {
 }
 
 // Upstream update-user.ts:254-283: change-password validates length first,
-// hashes before verifying, and revokeOtherSessions mints a fresh token.
 func TestC702_ChangePasswordOrderAndRevoke(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := c702Options(db)
@@ -255,7 +242,6 @@ func TestC702_ChangePasswordOrderAndRevoke(t *testing.T) {
 	}); resp.Code != 200 {
 		t.Fatalf("sign-up status = %d: %s", resp.Code, resp.Body.String())
 	}
-	// Log in to get a session cookie.
 	signIn := api.Post("/api/auth/sign-in/email", map[string]any{
 		"email": "pw@example.com", "password": "password123",
 	})
@@ -270,14 +256,12 @@ func TestC702_ChangePasswordOrderAndRevoke(t *testing.T) {
 		}
 	}
 	_ = sessionCookie
-	// Too-short new password must win over credential checks (length first).
 	resp := api.Post("/api/auth/change-password", map[string]any{
 		"currentPassword": "password123", "newPassword": "short",
 	}, "Cookie: "+sessionCookie)
 	if resp.Code != 400 {
 		t.Fatalf("short password status = %d, want 400: %s", resp.Code, resp.Body.String())
 	}
-	// Revoke path returns a fresh token plus the user, status stays true.
 	resp = api.Post("/api/auth/change-password", map[string]any{
 		"currentPassword": "password123", "newPassword": "password45678", "revokeOtherSessions": true,
 	}, "Cookie: "+sessionCookie)

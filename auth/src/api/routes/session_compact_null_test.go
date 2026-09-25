@@ -46,7 +46,6 @@ func TestSessionCompactNull_UserMissingReturnsNull(t *testing.T) {
 	}, nil); err != nil {
 		t.Fatal(err)
 	}
-	// Resolver keeps an error for middleware (FAILED, not USER_NOT_FOUND).
 	_, err := resolveGetSession(ctx, opts, getSessionRequest{token: "tok-f5-orphan", headers: CookieRequestHeaders{}})
 	if err == nil {
 		t.Fatal("orphan session must error at resolver layer")
@@ -58,7 +57,6 @@ func TestSessionCompactNull_UserMissingReturnsNull(t *testing.T) {
 	if status != http.StatusUnauthorized || !strings.Contains(detail, types.ErrFailedToGetSession) {
 		t.Fatalf("orphan resolver: got %d %q, want 401 FAILED_TO_GET_SESSION", status, detail)
 	}
-	// HTTP layer maps to literal null.
 	_, api := humatest.New(t, huma.DefaultConfig("Test", "1.0.0"))
 	GetSession(api, "/api/auth", opts)
 	resp := api.Get("/api/auth/get-session", "Cookie: "+signedSessionHeader(t, opts, "tok-f5-orphan"))
@@ -101,7 +99,6 @@ func TestSessionCompactNull_CompactInteropRead(t *testing.T) {
 	if err != nil {
 		t.Fatalf("mint upstream compact: %v", err)
 	}
-	// TS-issued compact value must hit the Go fast path (with legacy fallback intact).
 	header := signedSessionHeader(t, opts, "tok-f5-compact") + "; " + sessionDataCookieName + "=" + upstreamValue
 	if _, ok := cachedSessionFromRequest(header, opts.AllSecrets(), "tok-f5-compact", opts.Session); !ok {
 		t.Fatal("TS-issued compact value must hit cachedSessionFromRequest")
@@ -137,7 +134,6 @@ func TestSessionCompactNull_CompactInteropWrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("mint: %v", err)
 	}
-	// Go-minted compact value must verify via upstream VerifyCompactCookieCache.
 	got, _, verr := cookies.VerifyCompactCookieCache(opts.AllSecrets(), minted.Value)
 	if verr != nil {
 		t.Fatalf("Go compact value must verify upstream, got %v", verr)
@@ -161,7 +157,6 @@ func TestSessionCompactNull_DontRememberExpiredOnExpiry(t *testing.T) {
 	if got := strings.TrimSpace(resp.Body.String()); got != "null" {
 		t.Fatalf("expired must be literal null, got %q", resp.Body.String())
 	}
-	// dont_remember marker must be expired alongside session_token + session_data.
 	var foundSession, foundDontRemember bool
 	for _, sc := range resp.Result().Cookies() {
 		if strings.Contains(sc.Name, "session_token") && sc.MaxAge < 0 {
@@ -171,13 +166,11 @@ func TestSessionCompactNull_DontRememberExpiredOnExpiry(t *testing.T) {
 			foundDontRemember = true
 		}
 	}
-	// Fallback to raw header scan (humatest may join cookies).
 	raw := resp.Header().Get("Set-Cookie")
 	if !foundSession && !strings.Contains(raw, "session_token") {
 		t.Fatalf("expired 200-null must emit session_token cleanup, got %q", raw)
 	}
 	if !foundDontRemember {
-		// Scan raw headers for dont_remember expiry.
 		found := false
 		for _, h := range resp.Result().Header.Values("Set-Cookie") {
 			if strings.Contains(h, "dont_remember") && (strings.Contains(h, "Max-Age=0") || strings.Contains(h, "max-age=0") || strings.Contains(h, "Expires=Thu, 01 Jan 1970")) {

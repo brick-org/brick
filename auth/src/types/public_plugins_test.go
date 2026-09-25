@@ -8,8 +8,6 @@ import (
 )
 
 // stubPlugin implements the legacy Plugin interface plus every new OPTIONAL
-// provider, proving the additive surface composes without breaking legacy
-// shapes.
 type stubPlugin struct{}
 
 func (stubPlugin) ID() string                    { return "stub" }
@@ -50,8 +48,6 @@ func TestStubPluginSatisfiesLegacyAndOptionalProviders(t *testing.T) {
 	if legacy.ID() != "stub" {
 		t.Fatalf("stub plugin ID = %q", legacy.ID())
 	}
-	// Every new surface must be discoverable via type assertion while the
-	// legacy interface keeps working.
 	if _, ok := legacy.(PluginVersionProvider); !ok {
 		t.Error("stub should satisfy PluginVersionProvider")
 	}
@@ -86,8 +82,6 @@ func TestStubPluginSatisfiesLegacyAndOptionalProviders(t *testing.T) {
 		t.Error("stub should satisfy PluginRateLimitProvider")
 	}
 	if _, ok := legacy.(PluginSchemaProvider); ok {
-		// Plugin.Schema() has the same signature, so a full Plugin also
-		// satisfies the schema-only provider — document the overlap.
 		t.Log("full Plugin satisfies PluginSchemaProvider via Schema()")
 	}
 }
@@ -184,8 +178,6 @@ func TestNewFieldValidatorNilSafe(t *testing.T) {
 		t.Errorf("output side err = %v, want boom", err)
 	}
 
-	// The struct form stays assignable from plain func literals (back-compat
-	// with the pre-FIELDVALIDATORFUNC field type).
 	legacy := &FieldValidator{
 		Input:  func(value any) error { return nil },
 		Output: func(value any) error { return boom },

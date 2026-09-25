@@ -26,9 +26,6 @@ func credsVerifyAPI(t *testing.T, opts types.Options) humatest.TestAPI {
 }
 
 // email-verification.test.ts "should return APIError status when
-// sendVerificationEmail throws (e.g. rate limit)" (#8757): sender APIErrors
-// keep their status after the anti-enumeration floor instead of collapsing
-// to 500.
 func TestCredsV1_SendVerificationSenderAPIErrorPropagates(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -55,7 +52,6 @@ func TestCredsV1_SendVerificationSenderAPIErrorPropagates(t *testing.T) {
 }
 
 // email-verification.test.ts "should enforce a constant-time floor for both
-// existing and non-existing emails".
 func TestCredsV1_SendVerificationMissingEmailFloor(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -86,7 +82,6 @@ func TestCredsV1_SendVerificationMissingEmailFloor(t *testing.T) {
 }
 
 // email-verification.test.ts "should send a verification email when
-// enabled": the sender receives user/url/token.
 func TestCredsV1_SendVerificationDelivers(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -113,7 +108,6 @@ func TestCredsV1_SendVerificationDelivers(t *testing.T) {
 }
 
 // email-verification.test.ts "should not send verification email when a
-// third party requests for an already verified user".
 func TestCredsV1_SendVerificationSkipsVerifiedThirdParty(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -149,7 +143,6 @@ func TestCredsV1_SendVerificationSkipsVerifiedThirdParty(t *testing.T) {
 }
 
 // email-verification.test.ts "should redirect to callback": GET verify with
-// callbackURL redirects to it.
 func TestCredsV1_VerifyEmailGetRedirectsToCallback(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -175,7 +168,6 @@ func TestCredsV1_VerifyEmailGetRedirectsToCallback(t *testing.T) {
 }
 
 // email-verification.test.ts "should preserve encoded characters in
-// callback URL": the redirect echoes the callbackURL exactly.
 func TestCredsV1_VerifyEmailGetPreservesEncodedCallback(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)

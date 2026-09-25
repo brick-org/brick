@@ -49,7 +49,6 @@ func TestOptionsTristate_SendOnSignUpZeroValueIsUnset(t *testing.T) {
 	if opts.SendOnSignUp != nil {
 		t.Fatal("zero EmailVerificationOptions.SendOnSignUp must be nil (unset)")
 	}
-	// Unset follows requireEmailVerification on both legs.
 	if ResolveSendOnSignUp(opts.SendOnSignUp, false) {
 		t.Fatal("unset SendOnSignUp with require=false must not send")
 	}

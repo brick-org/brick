@@ -27,7 +27,6 @@ func TestCookiesChunked_OversizeIssuanceYieldsIndexedChunks(t *testing.T) {
 		t.Fatal(err)
 	}
 	session, user := rowToSession(row, opts), rowToUser(urow, opts)
-	// Large unknown field survives returned:false filtering and bloats the value.
 	if user.AdditionalFields == nil {
 		user.AdditionalFields = map[string]any{}
 	}
@@ -38,7 +37,6 @@ func TestCookiesChunked_OversizeIssuanceYieldsIndexedChunks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("issuance must succeed (chunk, not error): %v", err)
 	}
-	// Collect session_data cookies (bare or chunked).
 	var dataCookies []string
 	for _, c := range out {
 		if c.Name == sessionDataCookieName || strings.HasPrefix(c.Name, sessionDataCookieName+".") {
@@ -51,7 +49,6 @@ func TestCookiesChunked_OversizeIssuanceYieldsIndexedChunks(t *testing.T) {
 	for i := range dataCookies {
 		_ = i
 	}
-	// Indexed naming <name>.<i> in order.
 	seen := map[string]bool{}
 	for _, n := range dataCookies {
 		seen[n] = true
@@ -62,7 +59,6 @@ func TestCookiesChunked_OversizeIssuanceYieldsIndexedChunks(t *testing.T) {
 			t.Fatalf("missing indexed chunk %q in %v", want, dataCookies)
 		}
 	}
-	// Every chunk line must fit the wire budget via Serialize sizing.
 	attrs := cookies.DefaultAttributes(false, "")
 	for _, c := range out {
 		if c.Name == sessionDataCookieName || strings.HasPrefix(c.Name, sessionDataCookieName+".") {
@@ -72,7 +68,6 @@ func TestCookiesChunked_OversizeIssuanceYieldsIndexedChunks(t *testing.T) {
 			}
 		}
 	}
-	// Chunks must reassemble to the minted value.
 	m := map[string]string{}
 	for _, c := range out {
 		if c.Name == sessionDataCookieName || strings.HasPrefix(c.Name, sessionDataCookieName+".") {
@@ -83,8 +78,6 @@ func TestCookiesChunked_OversizeIssuanceYieldsIndexedChunks(t *testing.T) {
 		t.Fatal("chunked issuance must reassemble via JoinChunkedCookies")
 	}
 
-	// Budget must be sized via Serialize (upstream serializeCookie), not
-	// ToHTTPCookie.String(): with Max-Age=0 set they differ by "; Max-Age=0".
 	zeroAttrs := cookies.Attributes{Path: "/", HttpOnly: true, MaxAge: 0, MaxAgeSet: true}
 	budget := cookies.MaxValueSizeFor("n", zeroAttrs)
 	wantBudget := cookies.MaxCookieSize - len(zeroAttrs.Serialize("n.99", ""))
@@ -114,7 +107,6 @@ func TestCookiesChunked_ShrinkExpiresStaleChunks(t *testing.T) {
 	opts := sessionTestOptions(db)
 	opts.Session.CookieCache.Enabled = true
 	opts.Advanced.CookiePrefix = "custom"
-	// Request carries upstream-default leftovers while configured name differs.
 	header := "custom.session_token=x; better-auth.session_data=stale; better-auth.session_data.0=c0; better-auth.session_data.1=c1"
 	got := expiredSessionCookiesWithContext(ctx, opts, CookieRequestHeaders{}, header)
 	expired := map[string]bool{}
@@ -128,7 +120,6 @@ func TestCookiesChunked_ShrinkExpiresStaleChunks(t *testing.T) {
 			t.Fatalf("stale %q must expire with MaxAge<0, got %v", want, got)
 		}
 	}
-	// Stale-cleanup path must also cover the same names.
 	got2 := expiredStaleSessionDataCookies(ctx, opts, CookieRequestHeaders{}, header)
 	expired2 := map[string]bool{}
 	for _, c := range got2 {
@@ -159,11 +150,9 @@ func TestCookiesChunked_SkipGateSuppressesRefresh(t *testing.T) {
 	session, user := rowToSession(row, opts), rowToUser(urow, opts)
 	now := time.Now().UTC()
 	payload := &sessionCookieCachePayload{Session: session, User: user, ExpiresAt: now.Add(30 * time.Second), Version: "1"}
-	// Sanity: without the flag the refresh fires.
 	if got := maybeRefreshCookieCacheWithContext(ctx, opts, CookieRequestHeaders{}, "tok-g8-skip", payload, now, false); len(got) == 0 {
 		t.Fatal("refresh must fire without the skip flag (sanity)")
 	}
-	// With the flag the refresh is suppressed.
 	skipped := state.SetShouldSkipSessionRefresh(ctx, true)
 	if got := maybeRefreshCookieCacheWithContext(skipped, opts, CookieRequestHeaders{}, "tok-g8-skip", payload, now, false); got != nil {
 		t.Fatalf("skip flag must suppress refresh, got %v", got)

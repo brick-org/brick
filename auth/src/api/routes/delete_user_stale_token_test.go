@@ -44,7 +44,6 @@ func g7UserID(t *testing.T, db *parityMemAdapter, email string) string {
 	return id
 }
 
-// Stale session + valid delete token without password must delete (200),
 // matching upstream early-return token path.
 func TestDeleteUserStale_DeleteUserStaleSessionValidTokenDeletes(t *testing.T) {
 	db := newParityMemAdapter()
@@ -76,7 +75,6 @@ func TestDeleteUserStale_DeleteUserStaleSessionValidTokenDeletes(t *testing.T) {
 }
 
 // Stale session without token (and without password) must still fail with
-// 400 SESSION_EXPIRED via the faithful second gate.
 func TestDeleteUserStale_DeleteUserStaleSessionWithoutTokenExpired(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -97,8 +95,6 @@ func TestDeleteUserStale_DeleteUserStaleSessionWithoutTokenExpired(t *testing.T)
 }
 
 // Invalid delete token must fail with 404 INVALID_TOKEN (upstream
-// deleteUserCallback throws NOT_FOUND on bad/owner-mismatch tokens,
-// update-user.ts:641-642; realigned from 401 by C5 for POST/GET consistency).
 func TestDeleteUserStale_DeleteUserInvalidTokenUnauthorized(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)

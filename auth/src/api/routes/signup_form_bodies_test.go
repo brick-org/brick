@@ -1,7 +1,6 @@
 package routes
 
 // F1 lane: P01-GAP-1 form-urlencoded sign-up + sendOnSignUp tri-state pins.
-//
 // Upstream refs (vendor/better-auth @ 5468e6bf):
 //   - sign-up.ts:38-41 allowedMediaTypes json+form; sign-up.test.ts
 //     "sign-up with form data / should accept form-urlencoded content type".
@@ -22,9 +21,6 @@ import (
 )
 
 // f1SetSendOnSignUp assigns EmailVerification.SendOnSignUp without naming its
-// static type, so this file compiles whether the field is bool (current
-// tree) or *bool (pending tri-state migration: nil = unset, fall back to
-// requireEmailVerification). Merge owner: no edits needed on either side.
 func f1SetSendOnSignUp(t *testing.T, opts *types.Options, v bool) {
 	t.Helper()
 	field := reflect.ValueOf(&opts.EmailVerification.SendOnSignUp).Elem()
@@ -42,7 +38,6 @@ func f1SetSendOnSignUp(t *testing.T, opts *types.Options, v bool) {
 }
 
 // f1SendOnSignUpIsTriState reports whether SendOnSignUp is *bool (nil =
-// unset). Compiles on both sides of the pending types migration.
 func f1SendOnSignUpIsTriState() bool {
 	var zero types.EmailVerificationOptions
 	_, ok := any(zero.SendOnSignUp).(*bool)
@@ -56,9 +51,7 @@ func f1SignUpAPI(t *testing.T, opts types.Options) humatest.TestAPI {
 	return api
 }
 
-// P01-GAP-1: POST /sign-up/email must accept
 // application/x-www-form-urlencoded bodies (upstream allowedMediaTypes
-// json+form), with additional fields surviving like the JSON path.
 func TestSignUpForm_SignUpFormURLEncoded(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -110,8 +103,6 @@ func TestSignUpForm_SignUpFormURLEncoded(t *testing.T) {
 }
 
 // Form bodies must validate exactly like JSON bodies: a missing required
-// field fails (absent keys stay absent through the transcode) and a
-// non-boolean rememberMe fails (left verbatim for schema validation).
 func TestSignUpForm_SignUpFormValidationParity(t *testing.T) {
 	post := func(t *testing.T, form url.Values) int {
 		t.Helper()
@@ -143,8 +134,6 @@ func TestSignUpForm_SignUpFormValidationParity(t *testing.T) {
 }
 
 // Upstream "should send verification email when sendOnSignUp is true":
-// explicit true wins even when requireEmailVerification is false (leg not
-// covered by TestTriageV1_SignUpSendOnSignUpTrue, which sets require=true).
 func TestSignUpForm_SendOnSignUpTrueSendsWithoutRequire(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -168,11 +157,6 @@ func TestSignUpForm_SendOnSignUpTrueSendsWithoutRequire(t *testing.T) {
 }
 
 // Upstream "should not send verification email when sendOnSignUp is false,
-// even with requireEmailVerification": needs *bool tri-state. While the
-// field is still bool, explicit false is indistinguishable from unset and
-// falls back to require (sends); that fallback is asserted so the test stays
-// green on both sides of the migration, and the true upstream leg engages
-// automatically once the field becomes *bool.
 func TestSignUpForm_SendOnSignUpExplicitFalse(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -195,7 +179,6 @@ func TestSignUpForm_SendOnSignUpExplicitFalse(t *testing.T) {
 			t.Fatalf("explicit sendOnSignUp=false must suppress the send, got %d", calls)
 		}
 	} else {
-		// Bool tree: false == unset, falls back to requireEmailVerification.
 		if calls != 1 {
 			t.Fatalf("bool-tree fallback: send calls = %d, want 1 ( flips to 0 under *bool)", calls)
 		}

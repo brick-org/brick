@@ -61,7 +61,6 @@ func (c *countSecondaryStorage) resetCounts() {
 }
 
 // appendSecondaryRef injects one active-sessions list entry (e.g. an expired
-// or dangling reference) without a backing token value.
 func appendSecondaryRef(t *testing.T, store *mapSecondaryStorage, userID, token string, expiresAt time.Time) {
 	t.Helper()
 	raw, err := store.Get(activeSessionsKey(userID))
@@ -87,10 +86,6 @@ func secondaryV1UserID(t *testing.T, ctx context.Context, db *parityMemAdapter, 
 }
 
 // TestSecondaryV1_RefreshPropagatesAcrossSessions ports update-user.test.ts
-// "should propagate updates across sessions when secondaryStorage is
-// enabled" at the secondary-runtime level: after refreshSecondaryUserSessions
-// every live token of the user serves the updated user while the session
-// halves stay untouched.
 func TestSecondaryV1_RefreshPropagatesAcrossSessions(t *testing.T) {
 	ctx := context.Background()
 	db := newParityMemAdapter()
@@ -128,9 +123,6 @@ func TestSecondaryV1_RefreshPropagatesAcrossSessions(t *testing.T) {
 }
 
 // TestSecondaryV1_RefreshWritesOncePerToken ports update-user.test.ts
-// "should not write to secondary storage multiple times for the same session
-// token during updateUser": the refresh costs exactly one Set per live token
-// and never rewrites the active-sessions list.
 func TestSecondaryV1_RefreshWritesOncePerToken(t *testing.T) {
 	ctx := context.Background()
 	db := newParityMemAdapter()
@@ -157,9 +149,7 @@ func TestSecondaryV1_RefreshWritesOncePerToken(t *testing.T) {
 	}
 }
 
-// TestSecondaryV1_RefreshSkipsStaleRefs pins the filter semantics of
 // upstream refreshUserSessions: expired references and dangling tokens are
-// skipped without error and without creating entries.
 func TestSecondaryV1_RefreshSkipsStaleRefs(t *testing.T) {
 	ctx := context.Background()
 	db := newParityMemAdapter()
@@ -186,11 +176,7 @@ func TestSecondaryV1_RefreshSkipsStaleRefs(t *testing.T) {
 	}
 }
 
-// TestSecondaryV1_DeleteAllThenRecreateKeepsOnlyReplacement ports
 // update-user.test.ts "should preserve the replacement session in secondary
-// storage" at the secondary-runtime level: clearing all of a user's sessions
-// then mirroring one fresh session leaves exactly the replacement behind
-// (old tokens gone, list holding only the new token).
 func TestSecondaryV1_DeleteAllThenRecreateKeepsOnlyReplacement(t *testing.T) {
 	ctx := context.Background()
 	db := newParityMemAdapter()
@@ -242,9 +228,6 @@ func TestSecondaryV1_DeleteAllThenRecreateKeepsOnlyReplacement(t *testing.T) {
 }
 
 // TestSecondaryV1_RouteListRevokeSecondary ports the session-api.test.ts
-// "session storage" revoke+list legs through the HTTP routes: list serves
-// live sessions only, revoke answers status true, the revoked session then
-// 401s and the list is empty with no store residue.
 func TestSecondaryV1_RouteListRevokeSecondary(t *testing.T) {
 	ctx := context.Background()
 	db := newParityMemAdapter()
@@ -301,9 +284,6 @@ func TestSecondaryV1_RouteListRevokeSecondary(t *testing.T) {
 		t.Fatalf("revoke status: %v (%s)", err, revoke.Body.String())
 	}
 
-	// The survivor still lists exactly itself; the revoked token authenticates
-	// nothing anymore, so listing with it 401s (upstream's client surfaces
-	// this leg as null data).
 	if tokens := listTokens(cookie2); len(tokens) != 1 || tokens[0] != "tok-rl-2" {
 		t.Fatalf("expected only the surviving session, got %v", tokens)
 	}

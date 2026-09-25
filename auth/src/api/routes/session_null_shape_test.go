@@ -24,7 +24,6 @@ func b14NullBody(t *testing.T, resp *httptest.ResponseRecorder) {
 	if resp.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
 	}
-	// Upstream ctx.json(null): literal `null`, not {"session":null,"user":null}.
 	if got := strings.TrimSpace(resp.Body.String()); got != "null" {
 		t.Fatalf("body must be literal null, got %q", resp.Body.String())
 	}
@@ -114,7 +113,6 @@ func TestSessionNull_CookieCacheVersionFuncFailure500s(t *testing.T) {
 		return "", errors.New("boom")
 	}
 
-	// Internal contract: the read surfaces a 500, never DB data.
 	_, err := resolveGetSession(ctx, failing, getSessionRequest{
 		token:        "tok-b14-ver",
 		cookieHeader: header,
@@ -125,7 +123,6 @@ func TestSessionNull_CookieCacheVersionFuncFailure500s(t *testing.T) {
 		t.Fatalf("version failure: got %d %q, want 500 FAILED_TO_GET_SESSION", status, detail)
 	}
 
-	// HTTP layer: the endpoint 500s like upstream's catch-all.
 	_, api := humatest.New(t, huma.DefaultConfig("Test", "1.0.0"))
 	GetSession(api, "/api/auth", failing)
 	resp := api.Get("/api/auth/get-session", "Cookie: "+header)

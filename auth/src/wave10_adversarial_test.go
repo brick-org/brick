@@ -1,19 +1,6 @@
 package auth_test
 
-// AUTH-V10-02 — adversarial and cross-language conformance (tests only).
-//
-// This file owns the root package's Wave 10 adversarial coverage: migration
-// diff concurrency (DiffSchemas determinism under burst) and plugin route
-// hook ordering under concurrency (per-request before/after order preserved
-// across simultaneous requests).
-//
-// Upstream references (pinned Better Auth v1.7.5 at 5468e6bf):
-//   - packages/core/src/db/schema-diff.test.ts and get-migration.ts
-//     (append-only diffing, unsafe-change errors, timestamp support matrix)
-//   - packages/better-auth/src/plugins/plugin-hooks / route-hook dispatch
-//     (before hooks run in plugin declaration order, then after hooks)
-//
-// No production code is changed here.
+// wave10_adversarial_test.go: upstream conformance (Better Auth v1.7.5).
 
 import (
 	"fmt"
@@ -30,9 +17,6 @@ import (
 func boolPtrW10(b bool) *bool { return &b }
 
 // Migration diffing under burst: concurrent DiffSchemas calls over fresh,
-// incremental, and populated-table shapes all return byte-identical
-// decisions (no map-iteration nondeterminism escapes, no races on shared
-// schema state).
 func TestWave10_DiffSchemasConcurrent(t *testing.T) {
 	cfg := auth.AdapterConfig{}
 	desired := auth.PluginSchema{
@@ -78,7 +62,6 @@ func TestWave10_DiffSchemasConcurrent(t *testing.T) {
 		wg.Add(1)
 		go run(map[string]bool{"directory_users": true}, 1, 1)
 	}
-	// Fresh-install shape concurrently: everything created, nothing unsafe.
 	freshBaseline, err := auth.DiffSchemas(auth.PluginSchema{}, desired, cfg, nil, false)
 	if err != nil {
 		t.Fatalf("fresh baseline: %v", err)
@@ -105,10 +88,6 @@ func TestWave10_DiffSchemasConcurrent(t *testing.T) {
 }
 
 // Hook ordering under concurrency: 16 simultaneous requests each carrying a
-// unique request tag observe before hooks strictly in plugin declaration
-// order ([p1 p2]) with no cross-request contamination. The shared order map
-// is mutex-guarded; the test fails under -race on any shared-state race and
-// fails functionally on any reorder or tag leak.
 func TestWave10_HookOrderUnderConcurrency(t *testing.T) {
 	var mu sync.Mutex
 	seen := map[string][]string{}

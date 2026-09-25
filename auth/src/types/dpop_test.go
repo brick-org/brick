@@ -6,8 +6,6 @@ import (
 )
 
 // TestDPoPOptionDefaults pins the upstream oauth-provider plugin defaults
-// (dpop.proofMaxAgeSeconds = 300, dpop.signingAlgorithms = the five
-// asymmetric JWS algorithms) for a zero DPoPOptions.
 func TestDPoPOptionDefaults(t *testing.T) {
 	var opts DPoPOptions
 	if got := opts.EffectiveProofMaxAgeSeconds(); got != DefaultDPoPProofMaxAgeSeconds {
@@ -30,8 +28,6 @@ func TestDPoPOptionDefaults(t *testing.T) {
 
 // TestDPoPOptionExplicitValues ensures explicit integrator values survive:
 // upstream applies defaults only when the option is unset (?? semantics), so
-// an explicit empty algorithm list stays empty (fail closed: no algorithm
-// accepted) rather than silently regaining the defaults.
 func TestDPoPOptionExplicitValues(t *testing.T) {
 	opts := DPoPOptions{ProofMaxAgeSeconds: 60, SigningAlgorithms: []string{"ES256"}}
 	if got := opts.EffectiveProofMaxAgeSeconds(); got != 60 {
@@ -52,7 +48,6 @@ func TestDPoPOptionExplicitValues(t *testing.T) {
 }
 
 // TestValidDPoPJkt pins the upstream dpop_jkt shape (base64url-encoded
-// SHA-256 JWK thumbprint: exactly 43 base64url chars, no padding).
 func TestValidDPoPJkt(t *testing.T) {
 	valid := strings.Repeat("aB3_-", 8) + "abc" // 43 chars from [A-Za-z0-9_-]
 	if len(valid) != 43 {

@@ -18,7 +18,6 @@ import (
 )
 
 // Update-session response must carry additional fields FLAT top-level
-// (session.theme), not nested under additionalFields. Get-session untouched.
 func TestUpdateSessionFlat_UpdateSessionFlatTheme(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := sessionTestOptions(db)
@@ -50,13 +49,10 @@ func TestUpdateSessionFlat_UpdateSessionFlatTheme(t *testing.T) {
 }
 
 // Revoke-other-sessions: revoke only LIVE others (expiresAt > now, exclude
-// current); expired rows survive; no Set-Cookie on this path.
 func TestUpdateSessionFlat_RevokeOtherLiveOnlyNoCookies(t *testing.T) {
 	ctx := context.Background()
 	db := newParityMemAdapter()
 	opts := sessionTestOptions(db)
-	// Current session due for refresh (30s left with 3600s/60s windows) so a
-	// cookie re-issue would fire pre-fix; post-fix must still emit none.
 	seedSessionUser(t, db, "f4revoke@example.com", "tok-f4-cur", time.Now().UTC().Add(30*time.Second))
 	userRow, err := db.FindOne(ctx, "user", []types.Where{{Field: "email", Value: "f4revoke@example.com"}}, nil)
 	if err != nil || userRow == nil {

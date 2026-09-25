@@ -1,14 +1,6 @@
 package auth_test
 
-// Wave 1 Agent D failing-first tests: upstream-faithful hook runtime.
-//   - before-hook results MERGE over the pending payload (with-hooks.ts
-//     `{...actualData, ...result.data}`), they do not replace it.
-//   - UpdateMany after-hooks observe the bulk result count via AfterBulk.
-//   - post-commit (Transaction flush) after-hook errors propagate: the
-//     Transaction call fails without rolling back, unless an
-//     onAfterCommitHookError-style handler is installed.
-//   - plugin adapter overrides replace the inner write (custom*Fn parity).
-//   - field validator/transform attributes execute on writes and reads.
+// hooked_wave1_test.go: upstream conformance (Better Auth v1.7.5).
 
 import (
 	"context"
@@ -40,8 +32,6 @@ func TestWave1BeforeHookPartialMapMerges(t *testing.T) {
 	if _, err := wrapped.Create(ctx, "user", input, nil); err != nil {
 		t.Fatal(err)
 	}
-	// Merge-not-replace: keys omitted by the before hook must survive, and
-	// the hook's keys win.
 	want := map[string]any{"id": "1", "role": "admin", "email": "a@example.com"}
 	for k, v := range want {
 		if inner.lastCreate[k] != v {
@@ -86,11 +76,9 @@ func TestWave1UpdateManyAfterBulkReceivesCount(t *testing.T) {
 	if n != 3 {
 		t.Fatalf("bulk count must pass through: got %d", n)
 	}
-	// Back-compat: the row-typed after hook still fires with nil.
 	if len(rowPayloads) != 1 || rowPayloads[0] != nil {
 		t.Fatalf("row after hook must fire once with nil, got %#v", rowPayloads)
 	}
-	// New: the bulk hook observes the count.
 	if len(bulkCounts) != 1 || bulkCounts[0] != 3 {
 		t.Fatalf("bulk after hook must observe count 3, got %v", bulkCounts)
 	}
@@ -112,7 +100,6 @@ func TestWave1PostCommitAfterErrorPropagates(t *testing.T) {
 	if !errors.Is(err, hookErr) {
 		t.Fatalf("post-commit after-hook error must propagate, got: %v", err)
 	}
-	// Committed work is not rolled back.
 	if n, _ := inner.Count(ctx, "user", nil); n != 1 {
 		t.Fatal("committed write must persist despite the after-hook failure")
 	}
@@ -130,7 +117,6 @@ func TestWave1PostCommitErrorHandlerSwallows(t *testing.T) {
 	}, auth.HookedAdapterOptions{
 		OnAfterCommitHookError: func(err error) { handled = append(handled, err) },
 	})
-	// Handler installed: Transaction succeeds and the error is reported.
 	err := wrapped.Transaction(ctx, func(tx auth.Adapter) error {
 		_, err := tx.Create(ctx, "user", map[string]any{"id": "1"}, nil)
 		return err

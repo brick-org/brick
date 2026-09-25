@@ -8,7 +8,6 @@ import (
 )
 
 // stubSecondaryStorage is a minimal auth.SecondaryStorage for constructor
-// tests.
 type stubSecondaryStorage struct {
 	values map[string]string
 }

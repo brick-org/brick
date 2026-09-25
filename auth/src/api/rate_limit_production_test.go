@@ -9,7 +9,6 @@ import (
 )
 
 // stubRateLimitPlugin implements types.Plugin plus the rate-limit provider
-// surface for plugin-rule resolution tests.
 type stubRateLimitPlugin struct {
 	id    string
 	rules []types.PluginRateLimitRule

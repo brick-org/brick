@@ -47,7 +47,6 @@ func TestFilterV1_IssuanceLegFiltersReturnedFalse(t *testing.T) {
 			cacheVal = c.Name + "=" + c.Value
 		}
 	}
-	// Locate the session_data cookie regardless of configured name.
 	if cacheVal == "" {
 		for _, c := range out {
 			if c.Value != "" {

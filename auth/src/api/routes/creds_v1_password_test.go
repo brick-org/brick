@@ -31,7 +31,6 @@ func credsPasswordAPI(t *testing.T, opts types.Options) humatest.TestAPI {
 const credsResetGenericMessage = "If this email exists in our system, check your email for the reset link"
 
 // password.test.ts "should not reveal user existence on failure" (+ the
-// warn leg from sign-in.test.ts "logs expected auth validation failures").
 func TestCredsV1_RequestResetUnknownUserWarnsGeneric(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -62,7 +61,6 @@ func TestCredsV1_RequestResetUnknownUserWarnsGeneric(t *testing.T) {
 }
 
 // password.test.ts "should allow callbackURL to have multiple query params":
-// the reset URL must carry callbackURL encoded so it round-trips verbatim.
 func TestCredsV1_ResetURLCallbackEncoding(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -81,8 +79,6 @@ func TestCredsV1_ResetURLCallbackEncoding(t *testing.T) {
 	if resp.Code != 200 {
 		t.Fatalf("status = %d: %s", resp.Code, resp.Body.String())
 	}
-	// The token is the last path segment before the query (upstream splits
-	// url on "?" then "/"), and the callbackURL must decode verbatim.
 	plain := strings.SplitN(capturedURL, "?", 2)
 	if len(plain) != 2 {
 		t.Fatalf("reset URL must carry a query string: %q", capturedURL)
@@ -141,7 +137,6 @@ func TestCredsV1_RequestResetRejectsUntrustedRedirect(t *testing.T) {
 }
 
 // password.test.ts verify-password legs: correct verifies, wrong is 400
-// INVALID_PASSWORD, missing session is 401.
 func TestCredsV1_VerifyPasswordStatuses(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -181,7 +176,6 @@ func TestCredsV1_VerifyPasswordStatuses(t *testing.T) {
 }
 
 // password.test.ts "shouldn't allow the token to be used twice" at the HTTP
-// layer: consume once succeeds, replay is 400 INVALID_TOKEN.
 func TestCredsV1_ResetTokenSingleUseHTTP(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -221,8 +215,6 @@ func TestCredsV1_ResetTokenSingleUseHTTP(t *testing.T) {
 }
 
 // password.test.ts "should expire" (callback leg): GET
-// /reset-password/{token} redirects to the callbackURL with the token when
-// live, and to ?error=INVALID_TOKEN when unknown.
 func TestCredsV1_ResetCallbackRedirect(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)

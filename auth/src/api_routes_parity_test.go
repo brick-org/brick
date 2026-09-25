@@ -301,7 +301,6 @@ func TestParity_PasswordResetRedirectToFlow(t *testing.T) {
 	resp, _ := signUp(t, srv.URL, "parity-reset-redirect@example.com")
 	resp.Body.Close()
 
-	// Untrusted redirectTo is rejected.
 	badResp, err := http.Post(srv.URL+"/api/auth/request-password-reset", "application/json",
 		strings.NewReader(`{"email":"parity-reset-redirect@example.com","redirectTo":"https://evil.example/reset"}`))
 	if err != nil {
@@ -312,7 +311,6 @@ func TestParity_PasswordResetRedirectToFlow(t *testing.T) {
 		t.Fatalf("untrusted redirectTo expected 403, got %d", badResp.StatusCode)
 	}
 
-	// Trusted redirectTo lands in the emailed callback URL.
 	okResp, err := http.Post(srv.URL+"/api/auth/request-password-reset", "application/json",
 		strings.NewReader(`{"email":"parity-reset-redirect@example.com","redirectTo":"`+srv.URL+`/new-password"}`))
 	if err != nil {

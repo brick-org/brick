@@ -1,24 +1,6 @@
 package api
 
-// AUTH-V10-02 — adversarial and cross-language conformance (tests only).
-//
-// This file owns the api package's Wave 10 adversarial coverage: rate-limit
-// bursts against the memory backend (exactly-max admission under
-// concurrency), ConsumeResolvedRateLimit burst parity, and rate-limit path
-// normalization fuzzing.
-//
-// Upstream references (pinned Better Auth v1.7.5 at 5468e6bf):
-//   - packages/better-auth/src/api/rate-limiter/index.ts
-//     (BetterAuthRateLimitStorage.consume single-step consume,
-//     onRequestRateLimit, getDefaultSpecialRules, longestObservedWindow)
-//   - packages/better-auth/src/api/rate-limiter/index.test.ts (window
-//     rollover, retry-after, failed-request counting, storage-error
-//     semantics)
-//
-// Work limits pinned for this file: burst sizes are fixed (32 racers max)
-// so the suite stays fast under -race; fuzz paths are capped at 1KiB. The
-// memory backend is process-global, so every burst uses a unique key. No
-// production code is changed here.
+// wave10_ratelimit_test.go: upstream conformance (Better Auth v1.7.5).
 
 import (
 	"context"
@@ -31,8 +13,6 @@ import (
 )
 
 // Memory-backend burst: 32 concurrent consumes against Max=8 admit exactly 8
-// (single-step check-and-increment; no stale-read pass-through), and the
-// limiter stays limited afterwards with a positive retry-after.
 func TestWave10_MemoryBurstAllowsExactlyMax(t *testing.T) {
 	storage := MemoryRateLimitStorage{}
 	key := fmt.Sprintf("w10-burst-%d", time.Now().UnixNano())
@@ -60,8 +40,6 @@ func TestWave10_MemoryBurstAllowsExactlyMax(t *testing.T) {
 }
 
 // Resolved-burst parity through the production entry point: the same
-// exactly-max admission holds via ConsumeResolvedRateLimit on the memory
-// backend, and distinct keys do not share buckets.
 func TestWave10_ConsumeResolvedBurstMemoryBackend(t *testing.T) {
 	opts := enabledOptions()
 	base := fmt.Sprintf("w10-resolved-%d", time.Now().UnixNano())
@@ -96,11 +74,9 @@ func TestWave10_ConsumeResolvedBurstMemoryBackend(t *testing.T) {
 	if got := burst(base + "|a"); got != max {
 		t.Fatalf("resolved burst allowed = %d, want exactly %d", got, max)
 	}
-	// A sibling key has an independent bucket (no cross-key leakage).
 	if got := burst(base + "|b"); got != max {
 		t.Fatalf("sibling bucket allowed = %d, want exactly %d", got, max)
 	}
-	// The first bucket is still exhausted.
 	ok, _, err := ConsumeResolvedRateLimit(context.Background(), resolvedRateLimit{
 		Key:    base + "|a",
 		Window: 10 * time.Second,
@@ -112,7 +88,6 @@ func TestWave10_ConsumeResolvedBurstMemoryBackend(t *testing.T) {
 }
 
 // Window rollover under burst: after the window elapses, the bucket reopens
-// for exactly max again (no stuck-limited, no stuck-open).
 func TestWave10_MemoryWindowRollover(t *testing.T) {
 	storage := MemoryRateLimitStorage{}
 	key := fmt.Sprintf("w10-rollover-%d", time.Now().UnixNano())
@@ -145,7 +120,6 @@ func TestWave10_MemoryWindowRollover(t *testing.T) {
 }
 
 // FuzzWave10_NormalizeRateLimitPath fuzzes path normalization: it never
-// panics, always returns a "/"-rooted path, and is deterministic.
 func FuzzWave10_NormalizeRateLimitPath(f *testing.F) {
 	f.Add("/api/auth/sign-in/email", "/api/auth")
 	f.Add("/api/auth/", "/api/auth/")

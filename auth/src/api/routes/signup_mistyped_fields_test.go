@@ -70,8 +70,6 @@ func TestSignUpMistyped_SignUpJSONValidStillSucceeds(t *testing.T) {
 }
 
 // Unmarshal-level pins: mistyped KNOWN keys must be a decode error (not
-// silently dropped as absent). Unknown keys must still pass through to
-// Extra for additionalFields.
 func TestSignUpMistyped_SignUpUnmarshalMistypedKnownKeysError(t *testing.T) {
 	t.Run("rememberMe banana errors", func(t *testing.T) {
 		var b signUpBody

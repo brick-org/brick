@@ -28,9 +28,6 @@ func parityToNumber(v any) (int, bool) {
 	}
 }
 
-// parityMemAdapter is a minimal in-memory types.Adapter for parity unit
-// tests. Rows are stored with snake_case keys, mirroring the physical
-// row-key contract route code reads.
 type parityMemAdapter struct {
 	mu     sync.Mutex
 	tables map[string][]map[string]any
@@ -121,9 +118,6 @@ func parityMatches(row map[string]any, where []types.Where) bool {
 }
 
 // parityClauseMatches evaluates one where clause, honoring comparison
-// operators for time.Time and numeric cells (needed by secondary-storage
-// live-row guards and verification expiry sweeps). Unknown operators fall
-// back to equality, preserving the historical behavior for eq-only callers.
 func parityClauseMatches(row map[string]any, clause types.Where) bool {
 	op := clause.Operator
 	if op == "" || op == types.OpEq {
@@ -149,7 +143,6 @@ func parityClauseMatches(row map[string]any, clause types.Where) bool {
 }
 
 // parityCompareValues orders two cells, supporting time.Time and numerics.
-// Incomparable pairs compare as equal (0) so guarded clauses simply miss.
 func parityCompareValues(got, want any) int {
 	if gotTime, ok := got.(time.Time); ok {
 		if wantTime, ok := want.(time.Time); ok {

@@ -1,16 +1,6 @@
 package types
 
-// Exclusion ledger for AUTH-R5-02 (closed Wave 10).
-//
-// The Wave-10 audit wired or removed every `Runtime: pending` marker, so no
-// pending marker may remain in package types: any new one fails
-// TestExcludedMarkerLedger on purpose. The 7 remaining `Runtime: excluded`
-// markers below are intentional exclusions from the PARITY_V2.md Wave-10
-// registry (W10-01/04/05): legacy compat surface with zero runtime effect,
-// preserved instead of removed.
-//
-// Ledger format: "file.go|symbol|W10-XX". Symbol is the nearest
-// type/func/field name carrying the marker.
+// marker_audit_test.go: upstream conformance (Better Auth v1.7.5).
 
 import (
 	"os"
@@ -21,19 +11,6 @@ import (
 )
 
 // pendingMarkerLedger is the full AUTH-R5-02 reconciled set (7 markers).
-// Counts and symbols were verified against actual consumers on 2026-09-21:
-// routes (api/routes), oauth2 baseProvider, and social-providers bags.
-// See the AUTH-R5-02 return report for the per-marker call-site evidence.
-//
-// AUTH-C7-03 update: the AccountSubjectFunc/AccountSubjectProvider markers
-// flipped to wired (routes resolve per sign-in/link seam via
-// oauth2.ResolveAccountSubject in api/routes/social.go) and left this ledger.
-//
-// Wave 10 update: RequireLocalEmailVerified flipped to wired (implicit-
-// linking gate at api/routes/social.go:1056); OnExistingUserSignUpRequest,
-// ValidateUserInfoFunc, UserOptions.ValidateUserInfo, and
-// UpdateUserInfoOnLink flipped to wired (Wave 10 seams + tests). All left
-// this ledger.
 var excludedMarkerLedger = []string{
 	"oauth.go|TokenEndpointAuth|W10-01",
 	"oauth.go|ClientAssertionProvider|W10-01",
@@ -45,9 +22,6 @@ var excludedMarkerLedger = []string{
 }
 
 // TestExcludedMarkerLedger pins the exclusion set. Any new
-// `Runtime: pending` marker fails the test; any new `Runtime: excluded`
-// marker must add a ledger entry plus a PARITY_V2.md Wave-10 registry item.
-// Wired options must flip to `Runtime: wired:<file:line>`.
 func TestExcludedMarkerLedger(t *testing.T) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {
@@ -81,8 +55,6 @@ func TestExcludedMarkerLedger(t *testing.T) {
 		currentSymbol := ""
 		for i, ln := range lines {
 			trimmed := strings.TrimSpace(ln)
-			// Track the nearest enclosing declaration so a marker maps
-			// to its symbol: type/func names and struct fields.
 			if sym := declSymbol(trimmed); sym != "" {
 				currentSymbol = sym
 			}
@@ -95,13 +67,7 @@ func TestExcludedMarkerLedger(t *testing.T) {
 			}
 			owner := excludedOwner(ln)
 			sym := currentSymbol
-			// Field markers sit on the field line itself (`Name Type`
-			// with a trailing comment above); prefer the field name
-			// from the next non-comment, non-empty line when the
-			// tracked symbol is the parent struct.
 			if next := nextFieldSymbol(lines, i); next != "" {
-				// Only override when the marker precedes the field
-				// declaration (comment-above-field style).
 				sym = next
 			}
 			got = append(got, found{file: e.Name(), line: i + 1, symbol: sym, owner: owner})
@@ -130,8 +96,6 @@ func TestExcludedMarkerLedger(t *testing.T) {
 		want[k] = true
 	}
 	for _, f := range got {
-		// Match on file|symbol prefix; owner suffixes carry line
-		// numbers that may shift without semantic change.
 		matched := false
 		for k := range want {
 			parts := strings.SplitN(k, "|", 3)
@@ -157,7 +121,6 @@ func declSymbol(trimmed string) string {
 			continue
 		}
 		rest := strings.TrimPrefix(trimmed, kw)
-		// func (recv) Name... -> Name; type Name ... -> Name.
 		if strings.HasPrefix(rest, "(") {
 			if idx := strings.Index(rest, ")"); idx != -1 {
 				rest = strings.TrimSpace(rest[idx+1:])
@@ -192,12 +155,9 @@ func nextFieldSymbol(lines []string, markerIdx int) string {
 		fields := strings.Fields(trimmed)
 		if len(fields) >= 2 {
 			name := strings.Trim(fields[0], "(*)")
-			// Skip composite literals and control flow.
 			if name == "" || strings.ContainsAny(name, "(){};=*") {
 				continue
 			}
-			// Heuristic: a struct field line has 2+ fields and the
-			// first is an exported identifier.
 			if c := name[0]; c >= 'A' && c <= 'Z' {
 				return name
 			}

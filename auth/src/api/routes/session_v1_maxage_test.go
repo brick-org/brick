@@ -17,7 +17,6 @@ import (
 // Max-Age ceiling on session refresh" (#9609). The session_token cookie must
 // carry Max-Age=expiresIn (upstream getCookies/setSessionCookie,
 // cookies/index.ts:122-125, session.ts:386-397); non-persistent sessions stay
-// Max-Age-free session cookies.
 
 // sessionTokenMaxAge extracts Max-Age for the named cookie from the response.
 func sessionTokenMaxAge(t *testing.T, resp *httptest.ResponseRecorder, name string) (int, bool) {
@@ -46,7 +45,7 @@ func sessionTokenMaxAge(t *testing.T, resp *httptest.ResponseRecorder, name stri
 
 func TestV1_SessionTokenMaxAgeDefault(t *testing.T) {
 	db := newParityMemAdapter()
-	opts := sessionTestOptions(db) // ExpiresIn 3600
+	opts := sessionTestOptions(db)
 	cookie, err := issueSessionCookie(opts, CookieRequestHeaders{}, "tok", time.Now().UTC().Add(time.Hour), false)
 	if err != nil {
 		t.Fatal(err)
@@ -55,7 +54,6 @@ func TestV1_SessionTokenMaxAgeDefault(t *testing.T) {
 		t.Fatalf("persistent session_token MaxAge = %d, want 3600", cookie.MaxAge)
 	}
 
-	// Non-persistent sessions stay true session cookies (no Max-Age).
 	transient, err := issueSessionCookie(opts, CookieRequestHeaders{}, "tok", time.Now().UTC().Add(time.Hour), true)
 	if err != nil {
 		t.Fatal(err)
@@ -71,7 +69,6 @@ func TestV1_SessionTokenMaxAgeRefreshCeiling(t *testing.T) {
 	opts := sessionTestOptions(db)
 	opts.Session.ExpiresIn = ceiling
 	opts.Session.UpdateAge = intPtr(30)
-	// Due session so GET performs the refresh write + cookie re-issue.
 	seedSessionUser(t, db, "ceiling@example.com", "tok-ceiling", time.Now().UTC().Add(30*time.Second))
 	_, api := humatest.New(t, huma.DefaultConfig("Test", "1.0.0"))
 	GetSession(api, "/api/auth", opts)
@@ -89,8 +86,6 @@ func TestV1_SessionTokenMaxAgeRefreshCeiling(t *testing.T) {
 }
 
 func TestV1_SessionTokenMaxAgeSignInDefault(t *testing.T) {
-	// Default ExpiresIn (7 days) issues Max-Age=604800, matching the upstream
-	// sign-in cookie assertion at the issuance-helper level.
 	db := newParityMemAdapter()
 	opts := parityTestOptions(db)
 	cookie, err := issueSessionCookie(opts, CookieRequestHeaders{}, "tok", time.Now().UTC().Add(7*24*time.Hour), false)

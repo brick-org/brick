@@ -14,17 +14,11 @@ import (
 
 // Pinned upstream: Better Auth v1.7.5 session ipAddress/userAgent issuance
 // (db/internal-adapter.ts:500-502, createSession):
-//
 //	ipAddress: headers ? getIP(headers, options) || "" : ""
 //	userAgent: headers?.get("user-agent") || ""
-//
 // createIssuedSession (generate-id.go) is the Go issuance seam and must
-// store both columns on every issued row ("" default, never nil/NULL).
 
 // ipuaTestAPI registers the credential issuance + read routes behind the
-// production-equivalent stored-request middleware (auth/api/index.go
-// always-on layer: WithStoredRequest(requestFromContext(...))), so handler
-// ctx carries the live request headers exactly as in production.
 func ipuaTestAPI(t *testing.T, opts types.Options) humatest.TestAPI {
 	t.Helper()
 	_, api := humatest.New(t, huma.DefaultConfig("Test", "1.0.0"))
@@ -79,8 +73,6 @@ func ipuaStoredSession(t *testing.T, db *parityMemAdapter, token string) map[str
 }
 
 // sign-up.test.ts "should get the ipAddress and userAgent from headers":
-// signUpEmail with x-forwarded-for/user-agent headers stores them on the
-// issued session; getSession echoes them back.
 func TestIPUA_SignUpStoresIPAndUserAgent(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -110,8 +102,6 @@ func TestIPUA_SignUpStoresIPAndUserAgent(t *testing.T) {
 }
 
 // sign-in.test.ts "should read the ip address and user agent from the
-// headers": signInEmail with X-Forwarded-For/User-Agent headers stores them
-// on the issued session; getSession echoes them back.
 func TestIPUA_SignInStoresIPAndUserAgent(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -148,8 +138,6 @@ func TestIPUA_SignInStoresIPAndUserAgent(t *testing.T) {
 }
 
 // The ""-default leg: with no request on ctx (programmatic issuance),
-// both columns store as "" (never nil/NULL) on the DB row and on the
-// secondary-only in-memory return.
 func TestIPUA_NoRequestStoresEmptyStrings(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -175,8 +163,6 @@ func TestIPUA_NoRequestStoresEmptyStrings(t *testing.T) {
 }
 
 // Direct IP resolution order: X-Forwarded-For leftmost non-empty hop, then
-// X-Real-IP, then RemoteAddr host (port stripped, bare IPv6 tolerated),
-// then "".
 func TestIPUA_ClientIPResolution(t *testing.T) {
 	cases := []struct {
 		name      string

@@ -14,8 +14,6 @@ import (
 
 func credsFalsePtr() *bool { v := false; return &v }
 
-// Pinned upstream: sign-up.test.ts — core (non-social, non-CSRF) legs.
-
 func credsSignUpAPI(t *testing.T, opts types.Options) humatest.TestAPI {
 	t.Helper()
 	_, api := humatest.New(t, huma.DefaultConfig("Test", "1.0.0"))
@@ -25,7 +23,6 @@ func credsSignUpAPI(t *testing.T, opts types.Options) humatest.TestAPI {
 }
 
 // sign-up.test.ts "should return additionalFields in signUpEmail response":
-// declared additional fields persist and echo with defaults applied.
 func TestCredsV1_SignUpAdditionalFields(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -67,7 +64,6 @@ func TestCredsV1_SignUpAdditionalFields(t *testing.T) {
 	}
 }
 
-// sign-up.test.ts "should not allow user to set the field that is set to
 // input: false": a truthy input:false value fails with the upstream message.
 func TestCredsV1_SignUpInputFalseRejected(t *testing.T) {
 	db := newParityMemAdapter()
@@ -120,7 +116,6 @@ func TestCredsV1_SignUpEmptyName(t *testing.T) {
 }
 
 // sign-up.test.ts "should throw status code 400 when passing invalid body"
-// (missing password surfaces a client error, never a user row).
 func TestCredsV1_SignUpMissingPasswordIsClientError(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -137,7 +132,6 @@ func TestCredsV1_SignUpMissingPasswordIsClientError(t *testing.T) {
 }
 
 // sign-up.test.ts sendOnSignUp legs: the verification URL must carry the
-// callbackURL encoded so it round-trips verbatim.
 func TestCredsV1_SignUpVerificationURLEncoding(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -171,7 +165,6 @@ func TestCredsV1_SignUpVerificationURLEncoding(t *testing.T) {
 }
 
 // sign-in.test.ts "should not allow duplicate sign-ups with different email
-// casing": sign-up stores lowercase and dedupes case-insensitively.
 func TestCredsV1_SignUpDuplicateCaseInsensitive(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -194,7 +187,6 @@ func TestCredsV1_SignUpDuplicateCaseInsensitive(t *testing.T) {
 }
 
 // sign-in.test.ts "logs expected auth validation failures below error
-// level": short passwords warn without error-level logs.
 func TestCredsV1_SignUpShortPasswordWarns(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -227,9 +219,6 @@ func TestCredsV1_SignUpShortPasswordWarns(t *testing.T) {
 }
 
 // sign-up.test.ts enumeration-protection indistinguishability legs
-// (#9346): real and synthetic users share image key presence/values, key
-// sets, and token:null; the synthetic echoes the request body with a fresh
-// id while defaults apply to both.
 func TestCredsV1_SyntheticResponseParity(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -264,8 +253,6 @@ func TestCredsV1_SyntheticResponseParity(t *testing.T) {
 	if err := json.Unmarshal(secondResp.Body.Bytes(), &second); err != nil {
 		t.Fatalf("decode second: %v", err)
 	}
-	// Same key sets (order-insensitive here; the Go serializer emits
-	// sorted keys deterministically for both sides).
 	if len(first.User) != len(second.User) {
 		t.Fatalf("key count %d vs %d: %#v vs %#v", len(first.User), len(second.User), first.User, second.User)
 	}

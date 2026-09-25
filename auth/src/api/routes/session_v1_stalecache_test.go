@@ -15,12 +15,6 @@ import (
 //     retired cookie plus its chunks (session.ts:102-109;
 //     cookie-cache-fallback.test.ts "ignores retired session_data when caching
 //     is disabled in configuration").
-//   - shouldUseCookieCache && value present but undecodable → expireCookie
-//     (session.ts:120-122; "should expire malformed compact session_data and
-//     fall through to session_token DB validation").
-//
-// In both cases the database session is still served; the stale cache entries
-// are expired so they cannot linger or shadow the re-issued cache.
 
 func expiredNamedCookie(respCookies []http.Cookie, name string) (http.Cookie, bool) {
 	for _, c := range respCookies {
@@ -39,7 +33,7 @@ func TestV1_MalformedCacheExpiredAndServed(t *testing.T) {
 	seedSessionUser(t, db, "malformed@example.com", "tok-malformed", time.Now().UTC().Add(time.Hour))
 
 	header := signedSessionHeader(t, opts, "tok-malformed") + "; " +
-		sessionDataCookieName + "=bm90LWpzb24" // "not-json": present but undecodable
+		sessionDataCookieName + "=bm90LWpzb24"
 	res, err := resolveGetSession(ctx, opts, getSessionRequest{
 		token:        "tok-malformed",
 		cookieHeader: header,
@@ -65,7 +59,6 @@ func TestV1_RetiredCacheCleanedWhenDisabled(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := sessionTestOptions(db)
 	opts.Session.CookieCache.Enabled = false
-	// Custom cookie names mirror the upstream fallback tests.
 	opts.Advanced.Cookies = map[string]types.CookieConfig{
 		"session_token": {Name: "custom.session_token"},
 		"session_data":  {Name: "custom.session"},

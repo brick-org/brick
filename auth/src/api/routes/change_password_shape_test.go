@@ -20,7 +20,6 @@ func f1ChangePwAPI(t *testing.T, opts types.Options) humatest.TestAPI {
 }
 
 // Gap 1 (V3-08 §8 / upstream update-user.ts:287,304,307-310): non-revoke
-// success must return {token:null, user} while keeping status:true.
 func TestChangePasswordShape_NonRevokeReturnsNullTokenAndUser(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -48,7 +47,6 @@ func TestChangePasswordShape_NonRevokeReturnsNullTokenAndUser(t *testing.T) {
 	if !strings.Contains(body, `"status":true`) {
 		t.Fatalf("non-revoke must keep status:true: %s", body)
 	}
-	// token must serialize as explicit null, not be omitted (omitempty watch).
 	if !strings.Contains(body, `"token":null`) {
 		t.Fatalf("non-revoke token must be null (not omitted): %s", body)
 	}

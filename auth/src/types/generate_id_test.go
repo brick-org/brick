@@ -6,9 +6,6 @@ import (
 )
 
 // TestMintModelID_Default ports the default branch of upstream generateIdFunc
-// (create-context.ts:248-263): with no generateId configured the minter
-// returns a 32-character random identifier, honoring an explicit size hint
-// and falling back to 32 for non-positive hints.
 func TestMintModelID_Default(t *testing.T) {
 	var opts Options
 	id, ok := MintModelID(opts, "user", nil)
@@ -29,9 +26,6 @@ func TestMintModelID_Default(t *testing.T) {
 }
 
 // TestMintModelID_CustomFunc ports the custom-function branch of upstream
-// generateIdFunc: the configured function wins and receives the model name
-// plus the (possibly nil) size hint. A false return means "database issues
-// the ID" and must propagate as ("", false).
 func TestMintModelID_CustomFunc(t *testing.T) {
 	var gotModel string
 	var gotSize *int
@@ -52,7 +46,6 @@ func TestMintModelID_CustomFunc(t *testing.T) {
 	if gotSize == nil || *gotSize != 24 {
 		t.Fatalf("custom func must receive the size hint, got %v", gotSize)
 	}
-	// Nil size hint passes through as nil for model-row mints.
 	if _, ok := MintModelID(opts, "user", nil); !ok {
 		t.Fatal("custom func true must propagate")
 	}
@@ -84,7 +77,6 @@ func TestMintModelID_UUIDMode(t *testing.T) {
 
 // TestMintModelID_SerialMode ports the "serial"/false shorthand: the minter
 // resolves to ("", false) so the database issues the ID (upstream
-// generateId:false).
 func TestMintModelID_SerialMode(t *testing.T) {
 	var opts Options
 	opts.Advanced.Database.GenerateID.Mode = GenerateIDModeSerial

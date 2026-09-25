@@ -54,15 +54,8 @@ func (a *issuingMemAdapter) omittedCount(model string) int {
 	return a.omitted[model]
 }
 
-// Transaction preserves database-issued-ID semantics inside transactions
-// (upstream runWithTransaction, e.g. sign-up.ts:183): the tx clone issues
-// IDs for omitted creates exactly like the outer adapter, and commits back
-// on success. Without this, the inherited parityMemAdapter.Transaction
-// would run the tx against a plain clone that never issues IDs, breaking
-// serial-mode creation paths that transact (sign-up user+account).
 func (a *issuingMemAdapter) Transaction(ctx context.Context, fn func(tx types.Adapter) error) error {
 	inner := &issuingMemAdapter{parityMemAdapter: newParityMemAdapter(), omitted: map[string]int{}}
-	// Seed the tx with a snapshot of current tables.
 	a.parityMemAdapter.mu.Lock()
 	for model, rows := range a.parityMemAdapter.tables {
 		for _, row := range rows {
@@ -87,14 +80,12 @@ func (a *issuingMemAdapter) Transaction(ctx context.Context, fn func(tx types.Ad
 	return nil
 }
 
-// generateIDCall records one custom-generateID invocation.
 type generateIDCall struct {
 	model string
 	size  *int
 }
 
 // recordingGenerateID returns a custom GenerateID func that records every
-// (model, size) pair and mints prefix+model IDs.
 func recordingGenerateID(prefix string, calls *[]generateIDCall, mu *sync.Mutex) types.GenerateIDFunc {
 	return func(model string, size *int) (string, bool) {
 		mu.Lock()
@@ -131,11 +122,6 @@ func signUpViaAPI(t *testing.T, api humatest.TestAPI, email string) string {
 }
 
 // TestGenerateID_CustomFuncHonoredAtSignUp ports the upstream context-generator
-// contract (create-context.ts generateIdFunc + internal-adapter createSession
-// + sign-up synthetic/real creates): a custom generateId receives the model
-// name (user/account/session) with a nil size hint, and every model-row ID it
-// returns is persisted. Session/verification tokens are NOT model IDs
-// (upstream generateId(32) direct) and must keep random values.
 func TestGenerateID_CustomFuncHonoredAtSignUp(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -197,8 +183,6 @@ func TestGenerateID_CustomFuncHonoredAtSignUp(t *testing.T) {
 }
 
 // TestGenerateID_UUIDModeAtSignUp ports the "uuid" shorthand to creation:
-// model-row IDs come out as UUIDs while the session token keeps its random
-// shape.
 func TestGenerateID_UUIDModeAtSignUp(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -228,10 +212,7 @@ func TestGenerateID_UUIDModeAtSignUp(t *testing.T) {
 	}
 }
 
-// TestGenerateID_SerialModeOmitsIDs ports the "serial" shorthand to creation
 // (upstream generateId:false): routes omit the ID so the database issues it,
-// and downstream rows consume the persisted return (the account links the
-// issued user ID, not a pre-minted value).
 func TestGenerateID_SerialModeOmitsIDs(t *testing.T) {
 	db := newIssuingMemAdapter()
 	opts := emailAuthTestOptions(db.parityMemAdapter)
@@ -271,10 +252,6 @@ func TestGenerateID_SerialModeOmitsIDs(t *testing.T) {
 }
 
 // TestSecondaryOnlySignUpSkipsDB ports the secondary-only branch of upstream
-// createSession (internal-adapter.ts:568-576, executeMainFn: storeInDb): with
-// secondary storage and StoreSessionInDatabase unset, issuance writes no
-// primary session row and serves entirely from the secondary pair. The
-// session ID still honors the custom generator.
 func TestSecondaryOnlySignUpSkipsDB(t *testing.T) {
 	db := newParityMemAdapter()
 	store := newMapSecondaryStorage(true)
@@ -307,7 +284,6 @@ func TestSecondaryOnlySignUpSkipsDB(t *testing.T) {
 	}
 }
 
-// TestSecondaryOnlySignInSkipsDB covers the sign-in issuance leg of the same
 // upstream branch: no primary session row is written in secondary-only mode.
 func TestSecondaryOnlySignInSkipsDB(t *testing.T) {
 	db := newParityMemAdapter()
@@ -342,10 +318,7 @@ func TestSecondaryOnlySignInSkipsDB(t *testing.T) {
 	}
 }
 
-// TestGenerateID_SerialSecondaryOnlySessionFallsBack ports the
 // `generatedId !== false ? generatedId : generateId()` fallback in upstream
-// createSession: a serial deployment with secondary-only sessions still mints
-// an in-memory random session ID (there is no database to issue one).
 func TestGenerateID_SerialSecondaryOnlySessionFallsBack(t *testing.T) {
 	db := newParityMemAdapter()
 	store := newMapSecondaryStorage(true)
@@ -372,7 +345,6 @@ func TestGenerateID_SerialSecondaryOnlySessionFallsBack(t *testing.T) {
 	}
 }
 
-// errSecondaryStorage fails every Set, pinning the issuance-failure matrix.
 type errSecondaryStorage struct {
 	*mapSecondaryStorage
 }
@@ -381,7 +353,6 @@ func (e *errSecondaryStorage) Set(string, string, *int) error {
 	return errors.New("secondary unavailable")
 }
 
-// failSessionAdapter fails session-row creates, pinning the DB-failure leg.
 type failSessionAdapter struct {
 	*parityMemAdapter
 }
@@ -394,9 +365,6 @@ func (a *failSessionAdapter) Create(ctx context.Context, model string, data map[
 }
 
 // TestSessionIssuanceFailureMatrix ports the failure legs around upstream
-// createSession mirroring: a failing secondary mirror fails issuance loudly
-// (like the database create), and a database failure surfaces instead of a
-// half-issued session.
 func TestSessionIssuanceFailureMatrix(t *testing.T) {
 	t.Run("mirror failure fails sign-up", func(t *testing.T) {
 		db := newParityMemAdapter()
@@ -447,10 +415,7 @@ func TestSessionIssuanceFailureMatrix(t *testing.T) {
 	})
 }
 
-// TestGenerateID_VerificationRowUsesCustomFunc pins the custom generator on
 // verification-row creation (upstream createVerificationValue flows through
-// the adapter defaultValue honoring generateId): the reset-password row ID
-// carries the custom mint while the token itself stays random.
 func TestGenerateID_VerificationRowUsesCustomFunc(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := parityTestOptions(db)
@@ -484,8 +449,6 @@ func TestGenerateID_VerificationRowUsesCustomFunc(t *testing.T) {
 }
 
 // TestGenerateID_EmailVerificationSessionHonorsCustomFunc pins the custom
-// generator on the post-verification auto-sign-in session (the fourth
-// issuance leg sharing createSession semantics).
 func TestGenerateID_EmailVerificationSessionHonorsCustomFunc(t *testing.T) {
 	ctx := context.Background()
 	db := newParityMemAdapter()

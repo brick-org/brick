@@ -47,7 +47,6 @@ func TestCollectPluginEndpointsMergesLegacyAndNamed(t *testing.T) {
 			t.Fatalf("endpoints[%d] = %q, want %q (full %+v)", i, got[i].OperationID, op, got)
 		}
 	}
-	// Legacy-only plugins keep working; nil plugins are skipped.
 	if out := CollectPluginEndpoints([]Plugin{collectPlugin{id: "x"}}); len(out) != 0 {
 		t.Fatalf("empty plugin must contribute no endpoints, got %+v", out)
 	}
@@ -103,7 +102,6 @@ func TestCollectPluginMigrationsAndRun(t *testing.T) {
 	if err := RunPluginMigrationsUp(context.Background(), got); err != nil {
 		t.Fatal(err)
 	}
-	// Deterministic sorted execution order.
 	want := []string{"a-001", "a-002", "b-003"}
 	if len(order) != len(want) {
 		t.Fatalf("run order = %v, want %v", order, want)
@@ -124,7 +122,6 @@ func TestRunPluginMigrationsUpErrorWrapsName(t *testing.T) {
 	if err := RunPluginMigrationsUp(context.Background(), migrations); !errors.Is(err, boom) {
 		t.Fatalf("migration error must propagate, got: %v", err)
 	}
-	// Nil Up is a documented no-op.
 	if err := RunPluginMigrationsUp(context.Background(), map[string]PluginMigration{"x": {}}); err != nil {
 		t.Fatalf("nil Up must be a no-op, got: %v", err)
 	}

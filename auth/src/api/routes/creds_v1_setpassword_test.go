@@ -47,7 +47,6 @@ func credsSetPasswordErrCode(err error) string {
 }
 
 // update-user.test.ts setPassword "sets the password on the existing
-// passwordless credential account".
 func TestCredsV1_SetPasswordOnPasswordlessAccount(t *testing.T) {
 	ctx := context.Background()
 	db := newParityMemAdapter()
@@ -77,7 +76,6 @@ func TestCredsV1_SetPasswordOnPasswordlessAccount(t *testing.T) {
 }
 
 // A credential account that already has a password rejects with
-// PASSWORD_ALREADY_SET.
 func TestCredsV1_SetPasswordAlreadySet(t *testing.T) {
 	ctx := context.Background()
 	db := newParityMemAdapter()
@@ -108,7 +106,6 @@ func TestCredsV1_SetPasswordTooShort(t *testing.T) {
 	}
 }
 
-// No credential account (e.g. social-only user): SetPassword links one,
 // mirroring upstream linkAccount.
 func TestCredsV1_SetPasswordCreatesMissingAccount(t *testing.T) {
 	ctx := context.Background()

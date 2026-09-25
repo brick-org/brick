@@ -102,7 +102,6 @@ func TestSchemaDiff_SkipsDisableMigrations(t *testing.T) {
 }
 
 // Shared physical tables merge regardless of model order (upstream
-// "shared physical tables" suite with reversed=%s).
 func TestSchemaDiff_SharedPhysicalTables(t *testing.T) {
 	for _, reversed := range []bool{false, true} {
 		models := [][2]string{{"managed", "value"}, {"external", ""}}
@@ -291,7 +290,6 @@ func TestSchemaDiff_DiffSchemasFreshAndIncremental(t *testing.T) {
 			"connectionIssuer": {Type: auth.FieldTypeString, Required: boolPtrDiff(true)},
 		}},
 	}
-	// Fresh install: everything is created, nothing is unsafe.
 	fresh, err := auth.DiffSchemas(auth.PluginSchema{}, desired, cfg, nil, false)
 	if err != nil {
 		t.Fatalf("fresh diff must build: %v", err)
@@ -299,7 +297,6 @@ func TestSchemaDiff_DiffSchemasFreshAndIncremental(t *testing.T) {
 	if len(fresh.ToBeCreated) != 1 || len(fresh.UnsafeChanges) != 0 {
 		t.Fatalf("fresh diff must create without unsafe: %+v", fresh)
 	}
-	// Incremental on an empty table: safe ALTER.
 	current := auth.PluginSchema{
 		"directoryUser": {Fields: map[string]auth.FieldAttribute{
 			"externalId": {Type: auth.FieldTypeString},
@@ -312,7 +309,6 @@ func TestSchemaDiff_DiffSchemasFreshAndIncremental(t *testing.T) {
 	if len(empty.ToBeAdded) != 1 || len(empty.UnsafeChanges) != 0 {
 		t.Fatalf("empty table must plan a safe add: %+v", empty)
 	}
-	// Incremental on a populated table: unsafe refusal as data.
 	populated, err := auth.DiffSchemas(current, desired, cfg, map[string]bool{"directory_users": true}, false)
 	if err != nil {
 		t.Fatalf("populated diff must build: %v", err)
@@ -323,7 +319,6 @@ func TestSchemaDiff_DiffSchemasFreshAndIncremental(t *testing.T) {
 	if !strings.Contains(populated.UnsafeChanges[0], `Cannot add required column "connection_issuer" to populated table "directory_users"`) {
 		t.Fatalf("unsafe message uses physical names: %q", populated.UnsafeChanges[0])
 	}
-	// Nil populated map assumes populated (conservative offline default).
 	conservative, err := auth.DiffSchemas(current, desired, cfg, nil, false)
 	if err != nil {
 		t.Fatalf("conservative diff must build: %v", err)
@@ -331,7 +326,6 @@ func TestSchemaDiff_DiffSchemasFreshAndIncremental(t *testing.T) {
 	if len(conservative.UnsafeChanges) != 1 {
 		t.Fatalf("nil populated map must assume populated: %+v", conservative)
 	}
-	// Static defaults stay safe on populated tables.
 	withDefault := auth.PluginSchema{
 		"directoryUser": {Fields: map[string]auth.FieldAttribute{
 			"externalId":       {Type: auth.FieldTypeString},
@@ -389,8 +383,6 @@ func TestSchemaDiff_GetExpectedSchemaMergesSharedTables(t *testing.T) {
 		t.Fatal("shared fields must merge")
 	}
 	if !shared.DisableMigrations {
-		// Shared disableMigrations ANDs from true: any migrating
-		// contributor keeps the shared table migrating.
 	} else {
 		t.Fatal("shared table must migrate when any contributor migrates")
 	}

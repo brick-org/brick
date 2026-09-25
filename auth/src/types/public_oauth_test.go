@@ -6,7 +6,6 @@ import (
 )
 
 // oauthBareStub implements only the minimal OAuthProvider surface: it must
-// keep compiling and must NOT satisfy any optional capability interface.
 type oauthBareStub struct{}
 
 func (oauthBareStub) ID() string   { return "bare" }
@@ -22,7 +21,6 @@ func (oauthBareStub) GetUserInfo(tokens *OAuthTokens) (*OAuthUserInfo, error) {
 }
 
 // oauthCapStub implements the full new capability surface on top of the
-// bare provider.
 type oauthCapStub struct{ oauthBareStub }
 
 func (oauthCapStub) RequiresIDTokenNonce() bool { return true }
@@ -90,8 +88,6 @@ func TestOAuthProviderShapeStaysBackwardCompatible(t *testing.T) {
 	if core.ID() != "bare" {
 		t.Fatalf("bare provider ID = %q", core.ID())
 	}
-	// Every new capability must remain optional: a minimal provider keeps
-	// compiling without implementing any of them.
 	optional := []struct {
 		name string
 		ok   bool
@@ -309,7 +305,6 @@ func TestNonceShapeAndMatching(t *testing.T) {
 	if MatchIDTokenNonce("a", "b", IDTokenNonceExactOrSHA256) {
 		t.Error("unrelated nonce must fail even with sha256 comparison")
 	}
-	// SHA-256("hello") = 2cf24dba...b9824: Apple-style stored-digest match.
 	if !MatchIDTokenNonce("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", "hello", IDTokenNonceExactOrSHA256) {
 		t.Error("sha256-digest nonce should match under exact-or-sha256")
 	}

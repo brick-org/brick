@@ -17,9 +17,6 @@ import (
 // no secondary residue survives.
 
 // f7DeleteSecondarySetup builds secondary-enabled delete-user options over a
-// fresh mem adapter + map store. When dual is true the database also persists
-// session rows (StoreSessionInDatabase), covering both legs of the flag
-// matrix; otherwise sessions live in secondary storage only.
 func f7DeleteSecondarySetup(t *testing.T, dual bool) (*parityMemAdapter, *mapSecondaryStorage, types.Options) {
 	t.Helper()
 	db := newParityMemAdapter()
@@ -34,8 +31,6 @@ func f7DeleteSecondarySetup(t *testing.T, dual bool) (*parityMemAdapter, *mapSec
 }
 
 // f7DeleteSecondaryTokens returns the live secondary tokens for userID,
-// failing when issuance did not populate secondary storage (a vacuous test
-// would pass pre-fix without proving anything).
 func f7DeleteSecondaryTokens(t *testing.T, opts types.Options, store *mapSecondaryStorage, userID string) []string {
 	t.Helper()
 	refs := getSecondarySessionRefs(opts, userID)
@@ -56,7 +51,6 @@ func f7DeleteSecondaryTokens(t *testing.T, opts types.Options, store *mapSeconda
 }
 
 // f7AssertSecondaryPurged fails when any secondary session residue survives
-// for userID: per-token entries or the active-sessions index.
 func f7AssertSecondaryPurged(t *testing.T, ctx context.Context, db *parityMemAdapter, opts types.Options, store *mapSecondaryStorage, userID string, tokens []string) {
 	t.Helper()
 	if row, _ := db.FindOne(ctx, "user", []types.Where{{Field: "id", Value: userID}}, nil); row != nil {
@@ -79,8 +73,6 @@ func f7AssertSecondaryPurged(t *testing.T, ctx context.Context, db *parityMemAda
 }
 
 // TestDeleteUserPurge_DeleteUserDirectPurgesSecondary runs POST /delete-user end to end
-// with secondary storage enabled: the user is deleted AND every secondary
-// session entry plus the active-sessions index is purged.
 func TestDeleteUserPurge_DeleteUserDirectPurgesSecondary(t *testing.T) {
 	for _, dual := range []bool{false, true} {
 		t.Run(fmt.Sprintf("dual=%v", dual), func(t *testing.T) {
@@ -108,9 +100,6 @@ func TestDeleteUserPurge_DeleteUserDirectPurgesSecondary(t *testing.T) {
 }
 
 // TestDeleteUserPurge_DeleteUserCallbackPurgesSecondary runs the verification flow end to
-// end with secondary storage enabled: POST /delete-user sends the token,
-// GET /delete-user/callback consumes it and deletes the user AND purges
-// every secondary session entry plus the active-sessions index.
 func TestDeleteUserPurge_DeleteUserCallbackPurgesSecondary(t *testing.T) {
 	for _, dual := range []bool{false, true} {
 		t.Run(fmt.Sprintf("dual=%v", dual), func(t *testing.T) {

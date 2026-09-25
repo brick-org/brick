@@ -9,8 +9,6 @@ import (
 )
 
 // FullSchema must name the complete resolved schema (core + plugins +
-// options) so route code can migrate off the legacy plugin-only
-// ResolveSchema allow-list without behavior flips.
 func TestSchemaSplit_FullSchemaEqualsGetAuthTables(t *testing.T) {
 	plugin := &schemaFixPlugin{
 		id: "test",

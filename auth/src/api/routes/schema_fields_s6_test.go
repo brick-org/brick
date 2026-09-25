@@ -2,11 +2,9 @@ package routes
 
 // AUTH-S6-01 route-side failing-first suite (owned file:
 // auth/api/routes/schema_fields.go).
-//
 // Ports db/to-zod.test.ts (returned:false input vs output, required:false
 // nullish) and db/schema.ts parseInputData update/create + alias behavior
 // against the explicit full-schema helper APIs Wave 7 consumes. The helpers
-// must union — never intersect — with legacy acceptance.
 
 import (
 	"errors"
@@ -66,8 +64,6 @@ func TestS6Route_ParseModelInputFullUsesFullSchema(t *testing.T) {
 		"account": {Fields: map[string]types.FieldAttribute{}},
 	}
 	_ = opts
-	// Full parse: unknown keys ignored, defaults applied on create only,
-	// required enforced on create only.
 	fields := map[string]types.FieldAttribute{
 		"name": {Type: types.FieldTypeString},
 		"nick": {Type: types.FieldTypeString, Required: boolPtr(false), DefaultValue: "anon"},
@@ -110,7 +106,6 @@ func TestS6Route_FilterModelOutputFullStripsReturnedFalse(t *testing.T) {
 }
 
 func TestS6Route_ValidateUserInfoRedirectVs403(t *testing.T) {
-	// Browser flows redirect with ?error=&error_description=.
 	url := ValidateUserInfoRedirectURL("https://app.example/error", "email_not_allowed", "Only company emails are allowed")
 	if url == "" || len(url) == 0 {
 		t.Fatal("redirect URL must be built")
@@ -130,7 +125,6 @@ func TestS6Route_ValidateUserInfoRedirectVs403(t *testing.T) {
 		t.Fatalf("redirect must carry error_description, got %q", url)
 	}
 
-	// Programmatic flows surface 403 with the gate code/message.
 	err := NewValidateUserInfoError("email_not_allowed", "Only company emails are allowed")
 	if err.Code == "" {
 		t.Fatal("gate error must be built")

@@ -50,7 +50,6 @@ func TestErrorPageSanitizesCode(t *testing.T) {
 	if strings.Contains(text, "<script>") {
 		t.Fatal("raw code leaked into the page")
 	}
-	// Invalid codes default to UNKNOWN.
 	if !strings.Contains(text, "UNKNOWN") {
 		t.Fatal("invalid code did not default to UNKNOWN")
 	}
@@ -86,8 +85,6 @@ func TestErrorPageCustomURLRedirect(t *testing.T) {
 	if q.Get("error") != "access_denied" {
 		t.Fatalf("error param = %q", q.Get("error"))
 	}
-	// The redirect carries the raw description URL-encoded (upstream
-	// appendQueryParams); the redirect target owns escaping.
 	if q.Get("error_description") != "no <b>access</b>" {
 		t.Fatalf("description param = %q", q.Get("error_description"))
 	}
@@ -107,7 +104,6 @@ func TestErrorPageProductionRedirect(t *testing.T) {
 	if loc := resp.Header().Get("Location"); !strings.HasPrefix(loc, "/?error=access_denied") {
 		t.Fatalf("location = %q", loc)
 	}
-	// Customization disables the production bounce: the page renders.
 	custom := types.Options{}
 	custom.OnAPIError.CustomizeDefaultErrorPage = &types.DefaultErrorPageOptions{}
 	custom.OnAPIError.CustomizeDefaultErrorPage.Colors.Primary = "#123456"
@@ -141,7 +137,6 @@ func TestErrorPageCustomRendering(t *testing.T) {
 			t.Fatalf("custom value %q missing", want)
 		}
 	}
-	// Decoration toggles remove their markup.
 	off := types.Options{}
 	off.OnAPIError.CustomizeDefaultErrorPage = &types.DefaultErrorPageOptions{}
 	off.OnAPIError.CustomizeDefaultErrorPage.DisableCornerDecorations = true

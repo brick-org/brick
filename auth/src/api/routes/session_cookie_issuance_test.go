@@ -10,16 +10,12 @@ import (
 	"github.com/brick-org/brick/auth/src/types"
 )
 
-// G4: expired/invalid session_token must emit the expired session_token
 // cleanup cookie alongside session_data cleanup (upstream deleteSessionCookie
-// clears both; session.ts:291,380). DB row deletion already happens.
 func TestSessionCookie_ExpiredTokenCleanupCookieOnFailure(t *testing.T) {
 	ctx := context.Background()
 	db := newParityMemAdapter()
 	opts := sessionTestOptions(db)
 
-	// Expired session row: must fail with SESSION_EXPIRED and still carry
-	// the expired session_token cleanup (MaxAge<0).
 	seedSessionUser(t, db, "g4-expired@example.com", "tok-g4-expired", time.Now().UTC().Add(-time.Hour))
 	res, err := resolveGetSession(ctx, opts, getSessionRequest{
 		token:        "tok-g4-expired",
@@ -47,8 +43,6 @@ func TestSessionCookie_ExpiredTokenCleanupCookieOnFailure(t *testing.T) {
 		t.Fatalf("expired session_token must emit expired token cleanup cookie, got %+v", res.cookies)
 	}
 
-	// Invalid (unknown) token: must fail with FAILED_TO_GET_SESSION and
-	// still carry the expired session_token cleanup.
 	res2, err := resolveGetSession(ctx, opts, getSessionRequest{
 		token:        "tok-g4-bogus",
 		cookieHeader: "",
@@ -73,8 +67,6 @@ func TestSessionCookie_ExpiredTokenCleanupCookieOnFailure(t *testing.T) {
 }
 
 // G5-part (session.go side): oversize session_data must chunk on write via
-// cookies.BuildChunkedCookies; >100-chunks maps to warn-and-skip (serve
-// authoritative, no cache).
 func TestSessionCookie_ChunkedIssuanceMultiCookieOnOversize(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := sessionTestOptions(db)
@@ -104,7 +96,6 @@ func TestSessionCookie_ChunkedIssuanceMultiCookieOnOversize(t *testing.T) {
 	if err != nil {
 		t.Fatalf("issueSessionCookies: %v", err)
 	}
-	// Session token + chunked session_data (≥2 chunks) => ≥3 cookies.
 	if len(cookiesOut) < 3 {
 		t.Fatalf("oversize session_data must chunk into multi-cookie issuance, got %d cookies: %+v", len(cookiesOut), cookiesOut)
 	}
@@ -123,15 +114,12 @@ func TestSessionCookie_ChunkedIssuanceMultiCookieOnOversize(t *testing.T) {
 	}
 }
 
-// shouldSkipSessionRefresh gating (session.go side): the skip flag must
 // suppress the DB refresh write (upstream session.ts:201-204,342-344).
 func TestSessionCookie_SkipGateSuppressesRefresh(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := sessionTestOptions(db)
-	// Due session: expires soon so the refresh write is due.
 	seedSessionUser(t, db, "g4-skip@example.com", "tok-g4-skip", time.Now().UTC().Add(30*time.Second))
 
-	// Sanity: without the flag the due session refreshes.
 	_, _, refreshed, _, err := loadSessionWithRefresh(context.Background(), opts, "tok-g4-skip", sessionRefreshConfig{})
 	if err != nil {
 		t.Fatal(err)
@@ -140,8 +128,6 @@ func TestSessionCookie_SkipGateSuppressesRefresh(t *testing.T) {
 		t.Fatal("sanity: due session must refresh without the skip flag")
 	}
 
-	// With the flag set the refresh write must be suppressed.
-	// Re-seed a second due session since the first was extended above.
 	seedSessionUser(t, db, "g4-skip2@example.com", "tok-g4-skip2", time.Now().UTC().Add(30*time.Second))
 	skipCtx := state.SetShouldSkipSessionRefresh(context.Background(), true)
 	_, _, refreshed, _, err = loadSessionWithRefresh(skipCtx, opts, "tok-g4-skip2", sessionRefreshConfig{})

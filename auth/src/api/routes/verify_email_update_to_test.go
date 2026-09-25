@@ -12,7 +12,6 @@ import (
 	"github.com/brick-org/brick/auth/src/types"
 )
 
-// F2 task1: fresh plain verify must return {status:true,user:null} like
 // upstream (ts:540-543), not the updated user.
 func TestVerifyUpdateTo_FreshPlainVerifyReturnsNull(t *testing.T) {
 	db := newParityMemAdapter()
@@ -35,8 +34,6 @@ func TestVerifyUpdateTo_FreshPlainVerifyReturnsNull(t *testing.T) {
 	}
 }
 
-// failSetSecondary delegates Gets to an underlying map store but fails Sets,
-// simulating a secondary fan-out backend failure.
 type failSetSecondary struct {
 	*mapSecondaryStorage
 	failErr error
@@ -86,7 +83,6 @@ func f2CookieCarries(cookiesOut []http.Cookie, opts types.Options, token string)
 }
 
 // F2 task2: updateTo verification leg must reuse pre-update activeSession
-// token (compare against OLD email), swapping cookie email, not mint new.
 func TestVerifyUpdateTo_UpdateToReusesPreUpdateToken(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := parityTestOptions(db)
@@ -120,9 +116,7 @@ func TestVerifyUpdateTo_FanOutFailureStillSucceeds(t *testing.T) {
 	baseStore := newMapSecondaryStorage(true)
 	opts := secondarySessionTestOptions(db, baseStore)
 	parityCreateUser(t, db, "f2-fanout@example.com", false)
-	// Seed one live secondary session so fan-out has work to do.
 	seedSecondarySession(t, context.Background(), opts, db, "f2-fanout@example.com", "tok-f2-fanout", time.Now().UTC().Add(time.Hour))
-	// Swap in a failing backend sharing the same data for Gets.
 	failing := &failSetSecondary{mapSecondaryStorage: baseStore, failErr: context.DeadlineExceeded}
 	opts.SecondaryStorage = failing
 	token, err := crypto.CreateEmailVerificationToken(opts.CurrentSecret(), "f2-fanout@example.com", "", 3600, nil)

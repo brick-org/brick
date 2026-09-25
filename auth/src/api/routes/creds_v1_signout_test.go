@@ -24,15 +24,11 @@ func credsSignOutAPI(t *testing.T, opts types.Options) humatest.TestAPI {
 }
 
 // sign-out.test.ts "should sign out": the session row is gone afterwards and
-// the response clears the local cookies with success:true.
 func TestCredsV1_SignOutDeletesSessionAndClearsCookies(t *testing.T) {
 	ctx := context.Background()
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
 	api := credsSignOutAPI(t, opts)
-	// Sign-up auto-signs-in (single session); sign out on that cookie so the
-	// row count must fall to zero. (A separate sign-in would create a second
-	// session that sign-out correctly leaves alone.)
 	resp := api.Post("/api/auth/sign-up/email", map[string]any{
 		"name": "Seed", "email": "signout@test.com", "password": "password123",
 	})
@@ -59,8 +55,6 @@ func TestCredsV1_SignOutDeletesSessionAndClearsCookies(t *testing.T) {
 	}
 }
 
-// sign-out.test.ts "should clear local session cookie when reading the
-// session fails": an unreadable token still yields success:true plus cookie
 // clearing (upstream never throws for a missing session).
 func TestCredsV1_SignOutClearsCookiesOnUnreadableSession(t *testing.T) {
 	db := newParityMemAdapter()

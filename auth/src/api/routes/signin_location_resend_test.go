@@ -13,11 +13,7 @@ import (
 // coverage (GAP-3). Pinned upstream: Better Auth v1.7.5 @ 5468e6bf
 // (sign-in.ts:522-525, 625-627, 569-601).
 
-// P02-GAP-1: a malformed email format answers 400 INVALID_EMAIL
 // (upstream sign-in.ts:522-525) instead of falling through to 401.
-// The format gate runs before any user lookup, so existence never leaks:
-// malformed input is 400 for unknown and seeded addresses alike, while a
-// well-formed unknown address stays 401 INVALID_EMAIL_OR_PASSWORD.
 func TestSignIn_MalformedEmailIs400(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -47,8 +43,6 @@ func TestSignIn_MalformedEmailIs400(t *testing.T) {
 		}
 	}
 
-	// Well-formed unknown address keeps the generic 401 (no existence leak
-	// in the other direction).
 	resp := api.Post("/api/auth/sign-in/email", map[string]any{
 		"email": "f2-unknown@test.com", "password": "password123",
 	})
@@ -60,10 +54,7 @@ func TestSignIn_MalformedEmailIs400(t *testing.T) {
 	}
 }
 
-// P02-GAP-2: a present, trusted callbackURL sets the Location response
 // header (upstream sign-in.ts:625-627) alongside the existing body
-// redirect/url pair. An untrusted callbackURL keeps the body pair but
-// sets no Location header (no open redirect).
 func TestSignIn_CallbackURLSetsLocationHeader(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -91,8 +82,6 @@ func TestSignIn_CallbackURLSetsLocationHeader(t *testing.T) {
 		t.Fatalf("Location = %q, want /dashboard", loc)
 	}
 
-	// Untrusted absolute URL: 403 INVALID_CALLBACK_URL (upstream global
-	// middleware; realigned from embed-and-continue by F7a for 100% parity).
 	bogus := api.Post("/api/auth/sign-in/email", map[string]any{
 		"email": "f2-location@test.com", "password": "password123",
 		"callbackURL": "https://evil.example.com/cb",
@@ -105,10 +94,7 @@ func TestSignIn_CallbackURLSetsLocationHeader(t *testing.T) {
 	}
 }
 
-// P02-GAP-3 (coverage): the sendOnSignIn:true resend leg (sign-in.go:104-117,
 // upstream sign-in.ts:588-597) — an unverified sign-in still 403s
-// EMAIL_NOT_VERIFIED but resends the verification email once, carrying a
-// token and URL.
 func TestSignIn_SendOnSignInResends(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -123,7 +109,7 @@ func TestSignIn_SendOnSignInResends(t *testing.T) {
 	}
 	api := credsSignUpAPI(t, opts)
 	credsSignInSeed(t, api, "f2-resend@test.com", "password123")
-	calls = 0 // isolate the sign-in resend (sign-up itself sends once)
+	calls = 0
 	captured = types.VerificationEmailData{}
 
 	resp := api.Post("/api/auth/sign-in/email", map[string]any{

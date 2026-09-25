@@ -9,8 +9,6 @@ import (
 )
 
 // C5: POST /delete-user with an invalid single-use token must 404 (upstream
-// deleteUserCallback throws NOT_FOUND on bad/owner-mismatch tokens,
-// update-user.ts:641-642), matching the GET callback path. User survives.
 func TestDeleteUserToken_DeleteUserInvalidTokenNotFound(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -33,7 +31,6 @@ func TestDeleteUserToken_DeleteUserInvalidTokenNotFound(t *testing.T) {
 	}
 }
 
-// C5: a wrong-owner delete token is still burned by the single-use consume
 // (upstream update-user.ts:634-643) while answering 404 and deleting nobody.
 func TestDeleteUserToken_DeleteUserWrongOwnerBurnsToken(t *testing.T) {
 	db := newParityMemAdapter()
@@ -66,7 +63,6 @@ func TestDeleteUserToken_DeleteUserWrongOwnerBurnsToken(t *testing.T) {
 			t.Fatalf("user %s must survive a wrong-owner token", email)
 		}
 	}
-	// Token was burned: the rightful owner can no longer use it either.
 	retry := api.Post("/api/auth/delete-user", map[string]any{
 		"token": token,
 	}, "Cookie: "+cookieA)

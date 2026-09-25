@@ -1,14 +1,10 @@
 package routes
 
 // F3 snapshot pins for GET /error (P03-GAP-1).
-//
 // Pins the rendered HTML for default + customized pages against the pinned
 // upstream template
 // (vendor/better-auth/.../src/api/routes/error.ts:18-372 at 5468e6bf):
 // body/grid background fallbacks, every customizeDefaultErrorPage knob,
-// static copy, docs/Ask-AI links, and the two XSS legs as regression anchors
-// (new names; error_test.go is untouched).
-// All hermetic (humatest, no network).
 
 import (
 	"net/http"
@@ -46,15 +42,12 @@ func TestErrorPageDefaultSnapshot(t *testing.T) {
 		"Something went wrong",
 		"CODE:",
 		"TEST",
-		// Upstream body fallback is var(--background) (error.ts:36), not white.
 		"font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
 		"background: var(--background);",
-		// Grid mask fallback is var(--background) (error.ts:148).
 		"background-image: linear-gradient(to right, var(--border) 1px, transparent 1px),",
 		"mask-image: radial-gradient(ellipse at center, transparent 20%, black);",
 		"background: var(--background);",
 		"background: var(--background);",
-		// Card + title defaults.
 		"background: var(--background);",
 		"border: 2px solid var(--destructive);",
 		"color: var(--foreground);",
@@ -76,7 +69,6 @@ func TestErrorPageDefaultSnapshot(t *testing.T) {
 }
 
 // Customized page snapshot: every knob from init-options.ts:1747-1778 must
-// take effect in the rendered HTML.
 func TestErrorPageCustomizedSnapshot(t *testing.T) {
 	opts := types.Options{}
 	opts.OnAPIError.CustomizeDefaultErrorPage = &types.DefaultErrorPageOptions{}
@@ -108,7 +100,6 @@ func TestErrorPageCustomizedSnapshot(t *testing.T) {
 		"#112233", "#333333", "#101010", "#999999",
 		"2px", "0.9rem", "1.6rem", "2.4rem", "4rem",
 		"Custom Font, sans-serif", "Custom Mono, monospace",
-		// Custom background wins in body (error.ts:36) and grid mask (error.ts:148).
 		"background: #0b0b0b;",
 		"linear-gradient(to right, #333333 1px, transparent 1px),",
 		"border: 2px solid #654321;",
@@ -118,8 +109,6 @@ func TestErrorPageCustomizedSnapshot(t *testing.T) {
 			t.Fatalf("custom value %q missing", want)
 		}
 	}
-	// Custom colors feed light and dark schemes alike (upstream uses the same
-	// custom value in both blocks).
 	if n := strings.Count(text, "--primary: #123456;"); n != 2 {
 		t.Fatalf("--primary custom appears %d times, want 2 (light + dark)", n)
 	}
@@ -145,7 +134,6 @@ func TestErrorPageDecorationToggles(t *testing.T) {
 }
 
 // Custom description is rendered sanitized (upstream sanitize branch,
-// error.ts:406-408 + template error.ts:307-312).
 func TestErrorPageCustomDescriptionSnapshot(t *testing.T) {
 	api := newF3ErrorTestAPI(t, types.Options{})
 	resp := api.Get("/api/auth/error?error=TEST&error_description=" + url.QueryEscape("hello <b>world</b>"))
@@ -182,7 +170,6 @@ func TestErrorPageXSSCodeRegression(t *testing.T) {
 	if !strings.Contains(text, "UNKNOWN") {
 		t.Fatal("invalid code did not default to UNKNOWN")
 	}
-	// The docs/Ask-AI links track the safe code, not the attack.
 	if !strings.Contains(text, "https://better-auth.com/docs/reference/errors/UNKNOWN") {
 		t.Fatal("docs link missing safe UNKNOWN code")
 	}

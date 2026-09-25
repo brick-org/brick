@@ -65,11 +65,7 @@ func triageTokenOf(t *testing.T, resp *httptest.ResponseRecorder) string {
 	return *body.Token
 }
 
-// --- sign-up residual ---
-
 // sign-up.test.ts "should allow email/password sign-up when validateUserInfo
-// returns void": the gate observes action create-user / method email-password
-// and the user persists.
 func TestTriageV1_SignUpValidateUserInfoAllows(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -101,7 +97,6 @@ func TestTriageV1_SignUpValidateUserInfoAllows(t *testing.T) {
 }
 
 // sign-up.test.ts "should return token: null for new sign-up when autoSignIn
-// is disabled".
 func TestTriageV1_SignUpAutoSignInFalseTokenNull(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -149,7 +144,6 @@ func TestTriageV1_SignUpSendOnSignUpTrue(t *testing.T) {
 }
 
 // sign-up.test.ts "should send verification email when sendOnSignUp is not
-// set but requireEmailVerification is true (default)".
 func TestTriageV1_SignUpSendOnSignUpDefault(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -167,7 +161,6 @@ func TestTriageV1_SignUpSendOnSignUpDefault(t *testing.T) {
 }
 
 // sign-up.test.ts "should not call onExistingUserSignUp when enumeration
-// protection is inactive": the duplicate throws and the hook stays silent.
 func TestTriageV1_SignUpExistingHookSkippedWhenInactive(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -190,7 +183,6 @@ func TestTriageV1_SignUpExistingHookSkippedWhenInactive(t *testing.T) {
 }
 
 // sign-up.test.ts "should not call onExistingUserSignUp for new user
-// sign-ups".
 func TestTriageV1_SignUpExistingHookSkippedForNewUser(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -206,8 +198,6 @@ func TestTriageV1_SignUpExistingHookSkippedForNewUser(t *testing.T) {
 		t.Fatalf("hook calls = %d, want 0 for a new user", calls)
 	}
 }
-
-// --- sign-in residual ---
 
 // sign-in.test.ts "should return a response with a set-cookie header".
 func TestTriageV1_SignInSetsSessionCookie(t *testing.T) {
@@ -237,7 +227,6 @@ func TestTriageV1_SignInSetsSessionCookie(t *testing.T) {
 }
 
 // sign-in.test.ts "verification email will not be sent if sendOnSignIn is
-// disabled": unverified sign-in still 403s but never resends.
 func TestTriageV1_SignInNoResendWhenDisabled(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -250,7 +239,7 @@ func TestTriageV1_SignInNoResendWhenDisabled(t *testing.T) {
 	}
 	api := triageCredsAPI(t, opts)
 	triagePostSignUp(t, api, "Unverified", "no-resend@test.com", "password123")
-	calls = 0 // isolate the sign-in resend (sign-up itself sends once)
+	calls = 0
 	resp := api.Post("/api/auth/sign-in/email", map[string]any{
 		"email": "no-resend@test.com", "password": "password123",
 	})
@@ -265,10 +254,7 @@ func TestTriageV1_SignInNoResendWhenDisabled(t *testing.T) {
 	}
 }
 
-// --- update-user residual ---
-
 // update-user.test.ts "should update the user's password": the new password
-// signs in, the old one stops working.
 func TestTriageV1_ChangePasswordSuccessRotatesCredentials(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -294,7 +280,6 @@ func TestTriageV1_ChangePasswordSuccessRotatesCredentials(t *testing.T) {
 }
 
 // update-user.test.ts "should update account's updatedAt when changing
-// password".
 func TestTriageV1_ChangePasswordBumpsAccountUpdatedAt(t *testing.T) {
 	ctx := context.Background()
 	db := newParityMemAdapter()
@@ -350,8 +335,6 @@ func TestTriageV1_DeleteUserDisabledIs404(t *testing.T) {
 }
 
 // update-user.test.ts "should ignore cookie cache for sensitive operations
-// like changePassword": with the cookie cache enabled, the password change
-// validates against the database and the revoked session stays dead.
 func TestTriageV1_ChangePasswordIgnoresCookieCache(t *testing.T) {
 	ctx := context.Background()
 	db := newParityMemAdapter()
@@ -374,18 +357,13 @@ func TestTriageV1_ChangePasswordIgnoresCookieCache(t *testing.T) {
 	if resp.Code != 200 || !strings.Contains(resp.Body.String(), `"status":true`) {
 		t.Fatalf("change with cache header = %d, want 200 status:true: %s", resp.Code, resp.Body.String())
 	}
-	// The raw (cache-less) token is revoked: without the stale cache to
-	// serve from, the session reads as upstream 200 literal null.
 	sess := api.Get("/api/auth/get-session", "Cookie: "+signedSessionHeader(t, opts, token))
 	if sess.Code != 200 || strings.TrimSpace(sess.Body.String()) != "null" {
 		t.Fatalf("revoked session must read 200 null, got %d: %s", sess.Code, sess.Body.String())
 	}
 }
 
-// --- password residual ---
-
 // password.test.ts "should fail on invalid password": a short new password is
-// a 400.
 func TestTriageV1_ResetShortPasswordRejected(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -416,7 +394,6 @@ func TestTriageV1_ResetShortPasswordRejected(t *testing.T) {
 }
 
 // password.test.ts "should send a reset password email when enabled" (token
-// length leg): the reset URL carries a long single-use token.
 func TestTriageV1_ResetEmailCarriesLongToken(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -442,7 +419,6 @@ func TestTriageV1_ResetEmailCarriesLongToken(t *testing.T) {
 }
 
 // password.test.ts "should update account's updatedAt when resetting
-// password".
 func TestTriageV1_ResetBumpsAccountUpdatedAt(t *testing.T) {
 	ctx := context.Background()
 	db := newParityMemAdapter()
@@ -497,7 +473,6 @@ func TestTriageV1_ResetBumpsAccountUpdatedAt(t *testing.T) {
 }
 
 // password.test.ts "should expire": an expired token is a 400 and the
-// onPasswordReset hook does not fire again.
 func TestTriageV1_ResetExpiredTokenRejected(t *testing.T) {
 	ctx := context.Background()
 	db := newParityMemAdapter()
@@ -562,7 +537,6 @@ func TestTriageV1_ResetExpiredTokenRejected(t *testing.T) {
 }
 
 // password.test.ts "should revoke other sessions when
-// revokeSessionsOnPasswordReset is enabled".
 func TestTriageV1_ResetRevokesSessionsWhenEnabled(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -625,11 +599,7 @@ func TestTriageV1_ResetKeepsSessionsByDefault(t *testing.T) {
 	}
 }
 
-// --- email-verification residual ---
-
 // email-verification.test.ts "should sign after verification": with
-// autoSignInAfterVerification the verify call mints a session and marks the
-// address verified.
 func TestTriageV1_VerifyEmailAutoSignInMintsSession(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -653,8 +623,6 @@ func TestTriageV1_VerifyEmailAutoSignInMintsSession(t *testing.T) {
 	if verify.Code != 200 || !strings.Contains(verify.Body.String(), `"status":true`) {
 		t.Fatalf("verify = %d, want 200 status:true: %s", verify.Code, verify.Body.String())
 	}
-	// Upstream fresh plain verify answers {status:true,user:null}
-	// (realigned by F2); verification proven via user:null + minted session.
 	if !strings.Contains(verify.Body.String(), `"user":null`) {
 		t.Fatalf("fresh verify must return user:null, got %s", verify.Body.String())
 	}
@@ -669,7 +637,6 @@ func TestTriageV1_VerifyEmailAutoSignInMintsSession(t *testing.T) {
 }
 
 // email-verification.test.ts "should use custom expiresIn": a token past its
-// TTL reports TOKEN_EXPIRED without firing hooks; a live token verifies.
 func TestTriageV1_VerifyEmailExpiredTokenRejected(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -705,8 +672,6 @@ func TestTriageV1_VerifyEmailExpiredTokenRejected(t *testing.T) {
 }
 
 // email-verification.test.ts "should call afterEmailVerification callback
-// when email is verified" (both duplicates): fired once with the verified
-// user.
 func TestTriageV1_VerifyEmailAfterHookFires(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -741,7 +706,6 @@ func TestTriageV1_VerifyEmailAfterHookFires(t *testing.T) {
 }
 
 // email-verification.test.ts "should call beforeEmailVerification callback
-// when email is verified".
 func TestTriageV1_VerifyEmailBeforeHookFires(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -773,7 +737,6 @@ func TestTriageV1_VerifyEmailBeforeHookFires(t *testing.T) {
 }
 
 // email-verification.test.ts "should properly encode callbackURL with query
-// parameters when sending verification email".
 func TestTriageV1_SendVerificationCallbackEncoding(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -808,7 +771,6 @@ func TestTriageV1_SendVerificationCallbackEncoding(t *testing.T) {
 }
 
 // email-verification.test.ts "should handle email case insensitivity when
-// sending verification email while signed in".
 func TestTriageV1_SendVerificationSignedInCaseInsensitive(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)

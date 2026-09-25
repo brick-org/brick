@@ -6,12 +6,9 @@ import (
 )
 
 // TestPublicOptions_NewFieldsPinPresence ensures the types-owned parity
-// additions exist with their PascalCase names and zero values. If any of
-// these fail to compile, an option field was renamed or removed.
 func TestPublicOptions_NewFieldsPinPresence(t *testing.T) {
 	var opts Options
 
-	// Dynamic base-URL config (upstream baseURL object half).
 	if opts.DynamicBaseURL != nil {
 		t.Error("zero Options.DynamicBaseURL should be nil (static-BaseURL mode)")
 	}
@@ -25,11 +22,7 @@ func TestPublicOptions_NewFieldsPinPresence(t *testing.T) {
 		t.Error("DynamicBaseURL.AllowedHosts not retained")
 	}
 
-	// REMOVED (AUTH-F6-03): DatabaseHints/Options.DBHints were deleted —
-	// upstream `database` object-form selectors with no Go adapter consumer
-	// must not persist as inert fields. See the REMOVED note in auth.go.
 
-	// Telemetry event shape (upstream publishTelemetry argument).
 	ev := TelemetryEvent{Type: "test", AnonymousID: "anon", Payload: map[string]any{"k": "v"}}
 	if ev.Type != "test" || ev.Payload["k"] != "v" {
 		t.Error("TelemetryEvent fields not retained")
@@ -74,8 +67,6 @@ func TestValidateOptions_EmptySecret(t *testing.T) {
 	} else if !strings.Contains(err.Error(), "Secret") {
 		t.Fatalf("error should mention Secret, got %q", err)
 	}
-	// Pure: env fallback is runtime-owned (auth/context/secret-utils.go), so even a
-	// set env secret must not satisfy the types-level check.
 	t.Setenv("BETTER_AUTH_SECRET", "env-secret-0123456789abcdef0123")
 	if err := ValidateOptions(Options{}); err == nil {
 		t.Fatal("ValidateOptions must not consult the environment")

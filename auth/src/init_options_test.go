@@ -1,22 +1,6 @@
 package auth_test
 
-// AUTH-F6-03 focused fixtures: initialization (defu merge, plugin context
-// overwrite order, nested patches, dynamic trusted-origin composition),
-// secrets (lookup precedence, versioned env parsing/validation, warnings,
-// rotation), and telemetry/instrumentation (event shape, disable controls).
-//
-// Pinned upstream (Better Auth v1.7.5 @ 5468e6bf):
-//   - packages/better-auth/src/context/helpers.ts (runPluginInit: defu merge,
-//     context overwrite order, trusted-origin composition)
-//   - packages/better-auth/src/context/secret-utils.ts (parse/validate/build)
-//   - packages/better-auth/src/context/create-context.ts (lookup precedence,
-//     validateSecret diagnostics)
-//   - packages/telemetry/src/index.ts (createTelemetry enablement/publish)
-//   - packages/core/src/instrumentation (createWithSpan/withSpan)
-//
-// Workflow: these tests were added BEFORE the AUTH-F6-03 implementation
-// changes; the subset marked NEEDS-FIX failed against the pre-fix code for
-// the reason stated, then passed after the fix without weakening.
+// init_options_test.go: upstream conformance (Better Auth v1.7.5).
 
 import (
 	"fmt"
@@ -29,7 +13,6 @@ import (
 )
 
 // f6MockProvider is a minimal OAuthProvider stub for init-plumbing tests
-// (defu slice concatenation). It carries an ID only; all operations fail.
 type f6MockProvider struct{ id string }
 
 func (p *f6MockProvider) ID() string   { return p.id }
@@ -48,8 +31,6 @@ func (p *f6MockProvider) GetUserInfo(*types.OAuthTokens) (*types.OAuthUserInfo, 
 }
 
 // f6ObserverPlugin is a minimal PluginInitPatches stub that records the
-// context AppName visible at InitPatches time (proving inter-plugin
-// visibility and overwrite order) and returns fixed patches.
 type f6ObserverPlugin struct {
 	id           string
 	optionsPatch *types.Options
@@ -92,12 +73,7 @@ func f6CaptureLogger(level types.LogLevel) (*[]string, types.LoggerOptions) {
 	}
 }
 
-// NEEDS-FIX (pre-fix: pre-loop AppName default blocked defu fill):
 // upstream runPluginInit `options = defu(options, restOpts)` fills values the
-// main config left unset (create-context.test.ts "should allow plugins to set
-// config values"). The options patch must land on ctx.Options; ctx.AppName
-// itself keeps the "Better Auth" default unless a context patch sets it
-// (upstream ctx.appName is built pre-init from the unpatched options).
 func TestInitDefuPatchFillsUnsetAppName(t *testing.T) {
 	adapter, _ := newTestAdapter(t)
 	a := mustBetterAuth(t, auth.Options{
@@ -180,10 +156,7 @@ func TestInitDefuSliceConcatBaseFirst(t *testing.T) {
 	}
 }
 
-// NEEDS-FIX (pre-fix: map values kept wholesale, no deep merge):
 // upstream defu recurses into plain-object values, so per-key option objects
-// merge deeply with base winning. Map entries present on both sides must
-// merge field-wise, not keep the base value outright.
 func TestInitDefuMapValuesMergeDeeply(t *testing.T) {
 	adapter, _ := newTestAdapter(t)
 	a := mustBetterAuth(t, auth.Options{
@@ -216,12 +189,6 @@ func TestInitDefuMapValuesMergeDeeply(t *testing.T) {
 }
 
 // Documents a structural Go deviation from defu: upstream skips only
-// null/undefined base values, so an explicit `false` beats a patch `true`
-// (create-context.test.ts "should not allow plugins to set config values if
-// they are set in the main config"). Go zero values conflate "unset" with an
-// explicit falsy, so patch fill wins here. Presence-tracked kinds (pointers,
-// slices, maps, strings set non-empty) honor base-wins exactly; plain scalar
-// falsy values do not. This pins the actual behavior so the gap stays loud.
 func TestInitDefuScalarZeroValueDeviation(t *testing.T) {
 	adapter, _ := newTestAdapter(t)
 	a := mustBetterAuth(t, auth.Options{
@@ -378,8 +345,6 @@ func TestInitParseSecretsEnvFailures(t *testing.T) {
 		"empty value":   {in: "1:", want: "Empty secret value"},
 		"blank value":   {in: "1:   ", want: "Empty secret value"},
 		// NEEDS-FIX (pre-fix: whitespace-only returned nil,nil): upstream
-		// parseSecretsEnv throws on any truthy non-empty input that is not a
-		// valid entry; only ""/unset yields null.
 		"whitespace": {in: "   ", want: "Invalid BETTER_AUTH_SECRETS entry"},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -393,8 +358,6 @@ func TestInitParseSecretsEnvFailures(t *testing.T) {
 }
 
 // Documents a strictness deviation from JS parseInt leniency: upstream
-// parseInt("1abc", 10) === 1 (accepted, normalized), while Go rejects
-// trailing-garbage versions fail-closed.
 func TestInitParseSecretsEnvStrictVersion(t *testing.T) {
 	if _, err := auth.ParseSecretsEnv("1abc:some-secret-value"); err == nil {
 		t.Fatal("trailing-garbage versions must fail closed in Go (deviation from parseInt leniency)")
@@ -403,7 +366,6 @@ func TestInitParseSecretsEnvStrictVersion(t *testing.T) {
 
 // NEEDS-FIX (pre-fix: messages lacked upstream's trailing periods):
 // validateSecretsArray error bodies must match secret-utils.ts exactly
-// (modulo the Go "auth: " prefix).
 func TestInitValidateSecretsArrayFailures(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -484,7 +446,6 @@ func TestInitSecretPrecedence(t *testing.T) {
 		t.Setenv("BETTER_AUTH_SECRET", "")
 		t.Setenv("AUTH_SECRET", "auth-secret-that-is-long-enough-123456")
 		t.Setenv("BETTER_AUTH_SECRETS", "")
-		// os.LookupEnv sees "" as set-but-empty; resolveSecrets must treat it
 		// as unset (upstream falsy), falling through to AUTH_SECRET.
 		a := mustBetterAuth(t, auth.Options{Adapter: adapter})
 		if a.Context.Secret != "auth-secret-that-is-long-enough-123456" {
@@ -493,9 +454,7 @@ func TestInitSecretPrecedence(t *testing.T) {
 	})
 }
 
-// NEEDS-FIX (pre-fix: missing the trailing period): documents the intentional
 // fail-closed deviation — upstream falls back to the public DEFAULT_SECRET
-// outside production, Go errors in every environment.
 func TestInitMissingSecretFailsClosed(t *testing.T) {
 	t.Setenv("BETTER_AUTH_SECRET", "")
 	t.Setenv("AUTH_SECRET", "")
@@ -576,9 +535,7 @@ func TestInitRotationDuplicateVersionsFail(t *testing.T) {
 	}
 }
 
-// NEEDS-FIX (pre-fix: whitespace env fell through to the missing-secret
 // error): upstream parseSecretsEnv throws on whitespace-only input instead of
-// treating it as unset.
 func TestInitWhitespaceSecretsEnvFails(t *testing.T) {
 	t.Setenv("BETTER_AUTH_SECRETS", "   ")
 	t.Setenv("BETTER_AUTH_SECRET", "")
@@ -608,7 +565,6 @@ func TestInitTelemetryDisabledSilent(t *testing.T) {
 	}
 }
 
-// NEEDS-FIX (pre-fix: debug log omitted AnonymousID): the publish path must
 // preserve the full upstream event shape {type, anonymousId, payload}.
 func TestInitTelemetryDebugPreservesEventShape(t *testing.T) {
 	t.Setenv("BETTER_AUTH_TELEMETRY", "")
@@ -653,7 +609,6 @@ func TestInitTelemetryNonDebugHidesPayload(t *testing.T) {
 	}
 }
 
-// NEEDS-FIX (pre-fix: only 1/true/yes enabled): enablement parsing must match
 // upstream getBooleanEnvVar (any non-empty value except "0"/"false").
 func TestInitTelemetryEnvTruthiness(t *testing.T) {
 	t.Setenv("BETTER_AUTH_TELEMETRY_DEBUG", "")
@@ -721,7 +676,6 @@ func TestInitWithSpanPassthrough(t *testing.T) {
 		t.Fatalf("WithSpan must propagate errors, got %v", err)
 	}
 	// Explicitly disabled instrumentation still executes inline (upstream
-	// noopWithSpan calls fn directly).
 	disabled := false
 	ran := false
 	if _, err := auth.WithSpan(auth.Options{

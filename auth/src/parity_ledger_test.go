@@ -1,9 +1,6 @@
 package auth_test
 
-// AUTH-R5-01 ledger drift guards. These tests pin the Better Auth v1.7.5
-// source/test ledger so the pinned commit/version, endpoint catalog,
-// provider catalog, explicit Runtime: pending markers, and ledger IDs
-// cannot drift silently. They read (never modify) runtime sources.
+// parity_ledger_test.go: upstream conformance (Better Auth v1.7.5).
 
 import (
 	"encoding/json"
@@ -23,7 +20,6 @@ const (
 )
 
 // ledgerCoreRoutes is the 30-path core route catalog (basePath-relative,
-// Huma `{param}` spelling; upstream uses `:param` for the callback route).
 var ledgerCoreRoutes = []string{
 	"/sign-up/email",
 	"/sign-in/email",
@@ -56,9 +52,6 @@ func ledgerAuthDir(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
 	}
-	// Tests execute with the package directory as working directory. The Go
-	// source tree lives below auth/src, while the parity ledger remains at the
-	// auth module root alongside go.mod.
 	for dir := wd; ; dir = filepath.Dir(dir) {
 		if _, err := os.Stat(filepath.Join(dir, "PARITY_V2.md")); err == nil {
 			return dir
@@ -174,8 +167,6 @@ func ledgerGoSources(t *testing.T, includeTests bool) []string {
 			return nil
 		}
 		if filepath.Base(p) == "parity_ledger_test.go" {
-			// This drift guard mentions "Runtime: pending" in its own
-			// assertions; it must not count toward the marker total.
 			return nil
 		}
 		out = append(out, p)
@@ -218,9 +209,6 @@ func TestParityLedger_PendingMarkers(t *testing.T) {
 	m := ledgerLoadManifest(t)
 	byFile := map[string]int{}
 	total := 0
-	// Markers declare runtime state, so only non-test sources count;
-	// test files (including the sibling types/marker_audit_test.go) merely
-	// reference the marker text in assertions and comments.
 	for _, f := range ledgerGoSources(t, false) {
 		content := ledgerRead(t, f)
 		n := strings.Count(content, "Runtime: pending")
@@ -262,7 +250,6 @@ func TestParityLedger_LedgerIDs(t *testing.T) {
 		t.Fatal("PARITY_V2.md ledger must reference AUTH-R5-01")
 	}
 	// plan.md was removed in parity v2; referenced IDs must instead be
-	// defined in this file's own Ledger ID registry (no dangling IDs).
 	const marker = "## Ledger ID registry"
 	idx := strings.Index(parity, marker)
 	if idx < 0 {

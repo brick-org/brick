@@ -66,7 +66,6 @@ func TestSchemaParity_PluginFieldsMergeOverCore(t *testing.T) {
 	if _, ok := tables["organization"]; !ok {
 		t.Fatal("plugin tables must be included")
 	}
-	// ResolveSchema stays compatible with the full table set.
 	resolved := auth.ResolveSchema(auth.Options{Plugins: []auth.Plugin{plugin}})
 	if _, ok := resolved["organization"]; !ok {
 		t.Fatal("ResolveSchema must include plugin tables")
@@ -74,7 +73,6 @@ func TestSchemaParity_PluginFieldsMergeOverCore(t *testing.T) {
 }
 
 func TestSchemaParity_SecondaryStorageInclusionRules(t *testing.T) {
-	// No secondary storage → session and verification are included.
 	full := auth.GetAuthTablesWithSecondaryStorage(auth.Options{}, false, false, false)
 	if _, ok := full["session"]; !ok {
 		t.Fatal("session must be included without secondary storage")
@@ -82,8 +80,6 @@ func TestSchemaParity_SecondaryStorageInclusionRules(t *testing.T) {
 	if _, ok := full["verification"]; !ok {
 		t.Fatal("verification must be included without secondary storage")
 	}
-	// Secondary storage without database overrides → both omitted
-	// (mirrors get-tables.ts spread conditionals).
 	secondary := auth.GetAuthTablesWithSecondaryStorage(auth.Options{}, true, false, false)
 	if _, ok := secondary["session"]; ok {
 		t.Fatal("session must be omitted under secondary storage without storeSessionInDatabase")
@@ -198,7 +194,6 @@ func TestSchemaParity_Indexes(t *testing.T) {
 }
 
 // paritySecondaryStorage is a minimal SecondaryStorage stub so table
-// inclusion rules can be exercised through Options directly.
 type paritySecondaryStorage struct{}
 
 func (paritySecondaryStorage) Get(key string) (any, error) { return nil, nil }

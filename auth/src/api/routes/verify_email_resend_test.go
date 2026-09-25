@@ -136,7 +136,6 @@ func TestVerifyEmailResend_AutoSignInReusesMatchingSession(t *testing.T) {
 		if v, ok := cookies.VerifyAny(opts.AllSecrets(), c.Value); ok && v == existingToken {
 			foundReuse = true
 		}
-		// Also accept raw token in cookie value (unsigned fallback names).
 		if strings.Contains(c.Value, existingToken) {
 			foundReuse = true
 		}

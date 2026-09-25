@@ -123,7 +123,6 @@ func TestVerifyEmailNullUser_AlreadyVerifiedGetReturnsNullUser(t *testing.T) {
 }
 
 // Redirect-with-callbackURL path stays as-is: already-verified with
-// callbackURL still 302s to the callback (not JSON).
 func TestVerifyEmailNullUser_AlreadyVerifiedGetRedirectUnchanged(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -152,8 +151,6 @@ func TestVerifyEmailNullUser_FreshVerifyReturnsNull(t *testing.T) {
 	if errCode != "" {
 		t.Fatalf("expected success, got %s", errCode)
 	}
-	// Upstream fresh plain verify answers {status:true,user:null}
-	// (email-verification.ts:540-543; realigned by F2 for 100% parity).
 	if user != nil {
 		t.Fatalf("fresh verify must return null user, got %#v", user)
 	}

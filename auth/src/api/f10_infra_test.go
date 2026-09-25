@@ -58,7 +58,6 @@ func TestF10_OriginRefererFallback_TrustedRefererPasses(t *testing.T) {
 }
 
 // P09-GAP-1: `Origin: null` + `Sec-Fetch-Site: same-origin` (same-origin form
-// with a no-referrer policy) infers the origin from the request target
 // instead of rejecting (upstream validateOrigin inferredOrigin).
 func TestF10_NullOrigin_SameOriginInferencePasses(t *testing.T) {
 	opts := f10OriginOptions("http://app.example")
@@ -87,11 +86,6 @@ func TestF10_NullOrigin_WithoutInferenceRejected(t *testing.T) {
 }
 
 // P09-GAP-2: Fetch-Metadata first-login gate (upstream validateFormCsrf).
-// Cross-site navigations are blocked even without cookies.
-// G10 narrowing: upstream formCsrfMiddleware is per-endpoint use: ONLY on
-// /sign-in/email (sign-in.ts:406) and /sign-up/email (sign-up.ts:34), so the
-// force gate is pinned on a login leg here; other routes keep the permissive
-// cookie-less fallback (global forceValidate=false).
 func TestF10_FormCsrf_CrossSiteNavigateBlocked(t *testing.T) {
 	opts := f10OriginOptions("https://app.example")
 	api := Router(humatest.NewAdapter(), "/api/auth", opts)
@@ -105,11 +99,7 @@ func TestF10_FormCsrf_CrossSiteNavigateBlocked(t *testing.T) {
 }
 
 // P09-GAP-2: cookie-less requests carrying an Origin are force-validated
-// (no permissive fallback for browser evidence).
 // G10 narrowing: upstream formCsrfMiddleware is per-endpoint use: ONLY on
-// /sign-in/email (sign-in.ts:406) and /sign-up/email (sign-up.ts:34), so the
-// force gate is pinned on a login leg here; other routes keep the permissive
-// cookie-less fallback (global forceValidate=false).
 func TestF10_FormCsrf_CookieLessOriginForceValidated(t *testing.T) {
 	opts := f10OriginOptions("https://app.example")
 	api := Router(humatest.NewAdapter(), "/api/auth", opts)
@@ -122,7 +112,6 @@ func TestF10_FormCsrf_CookieLessOriginForceValidated(t *testing.T) {
 }
 
 // P09-GAP-2: non-browser clients (no cookies, no origin, no fetch metadata)
-// keep the permissive fallback (curl / server-to-server still work).
 func TestF10_FormCsrf_ServerToServerPasses(t *testing.T) {
 	opts := f10OriginOptions("https://app.example")
 	api := Router(humatest.NewAdapter(), "/api/auth", opts)
@@ -133,8 +122,6 @@ func TestF10_FormCsrf_ServerToServerPasses(t *testing.T) {
 }
 
 // f10SkipPlugin contributes skip-origin-check paths without any other
-// plugin surface (mirrors upstream ctx.skipOriginCheck string[] branch,
-// populated upstream by SSO plugin init).
 type f10SkipPlugin struct {
 	id    string
 	paths []string
@@ -181,7 +168,6 @@ func TestF10_SkipOriginCheckPaths_SlashBoundary(t *testing.T) {
 }
 
 // P09-GAP-3: skipCSRFCheck granularity — DisableCSRFCheck skips CSRF
-// validation while DisableOriginCheck keeps its backward-compat warning path.
 func TestF10_SkipCSRFCheck_GranularityPinned(t *testing.T) {
 	opts := f10OriginOptions("https://app.example")
 	opts.Advanced.DisableCSRFCheck = true
@@ -196,8 +182,6 @@ func TestF10_SkipCSRFCheck_GranularityPinned(t *testing.T) {
 }
 
 // f10TracePlugin exposes a TRACE endpoint so the origin middleware's widened
-// mutating set is observable end to end: core routes are GET/POST-only and
-// the test stack answers 404/405 before middleware for unrouted methods.
 type f10TracePlugin struct{ id string }
 
 func (p *f10TracePlugin) ID() string                   { return p.id }
@@ -235,7 +219,6 @@ func (p *f10TracePlugin) Endpoints() []types.Endpoint {
 
 // P09-GAP-4: TRACE is outside GET/OPTIONS/HEAD so it is origin-validated
 // upstream; an untrusted TRACE + cookie must be 403 (not a pass-through to
-// the handler).
 func TestF10_TraceMethod_OriginValidated(t *testing.T) {
 	opts := f10OriginOptions("https://app.example")
 	opts.Plugins = []types.Plugin{&f10TracePlugin{id: "f10-trace"}}
@@ -248,7 +231,6 @@ func TestF10_TraceMethod_OriginValidated(t *testing.T) {
 	if resp.Code != http.StatusForbidden {
 		t.Fatalf("untrusted TRACE + cookie must be 403, got %d: %s", resp.Code, resp.Body.String())
 	}
-	// A trusted TRACE still reaches the handler.
 	resp = testAPI.Do("TRACE", "/api/auth/f10-trace",
 		"Origin: https://app.example",
 		"Cookie: session_token=abc",
@@ -259,8 +241,6 @@ func TestF10_TraceMethod_OriginValidated(t *testing.T) {
 }
 
 // P09-GAP-5: the default (memory) backend must enforce atomically — a
-// concurrent burst admits exactly max, never overshooting via a two-phase
-// check-then-record. /sign-in/email carries the 10s/3 special rule.
 func TestF10_MemoryBackendBurst_AtomicConsume(t *testing.T) {
 	rateLimitMu.Lock()
 	original := rateLimitMemory
@@ -304,7 +284,6 @@ func TestF10_MemoryBackendBurst_AtomicConsume(t *testing.T) {
 }
 
 // P09-GAP-6: custom-rule globs follow upstream wildcardMatch — `**` crosses
-// `/` separators while `*` stays within one segment.
 func TestF10_CustomRule_DoubleStarMatchesUpstream(t *testing.T) {
 	rules := map[string]types.RateLimitRule{
 		"/ok/**": {Window: 60, Max: 1},
@@ -351,10 +330,7 @@ func TestF10_CustomResolver_DoubleStarMatchesUpstream(t *testing.T) {
 }
 
 // P09-GAP-7: a plugin contributing ONLY rate-limit rules (no hooks) still has
-// its buckets consumed — consumption is not gated on other middleware.
 func TestF10_PluginBucket_OnlyRulesConsume(t *testing.T) {
-	// The default memory backend is process-global: isolate the bucket so
-	// repeated runs (go test -count=N) start from a fresh window.
 	rateLimitMu.Lock()
 	original := rateLimitMemory
 	rateLimitMemory = map[string]memoryRateLimitEntry{}

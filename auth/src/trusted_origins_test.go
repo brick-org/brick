@@ -11,7 +11,7 @@ import (
 	"github.com/danielgtaylor/huma/v2/humatest"
 )
 
-// --- Cycle 1: exact origin match ---
+// Cycle 1: exact origin match
 
 func TestIsTrustedOrigin_ExactMatch(t *testing.T) {
 	opts := auth.Options{TrustedOrigins: []string{"https://trusted.com"}}
@@ -20,7 +20,7 @@ func TestIsTrustedOrigin_ExactMatch(t *testing.T) {
 	}
 }
 
-// --- Cycle 2: path under trusted origin ---
+// Cycle 2: path under trusted origin
 
 func TestIsTrustedOrigin_PathUnderTrusted(t *testing.T) {
 	opts := auth.Options{TrustedOrigins: []string{"https://trusted.com"}}
@@ -29,7 +29,7 @@ func TestIsTrustedOrigin_PathUnderTrusted(t *testing.T) {
 	}
 }
 
-// --- Cycle 3: reject similar-looking domain ---
+// Cycle 3: reject similar-looking domain
 
 func TestIsTrustedOrigin_RejectsSimilarDomain(t *testing.T) {
 	opts := auth.Options{TrustedOrigins: []string{"https://trusted.com"}}
@@ -38,7 +38,7 @@ func TestIsTrustedOrigin_RejectsSimilarDomain(t *testing.T) {
 	}
 }
 
-// --- Cycle 4: wildcard host pattern ---
+// Cycle 4: wildcard host pattern
 
 func TestIsTrustedOrigin_WildcardHost(t *testing.T) {
 	opts := auth.Options{TrustedOrigins: []string{"*.my-site.com"}}
@@ -53,7 +53,7 @@ func TestIsTrustedOrigin_WildcardHost(t *testing.T) {
 	}
 }
 
-// --- Cycle 5: protocol-specific wildcard ---
+// Cycle 5: protocol-specific wildcard
 
 func TestIsTrustedOrigin_ProtocolWildcard(t *testing.T) {
 	opts := auth.Options{TrustedOrigins: []string{"https://*.example.com"}}
@@ -65,7 +65,7 @@ func TestIsTrustedOrigin_ProtocolWildcard(t *testing.T) {
 	}
 }
 
-// --- Cycle 6: BaseURL origin always trusted ---
+// Cycle 6: BaseURL origin always trusted
 
 func TestIsTrustedOrigin_BaseURLAlwaysTrusted(t *testing.T) {
 	opts := auth.Options{BaseURL: "http://localhost:8080/api/auth"}
@@ -128,18 +128,17 @@ func postWithOriginAndCookie(t *testing.T, url, origin, cookie string) int {
 	return resp.StatusCode
 }
 
-// --- Cycle 7: middleware passes trusted origin with cookie ---
+// Cycle 7: middleware passes trusted origin with cookie
 
 func TestOriginMiddleware_TrustedOriginWithCookie(t *testing.T) {
 	srv := newOriginTestServer(t, []string{"https://trusted.com"}, "http://localhost", auth.AdvancedOptions{})
-	// 422 = Huma validation error (empty body) — route exists, origin check passed
 	status := postWithOriginAndCookie(t, srv.URL+"/api/auth/sign-in/email", "https://trusted.com", "session=abc")
 	if status == http.StatusForbidden {
 		t.Fatalf("trusted origin with cookie must not be rejected, got %d", status)
 	}
 }
 
-// --- Cycle 8: middleware rejects untrusted origin with cookie ---
+// Cycle 8: middleware rejects untrusted origin with cookie
 
 func TestOriginMiddleware_UntrustedOriginWithCookie(t *testing.T) {
 	srv := newOriginTestServer(t, []string{"https://trusted.com"}, "http://localhost", auth.AdvancedOptions{})
@@ -149,10 +148,7 @@ func TestOriginMiddleware_UntrustedOriginWithCookie(t *testing.T) {
 	}
 }
 
-// --- Cycle 9: origin-bearing requests without cookie follow upstream ---
-// Upstream validateFormCsrf (origin-check.ts, pinned 5468e6bf) validates a
-// present Origin/Referer even without cookies; only requests with no origin
-// at all (server-to-server) keep the permissive fallback.
+// Cycle 9: origin-bearing requests without cookie follow upstream
 
 func TestOriginMiddleware_NoCookieUntrustedOriginBlocked(t *testing.T) {
 	srv := newOriginTestServer(t, []string{"https://trusted.com"}, "http://localhost", auth.AdvancedOptions{})

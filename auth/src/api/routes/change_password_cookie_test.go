@@ -21,10 +21,7 @@ func c34PasswordAPI(t *testing.T, opts types.Options) humatest.TestAPI {
 	return api
 }
 
-// C34-1: ChangePassword revoke path must fail the route when the replacement
 // session cookie cannot be minted (upstream await setSessionCookie rejects,
-// update-user.ts:288-305). The already-minted session row is kept (upstream
-// create-then-cookie order); only the route fails with 500.
 func TestChangePasswordCookie_ChangePasswordCookieMintFailure500s(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -61,21 +58,13 @@ func TestChangePasswordCookie_ChangePasswordCookieMintFailure500s(t *testing.T) 
 	if !strings.Contains(resp.Body.String(), types.ErrFailedToCreateSession) {
 		t.Fatalf("body must carry %q: %s", types.ErrFailedToCreateSession, resp.Body.String())
 	}
-	// The minted replacement session row is kept (no rollback).
 	n, err := db.Count(context.Background(), "session", nil)
 	if err != nil || n == 0 {
 		t.Fatalf("session rows = %d (err=%v), want >=1 (minted row kept)", n, err)
 	}
 }
 
-// C34-2: ChangePassword revoke shape pins the kept compat field status:true
 // plus token+user. Upstream is {token nullable, user required}
-// (update-user.ts:186-243); status is additive but existing suites require
-// it (TestCredsV1_ChangePasswordRevokesOthers,
-// TestTriageV1_ChangePasswordSuccessRotatesCredentials,
-// TestTriageV1_ChangePasswordIgnoresCookieCache,
-// TestPasswordResetCodes_ChangePasswordRevokeEmitsSetCookie,
-// TestC702_ChangePasswordOrderAndRevoke), so it stays.
 func TestChangePasswordCookie_ChangePasswordShapeKeepsStatus(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)

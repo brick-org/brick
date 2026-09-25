@@ -61,7 +61,6 @@ func TestCredsV1_ListAccounts(t *testing.T) {
 }
 
 // account.test.ts "should not expose empty scope tokens from stored empty
-// account scope": a stored empty scope lists as [].
 func TestCredsV1_ListAccountsEmptyScope(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -89,8 +88,6 @@ func TestCredsV1_ListAccountsEmptyScope(t *testing.T) {
 }
 
 // update-user.test.ts "should update the user's name" + "shouldn't pass
-// defaults": only supplied fields change; declared defaults never reset
-// stored additional values.
 func TestCredsV1_UpdateUserKeepsStoredAdditional(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -149,7 +146,6 @@ func TestCredsV1_UpdateUserUnsetsImage(t *testing.T) {
 }
 
 // update-user.test.ts "should not allow updating user with additional
-// fields that are input: false".
 func TestCredsV1_UpdateUserInputFalseRejected(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -171,7 +167,6 @@ func TestCredsV1_UpdateUserInputFalseRejected(t *testing.T) {
 }
 
 // update-user.test.ts "should update the user's password" (wrong-password
-// leg): a wrong current password fails and the old password keeps working.
 func TestCredsV1_ChangePasswordWrongCurrent(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -196,7 +191,6 @@ func TestCredsV1_ChangePasswordWrongCurrent(t *testing.T) {
 }
 
 // update-user.test.ts "should revoke other sessions": revokeOtherSessions
-// mints a fresh token and kills the old session.
 func TestCredsV1_ChangePasswordRevokesOthers(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -224,7 +218,6 @@ func TestCredsV1_ChangePasswordRevokesOthers(t *testing.T) {
 }
 
 // update-user.test.ts "change-email enumeration protection": an existing
-// target answers success without changing the email.
 func TestCredsV1_ChangeEmailExistingTarget(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -248,7 +241,6 @@ func TestCredsV1_ChangeEmailExistingTarget(t *testing.T) {
 }
 
 // update-user.test.ts "change-email without sendVerificationEmail": existing
-// and non-existing targets fail with the same error.
 func TestCredsV1_ChangeEmailSameErrorWithoutSender(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -274,8 +266,6 @@ func TestCredsV1_ChangeEmailSameErrorWithoutSender(t *testing.T) {
 }
 
 // update-user.test.ts "change-email callbackURL preservation": a
-// callbackURL carrying its own query string round-trips verbatim through
-// the confirmation URL.
 func TestCredsV1_ChangeEmailCallbackEncoding(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -313,8 +303,6 @@ func TestCredsV1_ChangeEmailCallbackEncoding(t *testing.T) {
 }
 
 // update-user.test.ts "change-email rejects confirmation-only config for
-// verified users": no verification sender means 400, not a misleading
-// success.
 func TestCredsV1_ChangeEmailConfirmationOnlyConfig(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -337,8 +325,6 @@ func TestCredsV1_ChangeEmailConfirmationOnlyConfig(t *testing.T) {
 }
 
 // update-user.test.ts "credential identity across email changes": the
-// unverified direct-update leg keeps one credential account and moves
-// sign-in to the new address.
 func TestCredsV1_ChangeEmailKeepsCredentialAccount(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -381,8 +367,6 @@ func TestCredsV1_ChangeEmailKeepsCredentialAccount(t *testing.T) {
 }
 
 // update-user.test.ts "should delete with verification flow and password":
-// password + verification flow sends a 32-char token mail first, then the
-// token completes deletion.
 func TestCredsV1_DeleteUserVerificationFlowWithPassword(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -420,7 +404,6 @@ func TestCredsV1_DeleteUserVerificationFlowWithPassword(t *testing.T) {
 }
 
 // update-user.test.ts "should require password when session is no longer
-// fresh" (#8173): stale sessions need a password, else 400 SESSION_EXPIRED.
 func TestCredsV1_DeleteUserRequiresPasswordWhenStale(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -434,9 +417,6 @@ func TestCredsV1_DeleteUserRequiresPasswordWhenStale(t *testing.T) {
 	if len(rows) == 0 {
 		t.Fatal("seed session missing")
 	}
-	// Age the sign-in session past FreshAge, mirroring upstream's createdAt
-	// backdate (#8173). The mem adapter's Update targets the first match,
-	// so scope the write to the latest session row (the sign-in session).
 	latest, _ := rows[len(rows)-1]["token"].(string)
 	if latest == "" {
 		t.Fatal("seed session has no token")
@@ -453,8 +433,6 @@ func TestCredsV1_DeleteUserRequiresPasswordWhenStale(t *testing.T) {
 }
 
 // update-user.test.ts "rejects /delete-user/callback when the backing
-// session was revoked": the GET callback must fail closed on a revoked
-// session even with a valid delete token.
 func TestCredsV1_DeleteUserCallbackRevokedSession(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -475,8 +453,6 @@ func TestCredsV1_DeleteUserCallbackRevokedSession(t *testing.T) {
 	if token == "" {
 		t.Fatal("expected a delete token")
 	}
-	// Revoke the backing session server-side while the cookie survives
-	// (the latest row is the sign-in session the cookie carries).
 	sessions, _ := db.FindMany(context.Background(), "session", nil, 0, 0, nil, nil)
 	if len(sessions) == 0 {
 		t.Fatal("seed session missing")
@@ -513,8 +489,6 @@ func TestCredsV1_DeleteUserFreshSession(t *testing.T) {	db := newParityMemAdapte
 }
 
 // update-user.test.ts deleteUserCallback originCheck leg: an untrusted
-// callbackURL fails with 403 INVALID_CALLBACK_URL before the token is
-// consumed or the user deleted; retrying without it then succeeds.
 func TestCredsV1_DeleteUserCallbackUntrustedCallbackURL(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -540,8 +514,6 @@ func TestCredsV1_DeleteUserCallbackUntrustedCallbackURL(t *testing.T) {
 	if row, _ := db.FindOne(context.Background(), "user", []types.Where{{Field: "email", Value: "del-untrusted@test.com"}}, nil); row == nil {
 		t.Fatal("user must survive an untrusted-callback rejection")
 	}
-	// The token was not burned: the same token completes deletion without
-	// the callbackURL.
 	done := api.Get("/api/auth/delete-user/callback?token="+url.QueryEscape(token), "Cookie: "+cookie)
 	if done.Code != 200 || !strings.Contains(done.Body.String(), "User deleted") {
 		t.Fatalf("retry = %d, want deletion: %s", done.Code, done.Body.String())
@@ -549,8 +521,6 @@ func TestCredsV1_DeleteUserCallbackUntrustedCallbackURL(t *testing.T) {
 }
 
 // update-user.test.ts "should change email only after confirming both
-// addresses": verified users flow confirmation -> verification, and only
-// the verification leg moves the email.
 func TestCredsV1_ChangeEmailDoubleConfirm(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -584,7 +554,6 @@ func TestCredsV1_ChangeEmailDoubleConfirm(t *testing.T) {
 	if confirmationToken == "" {
 		t.Fatal("confirmation email must be sent to the current address")
 	}
-	// 1. Confirm at the old address: no user update yet.
 	if resp := api.Get("/api/auth/verify-email?token="+url.QueryEscape(confirmationToken), "Cookie: "+cookie); resp.Code != 200 {
 		t.Fatalf("confirm = %d: %s", resp.Code, resp.Body.String())
 	}
@@ -594,7 +563,6 @@ func TestCredsV1_ChangeEmailDoubleConfirm(t *testing.T) {
 	if row, _ := db.FindOne(context.Background(), "user", []types.Where{{Field: "email", Value: "double-confirm@test.com"}}, nil); row == nil {
 		t.Fatal("email must still be the old address after confirmation")
 	}
-	// 2. Verify at the new address: email moves and verifies.
 	if resp := api.Get("/api/auth/verify-email?token="+url.QueryEscape(verificationToken), "Cookie: "+cookie); resp.Code != 200 {
 		t.Fatalf("verify = %d: %s", resp.Code, resp.Body.String())
 	}

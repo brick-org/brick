@@ -2,16 +2,9 @@ package routes
 
 // G1 route-layer schema-validation ports (pinned upstream Better Auth v1.7.5
 // @ 5468e6bf).
-//
 // Upstream case: `decodeCookieCache` verifies the signature and THEN
 // zod-validates the payload (`parseCookieCachePayload`,
 // vendor/.../src/cookies/cache.ts:20-39, wired in
-// vendor/.../src/cookies/index.ts:328-353). Route-level `compactCachePayload`
-// unmarshalled into typed structs where e.g. null `emailVerified` silently
-// becomes `false`, so a correctly-signed schema-invalid cache was ACCEPTED
-// as a hit. The JWT/JWE route paths (`jwtCachePayload`/`jweCachePayload`)
-// inherit the codec-level fix; this file pins the `compactCachePayload`
-// unmarshal-path verdict plus the route-visible JWT/JWE analogs.
 
 import (
 	"encoding/base64"
@@ -48,8 +41,6 @@ func schemaV1RouteUser() map[string]any {
 }
 
 // schemaV1RouteCompactValue signs a route-compact session_data value
-// (signed base64url JSON, mirroring newSessionDataCookie's compact branch)
-// for the given session/user maps.
 func schemaV1RouteCompactValue(t *testing.T, secret string, session, user map[string]any) string {
 	t.Helper()
 	raw, err := json.Marshal(map[string]any{
@@ -69,9 +60,6 @@ func schemaV1RouteCompactValue(t *testing.T, secret string, session, user map[st
 }
 
 // The resurrected probe at the route layer: a correctly-signed compact cache
-// with user.emailVerified: null must NOT decode. The typed unmarshal alone
-// coerces null to false, so compactCachePayload must run a post-decode shape
-// check and surface the shared schema sentinel.
 func TestSchemaV1_CompactCachePayloadRejectsNullEmailVerified(t *testing.T) {
 	session := schemaV1RouteSession()
 	user := schemaV1RouteUser()
@@ -117,8 +105,6 @@ func TestSchemaV1_CompactCachePayloadSignatureIdentity(t *testing.T) {
 }
 
 // Route-visible JWT analog: a correctly-signed JWT cache with
-// emailVerified:null must not decode (codec sentinel propagates through
-// jwtCachePayload); valid ones still do.
 func TestSchemaV1_JWTCachePayloadSchemaVerdict(t *testing.T) {
 	badUser := schemaV1RouteUser()
 	badUser["emailVerified"] = nil

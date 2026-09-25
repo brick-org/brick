@@ -13,10 +13,6 @@ import (
 )
 
 // TestSignupHook_PostCommitFailureSurfacesHookCode mirrors
-// organization-hook.test.ts "keeps the committed user and surfaces a
-// post-commit hook failure as the sign-up response": the user.create.after
-// hook runs after the sign-up transaction commits, so a hook failure keeps
-// the committed user and its error code becomes the sign-up response.
 func TestSignupHook_PostCommitFailureSurfacesHookCode(t *testing.T) {
 	db := openDB(t)
 	migrate(t, db)
@@ -76,7 +72,6 @@ func TestSignupHook_PostCommitFailureSurfacesHookCode(t *testing.T) {
 		t.Fatalf("hook error code must surface, got status=%d detail=%q", code, detail)
 	}
 
-	// The second user's row committed before its hook ran.
 	row, err := authbun.New(db, authbun.Config{}).FindOne(context.Background(), "user", []auth.Where{
 		{Field: "email", Value: "user2-hook@example.com"},
 	}, nil)

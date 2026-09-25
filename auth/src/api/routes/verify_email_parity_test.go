@@ -22,8 +22,6 @@ func TestProcessVerifyEmail_HMACMarksVerifiedAndReturnsUser(t *testing.T) {
 	if errCode != "" {
 		t.Fatalf("expected success, got %s (%d)", errCode, status)
 	}
-	// Upstream fresh plain verify answers {status:true,user:null}
-	// (email-verification.ts:540-543; realigned by F2).
 	if user != nil {
 		t.Fatalf("fresh verify must return null user, got %#v", user)
 	}
@@ -131,8 +129,6 @@ func TestProcessVerifyEmail_AutoSignInMintsSession(t *testing.T) {
 	if errCode != "" {
 		t.Fatalf("expected success, got %s", errCode)
 	}
-	// Upstream fresh plain verify answers {status:true,user:null}; the
-	// session cookies + row still prove auto sign-in (realigned by F2).
 	if user != nil {
 		t.Fatalf("fresh verify must return null user, got %#v", user)
 	}

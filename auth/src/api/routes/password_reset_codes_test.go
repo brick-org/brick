@@ -40,9 +40,7 @@ func f5BodyToken(t *testing.T, body string) string {
 	return *decoded.Token
 }
 
-// P08-G1: ChangePassword(revokeOtherSessions:true) must emit Set-Cookie for
 // the replacement session (upstream update-user.ts:300-303 calls
-// setSessionCookie(newSession)).
 func TestPasswordResetCodes_ChangePasswordRevokeEmitsSetCookie(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -87,8 +85,6 @@ func TestPasswordResetCodes_ChangePasswordRevokeEmitsSetCookie(t *testing.T) {
 			found = true
 			break
 		}
-		// Fallback: raw token embedded without signing (should not happen,
-		// but accept if the replacement token is carried verbatim).
 		if strings.Contains(c, replacement) {
 			found = true
 			break
@@ -97,13 +93,10 @@ func TestPasswordResetCodes_ChangePasswordRevokeEmitsSetCookie(t *testing.T) {
 	if !found {
 		t.Fatalf("Set-Cookie must carry the replacement token %q, got %q", replacement, raw)
 	}
-	// Cookie-only client: the Set-Cookie value must authenticate get-session.
 	var sessionCookie string
 	for _, c := range raw {
 		seg, _, _ := strings.Cut(c, ";")
 		if strings.Contains(strings.ToLower(seg), "session") || strings.Contains(c, replacement) {
-			// Reconstruct a forwardable Cookie header from the session cookie
-			// segment (value is the signed replacement token).
 			sessionCookie = strings.TrimSpace(seg)
 			if unsigned, ok := cookies.VerifyAny(opts.AllSecrets(), strings.TrimSpace(strings.SplitN(seg, "=", 2)[1])); ok && unsigned == replacement {
 				break
@@ -120,13 +113,9 @@ func TestPasswordResetCodes_ChangePasswordRevokeEmitsSetCookie(t *testing.T) {
 }
 
 // Deviation: request-reset disabled must adopt the upstream status/code
-// shape (400 RESET_PASSWORD_DISABLED, message "Reset password isn't
-// enabled") as a global flag — identical for existing and unknown emails,
-// no per-email oracle.
 func TestPasswordResetCodes_RequestResetDisabledUpstreamCode(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
-	// Disabled: both senders nil (global flag, checked before any lookup).
 	opts.EmailAndPassword.SendResetPassword = nil
 	opts.EmailAndPassword.SendResetPasswordRequest = nil
 	api := f5PasswordAPI(t, opts)
@@ -163,7 +152,6 @@ func TestPasswordResetCodes_RequestResetDisabledUpstreamCode(t *testing.T) {
 }
 
 // Deviation: reset USER_NOT_FOUND must be BAD_REQUEST (upstream
-// password.ts:304), not the canonical 404.
 func TestPasswordResetCodes_ResetUserNotFoundIsBadRequest(t *testing.T) {
 	ctx := context.Background()
 	db := newParityMemAdapter()

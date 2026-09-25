@@ -25,7 +25,6 @@ func TestV1_UpdateSessionRevokedFailsClosed(t *testing.T) {
 	seedSessionUser(t, db, "revoked-update@example.com", "tok-revoked-update", time.Now().UTC().Add(time.Hour))
 	header := cacheHeaderFor(t, ctx, opts, "tok-revoked-update")
 
-	// Revoke server-side; only the cookie cache still vouches for the session.
 	if err := deleteSecondaryAwareSession(ctx, opts, "tok-revoked-update"); err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +36,6 @@ func TestV1_UpdateSessionRevokedFailsClosed(t *testing.T) {
 		t.Fatalf("revoked update expected 401, got %d: %s", resp.Code, resp.Body.String())
 	}
 
-	// The database is authoritative and says the session is gone.
 	_, err := resolveGetSession(ctx, opts, getSessionRequest{
 		token:        "tok-revoked-update",
 		cookieHeader: header,
@@ -48,10 +46,6 @@ func TestV1_UpdateSessionRevokedFailsClosed(t *testing.T) {
 		t.Fatal("strict read of a revoked session must fail")
 	}
 }
-
-// Upstream deferSessionRefresh (session-api.test.ts): "should respect
-// disableSessionRefresh config when deferSessionRefresh is enabled" — the
-// deferred GET reports needsRefresh:false and performs no write.
 
 func TestV1_DeferWithDisableSessionRefresh(t *testing.T) {
 	ctx := context.Background()

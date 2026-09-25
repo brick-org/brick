@@ -14,20 +14,10 @@ import (
 )
 
 // Cookie-cache field filtering (v1 core port).
-//
 // Upstream: vendor/.../src/cookies/cookies.test.ts, describe
 // "Cookie Cache Field Filtering" (pinned 5468e6bf). Upstream setCookieCache
 // (cookies/index.ts:169-174) strips schema-declared `returned:false` fields
-// via filterOutputFields (session) and parseUserOutput (user) before signing,
-// for every strategy. Unknown fields are kept (backward compatibility).
-//
-// Adaptation: Go keeps additional fields nested under AdditionalFields (not
-// flat), and DB reads (rowToUser/rowToSession) already strip returned:false.
-// These tests therefore build Session/User structs directly with
-// AdditionalFields values (simulating defaults applied at creation, as in the
 // upstream getTestInstance configs) and mint via newSessionDataCookieWithContext
-// (the owned issuance path), reading back via cachedSessionFromRequestFull.
-// The sign-up/sign-in HTTP issuance legs are sibling-owned and untouched here.
 
 func filterV1BoolPtr(v bool) *bool { return &v }
 
@@ -92,7 +82,6 @@ func filterV1AssertPresent(t *testing.T, m map[string]any, key string, want any)
 }
 
 // Upstream: "should exclude user fields with returned: false from cookie cache"
-// (internalNote undefined, email kept).
 func TestFilterV1_ExcludeSingleUserField(t *testing.T) {
 	ctx := context.Background()
 	opts, _ := filterV1BaseOpts()
@@ -176,7 +165,6 @@ func TestFilterV1_SessionFieldFiltering(t *testing.T) {
 }
 
 // Upstream: "should include unknown user fields for backward compatibility"
-// (known returned:false dropped; email/name kept; unknown kept).
 func TestFilterV1_UnknownFieldsKept(t *testing.T) {
 	ctx := context.Background()
 	opts, _ := filterV1BaseOpts()
@@ -197,7 +185,6 @@ func TestFilterV1_UnknownFieldsKept(t *testing.T) {
 }
 
 // Upstream: "should work with JWT strategy" (email + token round-trip;
-// plus filtering, which must apply to every strategy).
 func TestFilterV1_JWTStrategy(t *testing.T) {
 	ctx := context.Background()
 	opts, _ := filterV1BaseOpts()
@@ -218,7 +205,6 @@ func TestFilterV1_JWTStrategy(t *testing.T) {
 }
 
 // Upstream: "should work with compact strategy" (email + token round-trip;
-// plus filtering).
 func TestFilterV1_CompactStrategy(t *testing.T) {
 	ctx := context.Background()
 	opts, _ := filterV1BaseOpts()
@@ -238,8 +224,6 @@ func TestFilterV1_CompactStrategy(t *testing.T) {
 	filterV1AssertAbsent(t, payload.User.AdditionalFields, "hiddenNote")
 }
 
-// Custom-signer path (no direct upstream case; constraint: JWT/custom-signer
-// paths share the filter). Exercises signViaCustomSigner + verify round-trip.
 type filterV1Payload struct {
 	Session   map[string]any
 	User      map[string]any

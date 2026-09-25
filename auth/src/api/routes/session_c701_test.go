@@ -22,18 +22,8 @@ import (
 // C7-01 port: upstream cookie-name/chunk recovery, TS fixture interop,
 // dynamic secure/domain via request context, AdditionalCookies propagation,
 // custom JWKS signer path, and stateless guards.
-//
 // Upstream refs (pinned 5468e6bf):
 //   - cookies/index.ts (setCookieCache/decodeCookieCache, getCookies,
-//     createCookieGetter, deleteSessionCookie chunk clean)
-//   - cookies/session-store.ts (getChunkedCookie, chunkCookie, clean)
-//   - cookies/jwt.ts (verifySessionCookieJwtWithJwks claim binding)
-//   - crypto/jwt.ts (signJWT/verifyJWT, symmetricEncode/DecodeJWT)
-//   - api/routes/session.ts (get-session cache fast path, version/token/
-//     expiry binding, cookieRefreshCache, isStateful, fresh middleware)
-//   - api/routes/update-session.ts, sign-out.ts
-//   - context/create-context.ts (sessionConfig defaults, isStateful)
-//   - core init-options.ts (crossSubDomainCookies.additionalCookies)
 
 func c701TestOptions(db *parityMemAdapter) types.Options {
 	opts := sessionTestOptions(db)
@@ -51,7 +41,6 @@ func c701MintJWT(t *testing.T, secret string, session, user map[string]any, vers
 }
 
 // Upstream session_data name must be accepted (cookie-name recovery).
-// Currently cachedSessionFromRequest only reads "auth_session_data".
 func TestC701_SessionDataUpstreamNameRecovery(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := c701TestOptions(db)
@@ -101,7 +90,6 @@ func TestC701_SessionDataChunkRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Force at least 2 chunks by splitting manually.
 	if len(chunks) == 1 {
 		half := len(single.Value) / 2
 		chunks = map[string]string{
@@ -173,12 +161,10 @@ func TestC701_TSFixtureJWTInteropAtRoute(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := c701TestOptions(db)
 	opts.Session.CookieCache.Strategy = types.SessionCookieCacheJWT
-	// Wrong-only secrets must miss.
 	header := signedSessionHeader(t, opts, sessionToken) + "; better-auth.session_data=" + token
 	if _, ok := cachedSessionFromRequestFull(context.Background(), header, []string{"wrong"}, sessionToken, opts); ok {
 		t.Fatal("wrong secret must miss at route layer")
 	}
-	// Rotation: retained secret hits.
 	cached, ok := cachedSessionFromRequestFull(context.Background(), header, []string{"rotated", secret}, sessionToken, opts)
 	if !ok || cached == nil {
 		t.Fatal("TS JWT fixture must hit under rotation at route layer")
@@ -186,11 +172,9 @@ func TestC701_TSFixtureJWTInteropAtRoute(t *testing.T) {
 	if cached.Version != version {
 		t.Fatalf("version = %q, want %q", cached.Version, version)
 	}
-	// Token binding: mismatched session_token must miss.
 	if _, ok := cachedSessionFromRequestFull(context.Background(), header, []string{secret}, "other-token", opts); ok {
 		t.Fatal("token mismatch must miss")
 	}
-	// Malformed limits fail closed.
 	for _, bad := range []string{"", "not.a.jwt", strings.Repeat("A", 1<<20)} {
 		badHeader := signedSessionHeader(t, opts, sessionToken) + "; better-auth.session_data=" + bad
 		if _, ok := cachedSessionFromRequestFull(context.Background(), badHeader, []string{secret}, sessionToken, opts); ok {
@@ -244,13 +228,11 @@ func TestC701_DynamicSecureDomainViaContext(t *testing.T) {
 	if !strings.HasPrefix(cfg.Name, "__Secure-") {
 		t.Fatalf("secure context must use __Secure- name, got %q", cfg.Name)
 	}
-	// Cross-subdomain domain follows the effective origin, not static BaseURL.
 	opts.Advanced.CrossSubDomainCookies.Enabled = true
 	domain := ResolveCrossSubDomainCookieDomainWithContext(ctx, opts, CookieRequestHeaders{})
 	if domain != "tenant.example.com" {
 		t.Fatalf("domain = %q, want tenant.example.com", domain)
 	}
-	// Stored request supplements Host when headers are empty.
 	stored, _ := newStoredRequestForTest("tenant.example.com")
 	ctx2 := withStoredRequestForTest(context.Background(), stored)
 	filled := headersWithStoredRequest(ctx2, CookieRequestHeaders{})
@@ -301,16 +283,12 @@ func TestC701_CustomSignerClaimBindingAndFallback(t *testing.T) {
 	if !ok || cached == nil {
 		t.Fatal("custom signer token must hit with claim binding")
 	}
-	// Wrong sid (token mismatch) must miss and fall back (miss here).
 	badSession := map[string]any{"token": "other", "id": "x"}
 	bad, _ := fake.SignForTest(badSession, um, "1", 5*time.Minute)
 	badHeader := signedSessionHeader(t, opts, "tok-signer") + "; " + resolveSessionDataCookieName(opts, false) + "=" + bad
 	if _, ok := cachedSessionFromRequestFull(ctx, badHeader, opts.AllSecrets(), "tok-signer", opts); ok {
 		t.Fatal("sid mismatch must miss")
 	}
-	// Secret-signed token must NOT verify via custom path alone; it falls
-	// through to the DB (authoritative fallback) — at the cache layer it
-	// is a miss when a custom signer is configured.
 	secretVal := c701MintJWT(t, opts.CurrentSecret(), sm, um, "1")
 	secretHeader := signedSessionHeader(t, opts, "tok-signer") + "; " + resolveSessionDataCookieName(opts, false) + "=" + secretVal
 	if _, ok := cachedSessionFromRequestFull(ctx, secretHeader, opts.AllSecrets(), "tok-signer", opts); ok {
@@ -319,14 +297,12 @@ func TestC701_CustomSignerClaimBindingAndFallback(t *testing.T) {
 }
 
 // Stateless (no DB, no secondary) reads must not panic; cache hit serves,
-// cache miss is unauthorized.
 func TestC701_StatelessNoDBGuard(t *testing.T) {
 	opts := sessionTestOptions(newParityMemAdapter())
 	opts.DB = nil
 	opts.SecondaryStorage = nil
 	opts.Session.CookieCache.Enabled = true
 	opts.Session.CookieCache.Strategy = types.SessionCookieCacheCompact
-	// Miss with no store is unauthorized, not a panic.
 	defer func() {
 		if r := recover(); r != nil {
 			t.Fatalf("stateless miss panicked: %v", r)
@@ -337,9 +313,6 @@ func TestC701_StatelessNoDBGuard(t *testing.T) {
 		t.Fatal("stateless miss must error")
 	}
 }
-
-// --- C7-01 test helpers (local fakes; no plugins/jwt import to avoid a
-// routes -> plugins/jwt -> auth -> routes cycle) ---
 
 func newStoredRequestForTest(host string) (*http.Request, error) {
 	return http.NewRequest(http.MethodGet, "https://"+host+"/api/auth/get-session", nil)
@@ -387,8 +360,6 @@ func (f *fakeCookieCacheSignerForTest) RouteHooks() types.PluginRouteHooks {
 
 func (f *fakeCookieCacheSignerForTest) ErrorCodes() map[string]string { return nil }
 
-// SignForTest mints a custom-signer JWT for the test (mirrors the plugin's
-// signCookieCacheJWT claim binding: sid/sub/iss/aud + version).
 func (f *fakeCookieCacheSignerForTest) SignForTest(session, user map[string]any, version string, maxAge time.Duration) (string, error) {
 	if maxAge <= 0 {
 		maxAge = 5 * time.Minute
@@ -419,14 +390,10 @@ func (f *fakeCookieCacheSignerForTest) SignForTest(session, user map[string]any,
 	return unsigned + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
 }
 
-// SignCookieCache satisfies the duck-typed custom signer contract (same
-// method name/signature shape as plugins/jwt.Plugin, discovered via
-// reflection so routes avoid a plugins/jwt import cycle).
 func (f *fakeCookieCacheSignerForTest) SignCookieCache(_ context.Context, _ types.Options, payload fakeCookieCachePayloadForTest, maxAge time.Duration) (string, error) {
 	return f.SignForTest(payload.Session, payload.User, payload.Version, maxAge)
 }
 
-// VerifyCookieCache verifies the custom-signer JWT with claim binding.
 func (f *fakeCookieCacheSignerForTest) VerifyCookieCache(_ context.Context, _ types.Options, token string) (fakeCookieCacheVerifiedForTest, error) {
 	fail := func(msg string) (fakeCookieCacheVerifiedForTest, error) {
 		return fakeCookieCacheVerifiedForTest{}, errFakeVerify(msg)
@@ -527,7 +494,6 @@ func TestC701_ExpiredRowCleanup(t *testing.T) {
 	if row, _ := db.FindOne(ctx, "session", []types.Where{{Field: "token", Value: "tok-expired-clean"}}, nil); row != nil {
 		t.Fatal("expired row must be deleted on authoritative read")
 	}
-	// Deferred GET never writes: expired rows survive.
 	db2 := newParityMemAdapter()
 	opts2 := sessionTestOptions(db2)
 	seedSessionUser(t, db2, "expired-defer@example.com", "tok-expired-defer", time.Now().UTC().Add(-time.Hour))
@@ -553,11 +519,9 @@ func TestC701_RevokeForeignTokenMatrix(t *testing.T) {
 	if !strings.Contains(resp.Body.String(), `"status":true`) {
 		t.Fatalf("revoke foreign must return status:true, got %s", resp.Body.String())
 	}
-	// Foreign session still resolves (not deleted).
 	if _, _, _, err := loadSessionAndUser(context.Background(), opts, "tok-revoke-b"); err != nil {
 		t.Fatalf("foreign session must survive: %v", err)
 	}
-	// Update with no fields is 400, unknown token is 401.
 	_, api2 := humatest.New(t, huma.DefaultConfig("Test", "1.0.0"))
 	UpdateSession(api2, "/api/auth", opts)
 	emptyResp := api2.Post("/api/auth/update-session", "Cookie: "+headerA, map[string]any{})
@@ -582,7 +546,6 @@ func TestC701_StatefulStatelessDefaults(t *testing.T) {
 	if isStatefulSessionStore(stateless) {
 		t.Fatal("DB-less deployment must be stateless")
 	}
-	// Default session lifetimes (create-context.ts:308-317).
 	opts := parityTestOptions(newParityMemAdapter())
 	if got := opts.Session.ExpiresInDuration(); got != 7*24*time.Hour {
 		t.Fatalf("default ExpiresIn = %v, want 7d", got)

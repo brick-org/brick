@@ -1352,8 +1352,6 @@ func TestSignOut_AdvancedCookieOptionsApplied(t *testing.T) {
 		t.Fatalf("new request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	// F6 requireHeaders parity: headerless sign-out 401s; a garbage cookie
-	// passes the gate while still exercising cookie-clear attributes.
 	req.Header.Set("Cookie", "better-auth.session_token=garbage-token")
 
 	resp, err := http.DefaultClient.Do(req)
@@ -1398,7 +1396,6 @@ func TestSignOut_CrossSubDomainCookieUsesTrustedProxyHost(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Forwarded-Host", "auth.proxy.example.com")
 	req.Header.Set("X-Forwarded-Proto", "https")
-	// F6 requireHeaders parity (see above).
 	req.Header.Set("Cookie", "better-auth.session_token=garbage-token")
 
 	resp, err := http.DefaultClient.Do(req)
@@ -1579,7 +1576,6 @@ func TestNew_RejectsUnsupportedSecondaryStorageSessionFlags(t *testing.T) {
 	assertErr("preserveSessionInDatabase", auth.SessionOptions{PreserveSessionInDatabase: true})
 }
 
-// --- Plugin system tests ---
 
 // testPlugin implements auth.Plugin for testing the plugin contract.
 type testPlugin struct {
@@ -1996,7 +1992,6 @@ func TestPluginSystem_ErrorCodesMerged(t *testing.T) {
 	if !ok || base.Code != "USER_NOT_FOUND" || base.Message != "User not found" {
 		t.Fatalf("expected per-Auth BASE USER_NOT_FOUND, got %#v", base)
 	}
-	// The two previously-missing BASE codes must be present everywhere.
 	for _, code := range []string{auth.ErrChangeEmailDisabled, auth.ErrMethodNotAllowedDeferSessionRequired} {
 		if _, ok := a.ErrorCodes[code]; !ok {
 			t.Fatalf("expected per-Auth code %q", code)
@@ -2018,7 +2013,6 @@ func TestBetterAuth_PluginInitError(t *testing.T) {
 }
 
 // patchPlugin exercises the OPTIONAL PluginInitPatches interface: it returns
-// option patches (trusted origins + a DB hook) and a context AppName patch.
 type patchPlugin struct {
 	id string
 }
@@ -2118,7 +2112,6 @@ func TestPluginSystem_HookMutatesData(t *testing.T) {
 	db := openDB(t)
 	migrate(t, db)
 
-	// Add the role column for the test plugin schema extension.
 	ctx := context.Background()
 	_, err := db.ExecContext(ctx, "ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'member'")
 	if err != nil {
@@ -2138,11 +2131,9 @@ func TestPluginSystem_HookMutatesData(t *testing.T) {
 		Plugins: []auth.Plugin{plugin},
 	})
 
-	// Sign up — the BeforeCreate hook should add role="member" to the user data.
 	resp, _ := signUp(t, srv.URL, "plugin-hook@example.com")
 	resp.Body.Close()
 
-	// Verify the role was set in the DB.
 	bunDB := authbun.New(db, authbun.Config{})
 	row, err := bunDB.FindOne(ctx, "user", []auth.Where{
 		{Field: "email", Value: "plugin-hook@example.com"},
@@ -2550,7 +2541,6 @@ func TestHookedAdapter_TransactionPreservesHooks(t *testing.T) {
 	}
 }
 
-// --- Plugin route hook tests ---
 
 // routeHookPlugin is a minimal Plugin for testing route-level hooks.
 type routeHookPlugin struct {
@@ -2969,8 +2959,6 @@ func TestPluginRateLimitRule_LimitsMatchingPath(t *testing.T) {
 	api, _ := newMemoryAuthAPI(t, auth.Options{
 		Plugins: []auth.Plugin{p},
 		// Plugin rules honor the upstream enabled gate (resolveRateLimitConfig
-		// returns early when rate limiting is disabled), so the suite
-		// enables it explicitly; assertions below are unchanged.
 		RateLimit: auth.RateLimitOptions{Enabled: boolPtr(true)},
 	})
 	first := api.Get("/api/auth/ok", "X-Forwarded-For: 198.51.100.28")

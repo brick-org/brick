@@ -21,7 +21,6 @@ import (
 )
 
 // triageSeedSecondSession adds a second live session row for the user that
-// owns token, returning the new token.
 func triageSeedSecondSession(t *testing.T, ctx context.Context, db *parityMemAdapter, token, newToken string) {
 	t.Helper()
 	row, err := db.FindOne(ctx, "session", []types.Where{{Field: "token", Value: token}}, nil)
@@ -61,7 +60,6 @@ func triageListTokens(t *testing.T, api humatest.TestAPI, cookie string) []strin
 }
 
 // Upstream "should list sessions" (describe session): two live sessions are
-// both enumerated.
 func TestTriageV1_ListSessionsPrimary(t *testing.T) {
 	ctx := context.Background()
 	db := newParityMemAdapter()
@@ -78,8 +76,6 @@ func TestTriageV1_ListSessionsPrimary(t *testing.T) {
 }
 
 // Upstream "should revoke session" (describe session): revoking one of two
-// sessions nulls it out while the survivor keeps working; revoke-sessions
-// then clears everything with status:true.
 func TestTriageV1_RevokeOwnSessionThenRevokeAll(t *testing.T) {
 	ctx := context.Background()
 	db := newParityMemAdapter()
@@ -116,9 +112,6 @@ func TestTriageV1_RevokeOwnSessionThenRevokeAll(t *testing.T) {
 }
 
 // Upstream "should update a custom additional field on a session" and
-// "should update session cookie after mutation" (describe updateSession): a
-// declared custom field updates, the mutation response re-issues cookies,
-// and a later read serves the new value.
 func TestTriageV1_UpdateSessionCustomFieldAndCookie(t *testing.T) {
 	ctx := context.Background()
 	db := newParityMemAdapter()
@@ -158,8 +151,6 @@ func TestTriageV1_UpdateSessionCustomFieldAndCookie(t *testing.T) {
 }
 
 // Upstream "should ignore core session fields" and "should ignore core field
-// userId" (describe updateSession): core-only bodies are 400 "No fields to
-// update".
 func TestTriageV1_UpdateSessionIgnoresCoreFields(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := sessionTestOptions(db)
@@ -180,7 +171,6 @@ func TestTriageV1_UpdateSessionIgnoresCoreFields(t *testing.T) {
 }
 
 // Upstream "should have max age expiry" (describe cookie cache with JWT
-// strategy): the JWT cache exp lands on the ~300s default window.
 func TestTriageV1_JWTCacheMaxAgeExpiry(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := sessionTestOptions(db)
@@ -203,9 +193,6 @@ func TestTriageV1_JWTCacheMaxAgeExpiry(t *testing.T) {
 }
 
 // Upstream "refreshes expired cache and reuses the replacement cookie"
-// (describe cookie cache, compact): an expired cache falls through to the
-// database with a re-issued cache cookie, and the replacement serves the
-// next read from the cache.
 func TestTriageV1_CompactExpiredCacheRefreshes(t *testing.T) {
 	ctx := context.Background()
 	db := newParityMemAdapter()
@@ -264,14 +251,6 @@ func TestTriageV1_CompactExpiredCacheRefreshes(t *testing.T) {
 }
 
 // Upstream "should preserve session expiry when refreshing stateless cookie
-// cache", "should work without database when refreshCache threshold is
-// reached", "should extend session_token cookie expiry when refreshCache
-// threshold is reached" (describe cookie cache refreshCache), and "should
-// have consistent date types between cookie cache and refresh paths"
-// (describe date field type consistency): in a DB-less JWE deployment with
-// the refresh threshold forced, the read serves from the cookie, preserves
-// the session expiry/createdAt, and extends the session_token Max-Age to
-// expiresIn.
 func TestTriageV1_StatelessRefreshPreservesExpiry(t *testing.T) {
 	opts := statelessTestOptions()
 	opts.Session.CookieCache.Strategy = types.SessionCookieCacheJWE
@@ -311,9 +290,6 @@ func TestTriageV1_StatelessRefreshPreservesExpiry(t *testing.T) {
 }
 
 // Upstream "should update session on POST when deferSessionRefresh is
-// enabled" (describe deferSessionRefresh): POST performs the refresh write.
-// (The existing 405/GET-needsRefresh legs are pinned by
-// TestGetSessionPostRequiresDeferral.)
 func TestTriageV1_DeferPostWritesDueSession(t *testing.T) {
 	ctx := context.Background()
 	db := newParityMemAdapter()
@@ -334,9 +310,6 @@ func TestTriageV1_DeferPostWritesDueSession(t *testing.T) {
 }
 
 // Upstream "a request cannot re-enable the cookie cache on a route that
-// forces it off" (describe forced strict session validation): change-password
-// never consults the cache, so a stale cache plus an empty
-// ?disableCookieCache= still 401s once the row is gone.
 func TestTriageV1_ForcedStrictChangePassword(t *testing.T) {
 	ctx := context.Background()
 	db := newParityMemAdapter()
@@ -359,8 +332,6 @@ func TestTriageV1_ForcedStrictChangePassword(t *testing.T) {
 }
 
 // Upstream "does not set Cache-Control: no-store on session-gated endpoints"
-// (describe get-session cache headers): no-store is a get-session-only
-// header; other session routes must not emit it.
 func TestTriageV1_NoStoreAbsentElsewhere(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := sessionTestOptions(db)
@@ -378,8 +349,6 @@ func TestTriageV1_NoStoreAbsentElsewhere(t *testing.T) {
 }
 
 // Upstream "should include additionalFields when retrieving from cookie
-// cache" (describe cookie cache versioning): extra session columns stored on
-// the row survive the cache round-trip.
 func TestTriageV1_CacheServesAdditionalFields(t *testing.T) {
 	ctx := context.Background()
 	db := newParityMemAdapter()

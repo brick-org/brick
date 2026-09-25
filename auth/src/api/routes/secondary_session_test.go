@@ -112,8 +112,6 @@ func secondarySessionTestOptions(db *parityMemAdapter, store types.SecondaryStor
 }
 
 // seedSecondarySession mirrors upstream createSession with secondary storage:
-// the {session,user} pair is written to the token key plus the active-sessions
-// list, and the database row exists only when StoreSessionInDatabase is set.
 func seedSecondarySession(t *testing.T, ctx context.Context, opts types.Options, db *parityMemAdapter, email, token string, expiresAt time.Time) {
 	t.Helper()
 	parityCreateUser(t, db, email, true)
@@ -149,8 +147,6 @@ func TestSecondarySession_GetServesFromCache(t *testing.T) {
 		opts := secondarySessionTestOptions(db, store)
 		seedSecondarySession(t, ctx, opts, db, "cache@example.com", "tok-cache", time.Now().UTC().Add(time.Hour))
 
-		// Without database persistence there is no DB row; the read must be
-		// served from secondary storage alone.
 		if row, _ := db.FindOne(ctx, "session", []types.Where{{Field: "token", Value: "tok-cache"}}, nil); row != nil {
 			t.Fatal("secondary-only mode must not write a database row")
 		}
@@ -170,8 +166,6 @@ func TestSecondarySession_MissFallsBackToDatabase(t *testing.T) {
 	store := newMapSecondaryStorage(true)
 	opts := secondarySessionTestOptions(db, store)
 	opts.Session.StoreSessionInDatabase = true
-	// Database-only row (e.g. created before secondary mirroring was wired):
-	// with StoreSessionInDatabase the read falls back to the database.
 	seedSessionUser(t, db, "fallback@example.com", "tok-fallback", time.Now().UTC().Add(time.Hour))
 	res, err := resolveGetSession(ctx, opts, getSessionRequest{token: "tok-fallback", headers: CookieRequestHeaders{}})
 	if err != nil {
@@ -191,8 +185,6 @@ func TestSecondarySession_MissWithoutPersistenceIsUnauthorized(t *testing.T) {
 	store := newMapSecondaryStorage(true)
 	opts := secondarySessionTestOptions(db, store)
 	seedSessionUser(t, db, "revoked@example.com", "tok-revoked", time.Now().UTC().Add(time.Hour))
-	// Revoked sessions leave no secondary entry and (without persistence) no
-	// usable database row; the read must fail.
 	if _, err := resolveGetSession(ctx, opts, getSessionRequest{token: "tok-revoked", headers: CookieRequestHeaders{}}); err == nil {
 		t.Fatal("expected unauthorized for a session missing from secondary storage")
 	} else if status, _ := statusOf(t, err); status != 401 {
@@ -249,8 +241,6 @@ func TestSecondarySession_PreserveKeepsEndedRow(t *testing.T) {
 	if exp, ok := timeField(row, "expires_at", "expiresAt"); !ok || exp.After(time.Now().UTC()) {
 		t.Fatalf("preserved row must be marked ended, got %v", exp)
 	}
-	// The ended row must not serve: no secondary entry and an expired database
-	// row reads as expired/gone.
 	if _, err := resolveGetSession(ctx, opts, getSessionRequest{token: "tok-preserve", headers: CookieRequestHeaders{}}); err == nil {
 		t.Fatal("preserved (ended) session must not resolve")
 	}
@@ -357,7 +347,6 @@ func TestSecondaryVerification_ExpiredRowInvalid(t *testing.T) {
 	if err := writeSecondaryVerification(opts, identifier, row); err != nil {
 		t.Fatal(err)
 	}
-	// Expired rows are not written (TTL<=0), so the lookup misses.
 	if found, err := findSecondaryVerification(opts, identifier); err != nil || found != nil {
 		t.Fatalf("expired row must not resolve: %v %+v", err, found)
 	}

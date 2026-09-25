@@ -1,19 +1,10 @@
 package routes
 
 // AUTH-V10-02 — adversarial and cross-language conformance (tests only).
-//
 // This file owns the routes package's Wave 10 adversarial coverage: session
-// refresh races (concurrent get-session reads racing a due refresh write),
-// deferred read-only bursts, and refresh-due predicate fuzzing.
-//
 // Upstream references (pinned Better Auth v1.7.5 at 5468e6bf):
 //   - packages/better-auth/src/api/routes/session.ts (findSession refresh
-//     write, deferSessionRefresh read-only mode, ?disableRefresh knob,
-//     dont_remember persistence marker, expired-row deletion)
-//
 // Work limits pinned for this file: bursts are fixed at 16 racers;
-// refresh-due fuzz inputs are pure (no I/O) and unbounded-cheap. No
-// production code is changed here.
 
 import (
 	"context"
@@ -26,9 +17,6 @@ import (
 )
 
 // Concurrent get-session reads racing a due refresh: every reader is served
-// the same session, the row survives, and expiry never moves backwards. The
-// refresh write itself is best-effort under concurrency (last-writer-wins on
-// the same extension), but service must never fail, duplicate, or regress.
 func TestWave10_SessionRefreshRace(t *testing.T) {
 	ctx := context.Background()
 	db := newParityMemAdapter()
@@ -88,7 +76,6 @@ func TestWave10_SessionRefreshRace(t *testing.T) {
 }
 
 // Deferred read-only bursts never write: every concurrent reader reports the
-// due refresh via needsRefresh while the stored expiry stays byte-identical.
 func TestWave10_SessionDeferredReadBurst(t *testing.T) {
 	ctx := context.Background()
 	db := newParityMemAdapter()
@@ -139,8 +126,6 @@ func TestWave10_SessionDeferredReadBurst(t *testing.T) {
 }
 
 // FuzzWave10_SessionRefreshDue fuzzes the pure refresh-due predicate: it
-// never panics, disable flags always suppress, zero expiries never refresh,
-// and evaluation is deterministic.
 func FuzzWave10_SessionRefreshDue(f *testing.F) {
 	f.Add(int64(1999999999), false)
 	f.Add(int64(0), false)
@@ -148,9 +133,6 @@ func FuzzWave10_SessionRefreshDue(f *testing.F) {
 	f.Fuzz(func(t *testing.T, expiresUnix int64, disableRefresh bool) {
 		db := newParityMemAdapter()
 		opts := sessionTestOptions(db)
-		// Unix 0 is 1970-01-01 (a real, long-past expiry), not the zero
-		// time: model "no expiry" as a missing key, which is what
-		// sessionExpiresAt reports as zero.
 		row := map[string]any{}
 		if expiresUnix != 0 {
 			row["expiresAt"] = time.Unix(expiresUnix, 0).UTC()

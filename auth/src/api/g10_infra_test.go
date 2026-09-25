@@ -21,7 +21,6 @@ func g10OriginOptions(baseURL string) types.Options {
 }
 
 // Non-login routes keep the permissive cookie-less fallback: a bare
-// untrusted Origin without cookies must NOT 403 on sign-out.
 func TestRefreshCacheConstruction_SignOut_CookieLessBareOriginPasses(t *testing.T) {
 	opts := g10OriginOptions("https://app.example")
 	api := Router(humatest.NewAdapter(), "/api/auth", opts)

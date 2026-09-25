@@ -88,7 +88,6 @@ func TestSignOutHeaderless401(t *testing.T) {
 	if strings.Contains(resp.Body.String(), `"success":true`) {
 		t.Fatalf("headerless sign-out must not return success:true, got %s", resp.Body.String())
 	}
-	// Headerless with body must also 401 (headers gate runs regardless of body).
 	resp = api.Post("/api/auth/sign-out", map[string]any{
 		"callbackURL": "/login", "disableRedirect": true, "state": "s",
 	})

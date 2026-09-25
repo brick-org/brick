@@ -21,8 +21,6 @@ func f8CaptureLogger(level types.LogLevel) (*[]string, types.LoggerOptions) {
 }
 
 // Stateless (no DB, no secondary) must get defu defaults:
-// cookieCache{enabled:true, strategy:jwe, refreshCache:true, maxAge:expiresIn||7d}
-// and storeAccountCookie:true.
 // Upstream: create-context.ts:106-128 @ 5468e6bf.
 func TestStatelessDefaults_StatelessDefaultsJweCache(t *testing.T) {
 	api := newTestAPI(t)

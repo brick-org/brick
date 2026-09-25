@@ -8,12 +8,10 @@ import (
 )
 
 // Warn-routing for schema-invalid caches (G1 integration follow-up).
-//
 // Upstream `parseCookieCachePayload` warns via the configured logger and
 // returns null; the codecs surface `cookies.ErrCachePayloadSchema` and the
 // session-layer readers must warn + miss (fall through to DB, never throw).
 // This pins the route-layer contract: a correctly-signed compact cache with
-// `user.emailVerified: null` misses AND warns.
 
 // should use the configured logger for an invalid signed compact cookie.
 func TestSchemaV1_InvalidCacheWarnsAndMisses(t *testing.T) {
@@ -32,8 +30,6 @@ func TestSchemaV1_InvalidCacheWarnsAndMisses(t *testing.T) {
 	user := schemaV1RouteUser()
 	user["emailVerified"] = nil
 	value := schemaV1RouteCompactValue(t, opts.CurrentSecret(), session, user)
-	// Sanity: the value verifies at the signature step (else this would pin
-	// the wrong leg).
 	if _, ok := cookies.VerifyAny(opts.AllSecrets(), value); !ok {
 		t.Fatal("test cookie must verify at the signature step")
 	}

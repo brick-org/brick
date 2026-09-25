@@ -16,9 +16,6 @@ import (
 // cookie-cache-fallback.test.ts:91-136).
 
 func TestSessionUpdateAge_UpdateAgeTriState(t *testing.T) {
-	// P12 dedup: pins the canonical (SessionOptions).UpdateAgeDuration
-	// tri-state directly (same assertions as the removed route-layer
-	// duplicate, no weakening).
 	if got := (types.SessionOptions{}).UpdateAgeDuration(); got != 24*time.Hour {
 		t.Fatalf("nil UpdateAge = %v, want 24h default", got)
 	}
@@ -37,8 +34,7 @@ func TestSessionUpdateAge_ExplicitZeroAlwaysRefresh(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := sessionTestOptions(db)
 	opts.Session.ExpiresIn = 3600
-	opts.Session.UpdateAge = intPtr(0) // explicit 0 => always-refresh upstream
-	// Fresh session: just minted, expires in full ExpiresIn window.
+	opts.Session.UpdateAge = intPtr(0)
 	seedSessionUser(t, db, "f4-always@example.com", "tok-f4-always", time.Now().UTC().Add(3600*time.Second))
 	_, _, refreshed, _, err := loadSessionWithRefresh(ctx, opts, "tok-f4-always", sessionRefreshConfig{})
 	if err != nil {
@@ -54,8 +50,6 @@ func TestSessionUpdateAge_StaleCleanupOnFailure(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := sessionTestOptions(db)
 	opts.Session.CookieCache.Enabled = false
-	// Retired session_data value present while caching is disabled, with a
-	// bogus token so the authoritative read fails.
 	header := "bogus=1; " + sessionDataCookieName + "=retired-value"
 	res, err := resolveGetSession(ctx, opts, getSessionRequest{
 		token:        "tok-bogus",

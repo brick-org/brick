@@ -15,7 +15,6 @@ import (
 )
 
 // stubRateLimitContext is a minimal huma.Context for IP/resolution unit
-// tests. Only Header/RemoteAddr/URL participate; everything else is zero.
 type stubRateLimitContext struct {
 	headers    http.Header
 	remoteAddr string
@@ -75,8 +74,6 @@ func TestRequestIP_MultiHopChainUntrustedWithoutProxyOptIn(t *testing.T) {
 		headers:    http.Header{"X-Forwarded-For": []string{"1.2.3.4, 10.0.0.1"}},
 		remoteAddr: "9.9.9.9:1234",
 	}
-	// The leftmost token of a multi-hop chain is client-spoofable, so without
-	// proxy trust the header is skipped and RemoteAddr is used.
 	if got := requestIP(ctx, testRateLimitOptions()); got != "9.9.9.9" {
 		t.Fatalf("multi-hop chain must fall through to RemoteAddr, got %q", got)
 	}
@@ -125,7 +122,6 @@ func TestRequestIP_DisableIPTrackingSkipsLimiting(t *testing.T) {
 }
 
 func TestResolveRateLimit_DefaultDisabled(t *testing.T) {
-	// Rate limiting stays off unless explicitly enabled — tests rely on it.
 	ctx := &stubRateLimitContext{remoteAddr: "127.0.0.1:1234"}
 	if _, ok := resolveRateLimit(ctx, "/api/auth/get-session", testRateLimitOptions()); ok {
 		t.Fatal("rate limiting must be disabled by default")
@@ -158,8 +154,6 @@ func TestMemoryRateLimitStorage_ConsumeEnforcesMaxThenSlides(t *testing.T) {
 	if retryAfter < 1 {
 		t.Fatalf("retryAfter must be positive, got %d", retryAfter)
 	}
-	// The atomic consume must count the blocked attempt without growing state
-	// unboundedly: the key stays a single bounded entry.
 	rateLimitMu.Lock()
 	entries := len(rateLimitMemory)
 	rateLimitMu.Unlock()

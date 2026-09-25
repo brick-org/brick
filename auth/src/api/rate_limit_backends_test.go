@@ -11,13 +11,6 @@ import (
 	"github.com/brick-org/brick/auth/src/types"
 )
 
-// AUTH-D6-01: database, migration, and rate-limit foundations.
-//
-// Ports of vendor/.../src/api/rate-limiter/rate-limiter.test.ts (Better Auth
-// v1.7.5, commit 5468e6bf) not yet covered: atomic concurrent enforcement via
-// the selected backend for plugin buckets (not the memory-only two-phase
-// path), exact retry-after, storage-error surfacing, dynamic-resolver windows
-// feeding prune cutoffs, and single-step failed-request counting.
 
 // stubSecondary is a minimal SecondaryStorage with Increment.
 type d6StubSecondary struct {
@@ -60,18 +53,12 @@ func TestRateLimitBackends_PluginBucketUsesSelectedAtomicBackend(t *testing.T) {
 	opts.RateLimit.Storage = types.RateLimitStorageDatabase
 	opts.DB = db
 	config := resolvedRateLimit{Key: "ip|plugin|p|/ok", Window: 10 * time.Second, Max: 2}
-	// Pre-create the bucket row so concurrent consumes exercise the guarded
-	// increment path (the fake has no unique constraint, so a fresh-key
-	// create race would duplicate rows; real tables enforce key uniqueness
-	// and the create-race re-read handles it).
 	if _, err := db.Create(context.Background(), "rateLimit", map[string]any{
 		"key": config.Key, "count": int64(0), "lastRequest": time.Now().UnixMilli(),
 	}, nil); err != nil {
 		t.Fatal(err)
 	}
 	// Single-step atomic consume through the selected backend: exactly Max
-	// pass under concurrency; the memory two-phase check/record pair would
-	// let racers pass a stale read.
 	var wg sync.WaitGroup
 	allowed := 0
 	var mu sync.Mutex
@@ -127,7 +114,6 @@ func TestRateLimitBackends_StorageErrorSurfacesInsteadOfSilentLimit(t *testing.T
 	if _, _, err := ConsumeResolvedRateLimit(context.Background(), config, opts); err == nil {
 		t.Fatal("storage failure must surface as an error (request-time 500), not a silent limit")
 	}
-	// The fail-closed Consume interface still limits (it cannot return the error).
 	storage := DatabaseRateLimitStorage{DB: errAdapter}
 	if _, limited := storage.Consume("k-err", 10*time.Second, 100); !limited {
 		t.Fatal("Consume interface must fail closed on storage errors")
@@ -159,9 +145,7 @@ func TestRateLimitBackends_DynamicResolverWindowFeedsPruneCutoff(t *testing.T) {
 		},
 	}
 	_ = opts
-	// Consume with the dynamic 120s window: the 90s-old row must survive
 	// pruning while the 130s-old row is collected, mirroring upstream's
-	// longest-observed-window growth for function rules.
 	config := resolvedRateLimit{Key: "127.0.0.1|/sign-in/email", Window: 120 * time.Second, Max: 10}
 	if ok, _, err := ConsumeResolvedRateLimit(context.Background(), config, opts); err != nil || !ok {
 		t.Fatalf("consume = %v, %v; want allowed", ok, err)
@@ -181,13 +165,9 @@ func TestRateLimitBackends_FailedRequestsCountInRequestPhase(t *testing.T) {
 	opts.RateLimit.Storage = types.RateLimitStorageDatabase
 	opts.DB = db
 	config := resolvedRateLimit{Key: "k-fail", Window: 10 * time.Second, Max: 1}
-	// Single-step consume happens before the handler: even when the handler
-	// fails, the request already counted (no separate response-phase
-	// write-back to lose).
 	if ok, _, err := ConsumeResolvedRateLimit(context.Background(), config, opts); err != nil || !ok {
 		t.Fatalf("first consume = %v, %v", ok, err)
 	}
-	// Simulate a failed handler: the count stays (second consume limited).
 	if ok, _, err := ConsumeResolvedRateLimit(context.Background(), config, opts); err != nil || ok {
 		t.Fatalf("second consume after failed request must be limited, got %v, %v", ok, err)
 	}

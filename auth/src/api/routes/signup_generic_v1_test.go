@@ -13,7 +13,6 @@ import (
 // explicit autoSignIn=false.
 
 // should return synthetic user for existing email when autoSignIn is
-// disabled without requireEmailVerification.
 func TestGenericV1_AutoSignInFalseDuplicateIsSynthetic(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -35,7 +34,6 @@ func TestGenericV1_AutoSignInFalseDuplicateIsSynthetic(t *testing.T) {
 }
 
 // should call onExistingUserSignUp when autoSignIn is false without
-// requireEmailVerification.
 func TestGenericV1_AutoSignInFalseDuplicateFiresHook(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)

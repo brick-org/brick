@@ -15,7 +15,6 @@ import (
 
 // orphanFailSessionAdapter forces the sign-up.go:413 path
 // (createIssuedSession error): session-row creates reject while the
-// user+account transaction still commits through the embedded adapter.
 type orphanFailSessionAdapter struct {
 	*parityMemAdapter
 }
@@ -27,8 +26,6 @@ func (a *orphanFailSessionAdapter) Create(ctx context.Context, model string, dat
 	return a.parityMemAdapter.Create(ctx, model, data, selectCols)
 }
 
-// orphanFailSecondaryStorage forces the sign-up.go:426 path
-// (writeSecondarySession error): every mirror write rejects.
 type orphanFailSecondaryStorage struct{}
 
 func (orphanFailSecondaryStorage) Get(key string) (any, error) { return nil, nil }
@@ -101,7 +98,6 @@ func TestOrphanV1_SecondaryMirrorFailureRemovesUser(t *testing.T) {
 }
 
 // Session-cookie failure (:429, via a rejecting cookie-cache VersionFunc)
-// rejects and leaves no user+account rows.
 func TestOrphanV1_SessionCookieFailureRemovesUser(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -118,9 +114,6 @@ func TestOrphanV1_SessionCookieFailureRemovesUser(t *testing.T) {
 		t.Fatalf("body must carry %q: %s", types.ErrFailedToCreateSession, resp.Body.String())
 	}
 	orphanAssertUserGone(t, db, "orphan-cookie@test.com")
-	// The primary session row persisted before cookie issuance failed, so the
-	// compensating delete must remove it too — no session may reference the
-	// rolled-back user.
 	n, err := db.Count(context.Background(), "session", nil)
 	if err != nil || n != 0 {
 		t.Fatalf("session rows = %d (err=%v), want 0", n, err)

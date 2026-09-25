@@ -1,13 +1,6 @@
 package auth_test
 
-// Regression tests for the hooked-adapter parity fixes documented in
-// auth/hooked_adapter.go. Unlike upstream's TypeScript with-hooks (which
-// throws queued after-hook errors post-commit), the Go adapter aborts before
-// hooks error-only, runs non-transactional after hooks with log-and-report
-// (AUTH-S6-01 D05 aligned to throw: the call fails without rolling back;
-// post-commit flush failures propagate unless a handler is installed), and
-// fails closed when a single-row delete pre-read fails. Before-hook payloads
-// merge like upstream ({...actualData, ...result.data}).
+// hooked_fix_test.go: upstream conformance (Better Auth v1.7.5).
 
 import (
 	"context"
@@ -229,9 +222,6 @@ func TestHfixUpdateManyAfterReceivesNilPayload(t *testing.T) {
 	if !called {
 		t.Fatal("update after hook must fire for bulk writes")
 	}
-	// The row-typed after hook keeps receiving nil for backwards
-	// compatibility; the bulk count goes to the AfterBulk hook (see the
-	// Wave 1 bulk-count test).
 	if payload != nil {
 		t.Fatalf("bulk after payload must be nil, got %#v", payload)
 	}
@@ -260,7 +250,6 @@ func TestHfixBeforeHookPartialMapMerges(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Merge-not-replace (upstream {...actualData, ...result.data}): keys
-	// omitted by the before hook survive, hook keys win.
 	want := map[string]any{"id": "1", "role": "admin", "email": "a@example.com"}
 	if !reflect.DeepEqual(inner.lastCreate, want) {
 		t.Fatalf("create payload must be merged, got %#v", inner.lastCreate)
@@ -302,7 +291,6 @@ func TestHfixAfterHooksDeferPostCommit(t *testing.T) {
 	if n, _ := inner.Count(ctx, "user", nil); n != 0 {
 		t.Fatal("rolled-back write must not persist")
 	}
-	// Commit flushes deferred afters.
 	if err := wrapped.Transaction(ctx, func(tx auth.DBAdapter) error {
 		_, err := tx.Create(ctx, "user", map[string]any{"id": "2"}, nil)
 		return err
@@ -403,9 +391,6 @@ func TestHfixPluginSourceLabel(t *testing.T) {
 		auth.DBHooks{
 			"user": {Create: auth.OperationHooks{After: after}},
 		}, logger)
-	// AUTH-S6-01 D05 (aligned to throw): the first failing after-hook stops
-	// the loop and propagates, so only the plugin source is logged; the
-	// write stays committed.
 	if _, err := wrapped.Create(ctx, "user", map[string]any{"id": "1"}, nil); err == nil {
 		t.Fatal("after-hook error must propagate (D05 throw)")
 	}
@@ -501,7 +486,6 @@ func TestHookedConsumeOneFiresDeleteHooks(t *testing.T) {
 	if befores != 1 || afters != 1 {
 		t.Fatalf("delete hooks must fire for consume: before=%d after=%d", befores, afters)
 	}
-	// Silent abort skips the consume.
 	aborting := auth.NewHookedAdapter(inner, nil, auth.DBHooks{
 		"verification": {Delete: auth.OperationHooks{
 			Before: func(_ context.Context, _ map[string]any) (map[string]any, error) {

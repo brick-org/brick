@@ -9,7 +9,6 @@ import (
 )
 
 // G10 construction wiring: ResolveCookieRefreshCache table exists but
-// nothing computes warn+disable from config at construction yet.
 // Upstream: create-context.ts:318-351 + store-capabilities.ts.
 func TestRefreshCacheConstruction_RefreshCacheConstruction_StatelessKeepsEnabled(t *testing.T) {
 	api := newTestAPI(t)

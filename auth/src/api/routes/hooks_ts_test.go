@@ -74,7 +74,6 @@ func TestRunTSRouteBeforeHooksAbort(t *testing.T) {
 	if len(ran) != 1 || ran[0] != "first" {
 		t.Fatalf("hooks after the failure must not run; non-matching must be skipped: %v", ran)
 	}
-	// Nil handlers and nil matchers are no-ops / always-run.
 	if err := RunTSRouteBeforeHooks(types.PluginHookContext{}, []types.PluginTSRouteBeforeHook{{}}); err != nil {
 		t.Fatalf("zero hook must be a no-op, got: %v", err)
 	}
@@ -95,7 +94,6 @@ func TestRunTSRouteAfterHooksReportAll(t *testing.T) {
 	if len(reported) != 1 || !errors.Is(reported[0], boom) {
 		t.Fatalf("errors must be reported, got %v", reported)
 	}
-	// Nil reporter discards.
 	RunTSRouteAfterHooks(types.PluginHookContext{}, hooks, nil)
 }
 

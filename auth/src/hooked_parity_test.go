@@ -95,8 +95,6 @@ func TestHookedParity_AfterHookErrorsAreLoggedAndPropagated(t *testing.T) {
 		logged = append(logged, msg)
 	})
 	// AUTH-S6-01 D05 (aligned to upstream transaction.ts:170): the write
-	// stays committed but the call fails. Without a logger the error still
-	// propagates (nothing is discarded).
 	quiet := auth.NewHookedAdapter(newMemoryAdapter(), nil, auth.DBHooks{
 		"user": {Create: auth.OperationHooks{
 			After: func(_ context.Context, _ map[string]any) error { return hookErr },
@@ -106,8 +104,6 @@ func TestHookedParity_AfterHookErrorsAreLoggedAndPropagated(t *testing.T) {
 		t.Fatalf("after-hook error must propagate (D05 throw), got: %v", err)
 	}
 	// With a logger the failure is additionally reported (upstream
-	// getWithHooks behavior: after hooks never roll back the operation —
-	// the row persists and the error surfaces).
 	inner := newMemoryAdapter()
 	noisy := auth.NewHookedAdapterWithLogger(inner, nil, auth.DBHooks{
 		"user": {Create: auth.OperationHooks{

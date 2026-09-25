@@ -5,8 +5,6 @@ package routes
 //   - untrusted callbackURL on sign-in/sign-up must 403 INVALID_CALLBACK_URL
 //     (global middleware) instead of embed-and-continue.
 //   - sign-up disabled must carry EMAIL_PASSWORD_SIGN_UP_DISABLED code.
-//   - customSyntheticUser forwards only user.additionalFields keys.
-//   - verification token/URL minted even when no sender configured.
 
 import (
 	"net/http"
@@ -132,7 +130,6 @@ func TestF7A_SignUpMintEvenWithoutSender(t *testing.T) {
 	opts.Secrets = nil
 	opts.EmailVerification.SendOnSignUp = boolPtr(true)
 	opts.EmailAndPassword.AutoSignIn = boolPtr(false)
-	// No sender configured.
 	opts.EmailVerification.SendVerificationEmail = nil
 	opts.EmailVerification.SendVerificationEmailRequest = nil
 	api := credsSignUpAPI(t, opts)
@@ -140,9 +137,6 @@ func TestF7A_SignUpMintEvenWithoutSender(t *testing.T) {
 	resp := api.Post("/api/auth/sign-up/email", map[string]any{
 		"name": "F7A", "email": "f7a-mint@test.com", "password": "password123",
 	})
-	// Upstream mints the token before checking the sender (sign-up.ts:395-407):
-	// with an empty secret the mint fails 500 even when no sender is set.
-	// Pre-fix skips the mint entirely and answers 200.
 	if resp.Code != http.StatusInternalServerError {
 		t.Fatalf("mint-skip status = %d, want 500: %s", resp.Code, resp.Body.String())
 	}

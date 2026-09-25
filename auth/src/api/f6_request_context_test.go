@@ -16,14 +16,6 @@ import (
 )
 
 // F6-01 middleware pipeline tests (upstream: api/index.ts router onRequest,
-// to-auth-endpoints.ts resolveDynamicContext + runWithRequestState,
-// dispatch.ts hook pipeline + mergeResponseHeaders, core instrumentation +
-// request-state tests).
-//
-// These fail before implementation and pass after: the resolved per-request
-// BaseURL must be authoritative for handlers, and the pipeline must carry
-// request state, endpoint metadata, response mutation, logger/instrumentation
-// and background tasks on every request (not only when hooks are configured).
 
 type f6EchoPlugin struct {
 	id string
@@ -98,17 +90,13 @@ func TestRequestContextDynamicBaseURLAuthoritativeTwoHosts(t *testing.T) {
 			Path      string `json:"path"`
 			Operation string `json:"operation"`
 		}
-		// humatest writes the huma envelope; decode the body JSON.
 		raw := resp.Body.String()
 		var envelope map[string]any
 		if err := json.Unmarshal([]byte(raw), &envelope); err != nil {
 			t.Fatalf("decode envelope: %v (%s)", err, raw)
 		}
-		// The echo handler returns the struct directly; re-marshal the whole
-		// body and decode the known fields via a second pass on raw.
 		_ = envelope
 		if err := json.Unmarshal([]byte(raw), &body); err != nil {
-			// Fall back: huma may wrap; try nested.
 			t.Fatalf("decode body: %v (%s)", err, raw)
 		}
 		return map[string]any{
@@ -148,15 +136,12 @@ func TestRequestContextDynamicBaseURLAuthoritativeTwoHosts(t *testing.T) {
 			t.Fatalf("host %s must carry request state, got %v", host, results[i])
 		}
 	}
-	// The two concurrent hosts must not leak into each other.
 	if results[0]["fullURL"] == results[1]["fullURL"] {
 		t.Fatalf("concurrent hosts leaked: %v", results)
 	}
 }
 
 func TestRequestContextRequestStateAlwaysInstalledWithoutHooks(t *testing.T) {
-	// No hooks/plugins that would previously trigger the lifecycle
-	// middleware: request state + endpoint metadata must still be present.
 	opts := types.Options{BaseURL: "https://app.example", BasePath: "/api/auth"}
 	opts.Plugins = []types.Plugin{&f6EchoPlugin{id: "f6-echo-plain"}}
 	api := Router(humatest.NewAdapter(), "/api/auth", opts)
@@ -246,7 +231,6 @@ func TestRequestContextBackgroundTasksAndInstrumentation(t *testing.T) {
 	if !ran || len(handled) != 1 {
 		t.Fatalf("handler must run the task inline, ran=%v handled=%v", ran, handled)
 	}
-	// Instrumentation passthrough preserves name/attrs and returns fn values.
 	out, err := authroutes.WithSpan(opts, "f6-op", map[string]string{"k": "v"}, func() (string, error) {
 		return "ok", nil
 	})

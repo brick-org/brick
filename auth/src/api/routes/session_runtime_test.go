@@ -15,7 +15,6 @@ import (
 )
 
 // seedSessionUser creates a verified user plus a session row valid until
-// expiresAt, returning the session token.
 func seedSessionUser(t *testing.T, db *parityMemAdapter, email, token string, expiresAt time.Time) {
 	t.Helper()
 	parityCreateUser(t, db, email, true)
@@ -39,7 +38,6 @@ func seedSessionUser(t *testing.T, db *parityMemAdapter, email, token string, ex
 }
 
 // sessionTestOptions returns options with a short session lifetime so refresh
-// behavior is exercisable without waiting.
 func sessionTestOptions(db *parityMemAdapter) types.Options {
 	opts := parityTestOptions(db)
 	opts.Session.ExpiresIn = 3600
@@ -48,7 +46,6 @@ func sessionTestOptions(db *parityMemAdapter) types.Options {
 }
 
 // signedSessionHeader builds a Cookie header carrying the signed session
-// token, mirroring what newSessionCookie issuance produces.
 func signedSessionHeader(t *testing.T, opts types.Options, token string) string {
 	t.Helper()
 	signed, err := cookies.Sign(opts.CurrentSecret(), token)
@@ -59,7 +56,6 @@ func signedSessionHeader(t *testing.T, opts types.Options, token string) string 
 }
 
 // cacheHeaderFor builds a Cookie header carrying both the session cookie and
-// a freshly minted cookie-cache cookie for token.
 func cacheHeaderFor(t *testing.T, ctx context.Context, opts types.Options, token string) string {
 	t.Helper()
 	sessionRow, userRow, _, err := loadSessionAndUser(ctx, opts, token)
@@ -135,7 +131,6 @@ func TestDontRememberCookieRoundTrip(t *testing.T) {
 	if !hasDontRememberCookie(name+"="+signed, opts) {
 		t.Fatal("signed dont_remember cookie not detected")
 	}
-	// Secure spelling is accepted too.
 	secureName := resolveDontRememberCookieName(opts, true)
 	if !strings.HasPrefix(secureName, "__Secure-") {
 		t.Fatalf("secure dont_remember name %q missing prefix", secureName)
@@ -194,8 +189,6 @@ func TestCookieCacheVersioning(t *testing.T) {
 		}
 		seedSessionUser(t, db, "func@example.com", "tok-func", time.Now().UTC().Add(time.Hour))
 		header := cacheHeaderFor(t, ctx, opts, "tok-func")
-		// Static "static" must not match the stamped "dynamic": re-check with
-		// the func removed to prove the func took precedence at write time.
 		withoutFunc := opts
 		withoutFunc.Session.CookieCache.VersionFunc = nil
 		if _, ok := cachedSessionFromRequest(header, opts.AllSecrets(), "tok-func", withoutFunc.Session); ok {
@@ -204,7 +197,6 @@ func TestCookieCacheVersioning(t *testing.T) {
 		if _, ok := cachedSessionFromRequest(header, opts.AllSecrets(), "tok-func", opts.Session); !ok {
 			t.Fatal("func-derived version must hit")
 		}
-		// A changed func output invalidates.
 		rotated := opts
 		rotated.Session.CookieCache.VersionFunc = func(types.Session, types.User) (string, error) {
 			return "dynamic-2", nil
@@ -212,12 +204,6 @@ func TestCookieCacheVersioning(t *testing.T) {
 		if _, ok := cachedSessionFromRequest(header, opts.AllSecrets(), "tok-func", rotated.Session); ok {
 			t.Fatal("changed func version must miss")
 		}
-		// A failing func is an operational failure: the get-session read 500s
-		// instead of failing closed to the authoritative database read
-		// (upstream session.ts:138-154, where the rejected version promise
-		// 500s via the endpoint catch-all). The frozen cache helper still
-		// reports a miss; resolveGetSession surfaces the 500 via
-		// cookieCacheVersionErr.
 		failing := opts
 		failing.Session.CookieCache.VersionFunc = func(types.Session, types.User) (string, error) {
 			return "", errors.New("boom")
@@ -250,9 +236,6 @@ func TestCookieCacheStrategyGate(t *testing.T) {
 	}
 	session, user := rowToSession(sessionRow, opts), rowToUser(userRow, opts)
 
-	// Every strategy issues a cache cookie and serves it back: the jwt/jwe
-	// strategies are wired (HS256 JWT / dir-A256CBC-HS512 JWE), not
-	// fail-closed.
 	for _, strategy := range []types.SessionCookieCacheStrategy{
 		types.SessionCookieCacheCompact,
 		types.SessionCookieCacheJWT,
@@ -270,7 +253,6 @@ func TestCookieCacheStrategyGate(t *testing.T) {
 		}
 	}
 
-	// Session creation still issues the session cookie in every strategy.
 	jwtOpts := opts
 	jwtOpts.Session.CookieCache.Strategy = types.SessionCookieCacheJWT
 	issued, err := newSessionCookies(jwtOpts, CookieRequestHeaders{}, "tok-strategy", session, user, jwtOpts.Session, time.Now().UTC())
@@ -300,28 +282,23 @@ func TestMaybeRefreshCookieCache(t *testing.T) {
 		return &sessionCookieCachePayload{Session: session, User: user, ExpiresAt: expiresAt, Version: "1"}
 	}
 
-	// Disabled refresh: always nil.
 	if got := maybeRefreshCookieCache(opts, CookieRequestHeaders{}, "tok-refresh", payload(now.Add(10*time.Second)), now, false); got != nil {
 		t.Fatal("disabled RefreshCache must not refresh")
 	}
 
 	enabled := opts
 	enabled.Session.CookieCache.RefreshCache.Enabled = true
-	// Fresh cache (default 20% of 300s = 60s threshold): nil.
 	if got := maybeRefreshCookieCache(enabled, CookieRequestHeaders{}, "tok-refresh", payload(now.Add(5*time.Minute)), now, false); got != nil {
 		t.Fatal("fresh cache must not refresh")
 	}
-	// Near-expiry cache: re-issued cookies.
 	if got := maybeRefreshCookieCache(enabled, CookieRequestHeaders{}, "tok-refresh", payload(now.Add(30*time.Second)), now, false); len(got) != 2 {
 		t.Fatalf("expected refreshed session+cache cookies, got %d", len(got))
 	}
-	// ShouldRefresh hook gates the refresh.
 	gated := enabled
 	gated.Session.CookieCache.RefreshCache.ShouldRefresh = func(types.Session, types.User) bool { return false }
 	if got := maybeRefreshCookieCache(gated, CookieRequestHeaders{}, "tok-refresh", payload(now.Add(30*time.Second)), now, false); got != nil {
 		t.Fatal("ShouldRefresh=false must suppress the refresh")
 	}
-	// Custom UpdateAge is honored.
 	custom := enabled
 	custom.Session.CookieCache.RefreshCache.UpdateAge = 10
 	if got := maybeRefreshCookieCache(custom, CookieRequestHeaders{}, "tok-refresh", payload(now.Add(30*time.Second)), now, false); got != nil {
@@ -450,7 +427,6 @@ func TestResolveGetSessionQueryKnobs(t *testing.T) {
 		headers:      CookieRequestHeaders{},
 	}
 
-	// Fresh cache hit: served without cookie writes.
 	res, err := resolveGetSession(ctx, opts, base)
 	if err != nil {
 		t.Fatal(err)
@@ -459,7 +435,6 @@ func TestResolveGetSessionQueryKnobs(t *testing.T) {
 		t.Fatalf("cache hit must not write cookies, got %d", len(res.cookies))
 	}
 
-	// ?disableCookieCache forces the authoritative read, which re-issues.
 	disabled := base
 	disabled.query.DisableCookieCache = true
 	res, err = resolveGetSession(ctx, opts, disabled)
@@ -470,7 +445,6 @@ func TestResolveGetSessionQueryKnobs(t *testing.T) {
 		t.Fatal("disableCookieCache must fall through to the database read with fresh cookies")
 	}
 
-	// ?disableRefresh serves the session with no writes at all.
 	noRefresh := base
 	noRefresh.query.DisableRefresh = true
 	res, err = resolveGetSession(ctx, opts, noRefresh)
@@ -490,14 +464,12 @@ func TestResolveGetSessionMapsErrors(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := sessionTestOptions(db)
 
-	// Unknown token: 401 FAILED_TO_GET_SESSION.
 	_, err := resolveGetSession(ctx, opts, getSessionRequest{token: "missing", headers: CookieRequestHeaders{}})
 	status, detail := statusOf(t, err)
 	if status != http.StatusUnauthorized || !strings.Contains(detail, types.ErrFailedToGetSession) {
 		t.Fatalf("unknown token: %d %q", status, detail)
 	}
 
-	// Expired session: 400 SESSION_EXPIRED (upstream BAD_REQUEST site).
 	seedSessionUser(t, db, "gone@example.com", "tok-gone", time.Now().UTC().Add(-time.Hour))
 	_, err = resolveGetSession(ctx, opts, getSessionRequest{token: "tok-gone", headers: CookieRequestHeaders{}})
 	status, detail = statusOf(t, err)
@@ -505,9 +477,6 @@ func TestResolveGetSessionMapsErrors(t *testing.T) {
 		t.Fatalf("expired session: %d %q", status, detail)
 	}
 
-	// Session without a user row: upstream findSession returns null, so the
-	// resolver surfaces 401 FAILED_TO_GET_SESSION for the 200 literal-null
-	// HTTP path (not 404 USER_NOT_FOUND).
 	now := time.Now().UTC()
 	if _, err := db.Create(ctx, "session", map[string]any{
 		"id": "sess-orphan", "userId": "no-such-user", "token": "tok-orphan",
@@ -583,8 +552,6 @@ func TestDeferredGetSessionReadOnly(t *testing.T) {
 	if res.needsRefresh == nil || !*res.needsRefresh {
 		t.Fatal("deferred read of a due session must report needsRefresh")
 	}
-	// Cache-only re-issue: exactly the session_data cookie, no session_token
-	// rewrite (upstream setCookieCache without setSessionCookie).
 	if len(res.cookies) != 1 || res.cookies[0].Name != sessionDataCookieName {
 		names := make([]string, 0, len(res.cookies))
 		for _, c := range res.cookies {
@@ -600,9 +567,6 @@ func TestDeferredGetSessionReadOnly(t *testing.T) {
 }
 
 // TestGetSessionPostRequiresDeferral pins the upstream POST contract
-// (session.ts:79-84) end to end: POST without deferSessionRefresh is a 405
-// METHOD_NOT_ALLOWED_DEFER_SESSION_REQUIRED; with deferral it behaves like
-// GET but with writes enabled.
 func TestGetSessionPostRequiresDeferral(t *testing.T) {
 	boot := func(t *testing.T, deferRefresh bool) (humatest.TestAPI, string) {
 		t.Helper()
@@ -624,7 +588,6 @@ func TestGetSessionPostRequiresDeferral(t *testing.T) {
 		if !strings.Contains(resp.Body.String(), types.ErrMethodNotAllowedDeferSessionRequired) {
 			t.Fatalf("body missing code: %s", resp.Body.String())
 		}
-		// GET still serves.
 		getResp := api.Get("/api/auth/get-session", "Cookie: "+header)
 		if getResp.Code != http.StatusOK {
 			t.Fatalf("GET expected 200, got %d: %s", getResp.Code, getResp.Body.String())
@@ -660,8 +623,6 @@ func TestGetSessionPostRequiresDeferral(t *testing.T) {
 }
 
 // TestGetSessionQueryBinding pins the ?disableRefresh knob end to end: a due
-// session refreshes (Set-Cookie) by default and stays untouched with the
-// knob set.
 func TestGetSessionQueryBinding(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := sessionTestOptions(db)

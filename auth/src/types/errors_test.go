@@ -3,8 +3,6 @@ package types
 import "testing"
 
 // allErrorCodes lists every BASE_ERROR_CODES key from
-// vendor/better-auth/packages/core/src/error/codes.ts (v1.7.5) in upstream
-// order, paired with the Go constant holding its value.
 var allErrorCodes = []struct {
 	name  string
 	value string

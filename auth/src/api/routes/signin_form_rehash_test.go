@@ -29,9 +29,7 @@ func g2SignInAPI(t *testing.T, opts types.Options) humatest.TestAPI {
 	return api
 }
 
-// G2: POST /sign-in/email must accept application/x-www-form-urlencoded
 // bodies (upstream allowedMediaTypes json+form), mirroring the sign-up
-// transcode pattern.
 func TestSignInForm_SignInFormURLEncoded(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -67,7 +65,6 @@ func TestSignInForm_SignInFormURLEncoded(t *testing.T) {
 }
 
 // G2: form bodies must validate exactly like JSON bodies: a missing required
-// field fails and a non-boolean rememberMe fails.
 func TestSignInForm_SignInFormValidationParity(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -99,9 +96,7 @@ func TestSignInForm_SignInFormValidationParity(t *testing.T) {
 	})
 }
 
-// G3: a disabled email/password gate answers 400 with the typed
 // EMAIL_PASSWORD_DISABLED code (upstream sign-in.ts:512-520), not a plain
-// string.
 func TestSignInForm_SignInEmailPasswordDisabledCode(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -124,8 +119,6 @@ func TestSignInForm_SignInEmailPasswordDisabledCode(t *testing.T) {
 }
 
 // G7: a legacy bcrypt credential hash rotates to the scrypt format on a
-// successful sign-in and the rotated hash keeps verifying (including a
-// second sign-in against it).
 func TestSignInForm_SignInBcryptHashRotatedToScrypt(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -180,7 +173,6 @@ func TestSignInForm_SignInBcryptHashRotatedToScrypt(t *testing.T) {
 		t.Fatal("rotated hash must verify the password")
 	}
 
-	// The rotated hash serves a second sign-in.
 	again := api.Post("/api/auth/sign-in/email", map[string]any{
 		"email": "g2-rehash@test.com", "password": "password123",
 	})
@@ -190,7 +182,6 @@ func TestSignInForm_SignInBcryptHashRotatedToScrypt(t *testing.T) {
 }
 
 // G7: custom Password.Verify hooks opt out of automatic rotation — the
-// stored hash is left untouched after a successful sign-in.
 func TestSignInForm_SignInCustomVerifySkipsRotation(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)

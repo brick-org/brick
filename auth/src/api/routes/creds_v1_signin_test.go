@@ -25,7 +25,6 @@ func credsSignInSeed(t *testing.T, api humatest.TestAPI, email, password string)
 }
 
 // sessionCookieOf extracts a forwardable "name=value" Cookie header from a
-// sign-in/up response carrying the session cookie.
 func sessionCookieOf(t *testing.T, resp *httptest.ResponseRecorder) string {
 	t.Helper()
 	for _, raw := range resp.Header().Values("Set-Cookie") {
@@ -38,8 +37,6 @@ func sessionCookieOf(t *testing.T, resp *httptest.ResponseRecorder) string {
 }
 
 // sign-in.test.ts "logs expected auth validation failures below error
-// level": wrong-password and unknown-user attempts warn without
-// error-level logs.
 func TestCredsV1_SignInWarnLogs(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -159,8 +156,6 @@ func TestCredsV1_SignInCaseInsensitive(t *testing.T) {
 }
 
 // sign-in.test.ts-adjacent (sign-in.ts:551 "Password not found"): a
-// credential account row without a password rejects with 401 like an
-// unknown user, without leaking which leg failed.
 func TestCredsV1_SignInPasswordlessCredentialAccount(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)

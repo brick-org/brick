@@ -115,9 +115,6 @@ func g5PasswordLiveTokens(t *testing.T, opts types.Options, store *mapSecondaryS
 }
 
 // TestPasswordResetRevoke_ResetWithRevokePurgesSecondary runs reset-password end to end with
-// revoke enabled: DB rows are gone AND no secondary residue survives, so old
-// cookies 401. Pre-fix this fails on secondary modes (raw DeleteMany leaves
-// the cache live and get-session keeps serving 200).
 func TestPasswordResetRevoke_ResetWithRevokePurgesSecondary(t *testing.T) {
 	for _, mode := range g5PasswordModes() {
 		t.Run(mode.name, func(t *testing.T) {
@@ -169,8 +166,6 @@ func TestPasswordResetRevoke_ResetWithRevokePurgesSecondary(t *testing.T) {
 }
 
 // TestPasswordResetRevoke_ResetWithoutRevokeKeepsSessions runs reset-password end to end with
-// revoke disabled: sessions survive in every storage mode (DB rows kept where
-// persisted, secondary entries kept where enabled, cookies still 200).
 func TestPasswordResetRevoke_ResetWithoutRevokeKeepsSessions(t *testing.T) {
 	for _, mode := range g5PasswordModes() {
 		t.Run(mode.name, func(t *testing.T) {

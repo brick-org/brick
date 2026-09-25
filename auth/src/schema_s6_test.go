@@ -1,28 +1,6 @@
 package auth_test
 
-// AUTH-S6-01 failing-first suite: full schema + identity admission pipeline.
-//
-// Upstream evidence (Better Auth v1.7.5, commit 5468e6bf):
-//   - db/get-schema.ts (getSchema: modelName-keyed, fieldName-keyed, refs
-//     rewritten, indexes attached)
-//   - core get-tables.ts (buildAuthTables core->plugin->options precedence,
-//     getAuthTablesWithResolvedIndexes)
-//   - db/schema.ts parseInputData/parseUserInput/filterOutputFields +
-//     db/to-zod.test.ts (returned:false input vs output, required:false
-//     nullish)
-//   - core database-index.ts + database-index.test.ts
-//     (resolveDatabaseSchemaIndexes validation)
-//   - db/with-hooks.ts + core context/transaction.ts:170
-//     (queueAfterTransactionHook rejects outside transactions)
-//   - user.validateUserInfo (core init-options.ts:970) + call sites:
-//     internal-adapter.ts createUser (action create-user, 403), link-account.ts
-//     handleOAuthUserInfo (link-account + sign-in, 403), callback.ts link
-//     branch (redirect ?error=&error_description=), sign-up.ts generic-duplicate
-//     hiding of 403s.
-//
-// This file ports the schema/admission behavior first; implementation lands
-// in auth/schema.go (GetSchema, Input/Output field helpers, ValidateUserInfo
-// seam helpers) and auth/hooked_adapter.go (D05 throw alignment).
+// schema_s6_test.go: upstream conformance (Better Auth v1.7.5).
 
 import (
 	"context"
@@ -35,9 +13,6 @@ import (
 	"github.com/brick-org/brick/auth/src/types"
 )
 
-// ---------------------------------------------------------------------------
-// 1. One resolved schema drives everything.
-// ---------------------------------------------------------------------------
 
 func TestS6_GetSchemaMirrorsUpstreamGetSchema(t *testing.T) {
 	falseVal := false
@@ -63,7 +38,6 @@ func TestS6_GetSchemaMirrorsUpstreamGetSchema(t *testing.T) {
 	opts.User.Model.Fields = map[string]string{"email": "email_address"}
 
 	schema := auth.GetSchema(opts)
-	// Keyed by physical modelName, not logical key.
 	if _, ok := schema["app_users"]; !ok {
 		t.Fatalf("GetSchema must key by modelName app_users, got keys %v", schemaKeys(schema))
 	}
@@ -71,14 +45,12 @@ func TestS6_GetSchemaMirrorsUpstreamGetSchema(t *testing.T) {
 	if !ok {
 		t.Fatal("missing app_users entry")
 	}
-	// Fields keyed by physical column (fieldName||logical).
 	if _, ok := userEntry.Fields["email_address"]; !ok {
 		t.Fatalf("user fields must key by fieldName email_address, got %v", fieldKeys(userEntry.Fields))
 	}
 	if _, ok := userEntry.Fields["role"]; !ok {
 		t.Fatal("plugin field role must survive GetSchema")
 	}
-	// References rewrite to the target modelName.
 	memberEntry, ok := schema["members"]
 	if !ok {
 		t.Fatalf("GetSchema must key plugin table by modelName members, got %v", schemaKeys(schema))
@@ -90,7 +62,6 @@ func TestS6_GetSchemaMirrorsUpstreamGetSchema(t *testing.T) {
 	if ref.Model != "app_users" {
 		t.Fatalf("references.model must rewrite to target modelName app_users, got %q", ref.Model)
 	}
-	// Order + indexes attached.
 	if userEntry.Order == 0 {
 		t.Fatal("GetSchema user entry must carry order")
 	}
@@ -116,7 +87,6 @@ func TestS6_OneResolvedSchemaDrivesAll(t *testing.T) {
 	}
 
 	full := auth.FullSchema(opts)
-	// Option additionalFields win over same-named plugin fields.
 	if got := full["user"].Fields["role"].DefaultValue; got != "option-wins" {
 		t.Fatalf("option additionalFields must win over plugin fields, got %#v", got)
 	}
@@ -127,7 +97,6 @@ func TestS6_OneResolvedSchemaDrivesAll(t *testing.T) {
 		t.Fatal("core fields must survive in FullSchema")
 	}
 
-	// Input/output field maps derive from the SAME resolved schema.
 	inFields := auth.UserInputFields(opts)
 	outFields := auth.UserOutputFields(opts)
 	if _, ok := inFields["tenant"]; !ok {
@@ -140,15 +109,11 @@ func TestS6_OneResolvedSchemaDrivesAll(t *testing.T) {
 		t.Fatal("UserOutputFields must include core fields")
 	}
 
-	// Adapter mapping derives from the same schema.
 	cfg := auth.AdapterConfig{}
 	if got := auth.PhysicalTableName("user", full["user"], cfg); got == "" {
 		t.Fatal("PhysicalTableName must resolve")
 	}
 
-	// Field validator/transform execution uses the same schema: wire the
-	// resolved user fields into the hooked adapter and prove a rejection
-	// aborts with no write.
 	boom := errors.New("s6 validator boom")
 	fields := map[string]map[string]types.FieldAttribute{
 		"user": {
@@ -164,13 +129,10 @@ func TestS6_OneResolvedSchemaDrivesAll(t *testing.T) {
 		t.Fatalf("resolved validator must abort the write, got %v", err)
 	}
 
-	// Migrations validate the same schema.
 	if err := auth.ValidateSchemaIndexes(full, cfg); err != nil {
 		t.Fatalf("FullSchema must validate: %v", err)
 	}
 
-	// Route helpers consume the same schema (Wave 7 contract): the exported
-	// full field maps must be the FullSchema non-core subset.
 	routeUser := routes.FullUserFieldsForOptions(optsToTypes(opts))
 	fullUser := full["user"].Fields
 	for name := range routeUser {
@@ -183,12 +145,8 @@ func TestS6_OneResolvedSchemaDrivesAll(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// 2. Additional-field pipeline (to-zod + parseInputData semantics).
-// ---------------------------------------------------------------------------
 
 func TestS6_AdditionalFieldDefaultsTransformsValidators(t *testing.T) {
-	// Static default applies on create, not update.
 	fields := map[string]types.FieldAttribute{
 		"name": {Type: types.FieldTypeString},
 		"nick": {Type: types.FieldTypeString, Required: boolPtrS6(false), DefaultValue: "anon"},
@@ -208,7 +166,6 @@ func TestS6_AdditionalFieldDefaultsTransformsValidators(t *testing.T) {
 		t.Fatalf("update must not backfill defaults: %v", got)
 	}
 
-	// Func default with a non-func()any signature must still evaluate
 	// (upstream () => Date.now() / () => new Date() factories).
 	funcFields := map[string]types.FieldAttribute{
 		"name": {Type: types.FieldTypeString},
@@ -222,8 +179,6 @@ func TestS6_AdditionalFieldDefaultsTransformsValidators(t *testing.T) {
 		t.Fatalf("func default must evaluate, got %#v", got["code"])
 	}
 
-	// Validator rejection surfaces VALIDATION_ERROR; transform applies;
-	// validator wins over transform per field (parseInputData branches).
 	vtFields := map[string]types.FieldAttribute{
 		"age": {
 			Type: types.FieldTypeNumber,
@@ -254,8 +209,6 @@ func TestS6_AdditionalFieldDefaultsTransformsValidators(t *testing.T) {
 	}
 
 	// Nullability mirrors upstream parseInputData (which copies present keys
-	// without null checks; to-zod nullish is an API-schema concern): a
-	// present null passes through for both required and optional fields.
 	nullFields := map[string]types.FieldAttribute{
 		"name": {Type: types.FieldTypeString},
 		"nick": {Type: types.FieldTypeString, Required: boolPtrS6(false)},
@@ -265,7 +218,6 @@ func TestS6_AdditionalFieldDefaultsTransformsValidators(t *testing.T) {
 		t.Fatalf("present null for optional field must pass (upstream copies): %v", err)
 	}
 
-	// Aliases: explicit FieldName reverse map + snake_case folding.
 	aliasFields := map[string]types.FieldAttribute{
 		"email":       {Type: types.FieldTypeString, FieldName: "email_address"},
 		"displayName": {Type: types.FieldTypeString, Required: boolPtrS6(false)},
@@ -277,7 +229,6 @@ func TestS6_AdditionalFieldDefaultsTransformsValidators(t *testing.T) {
 		t.Fatalf("snake alias must resolve: %q %v", name, ok)
 	}
 
-	// Output stripping: only returned:false is dropped; unknown keys survive
 	// (upstream filterOutputFields keeps everything except returned:false).
 	outFields := map[string]types.FieldAttribute{
 		"token":  {Type: types.FieldTypeString},
@@ -296,7 +247,6 @@ func TestS6_AdditionalFieldDefaultsTransformsValidators(t *testing.T) {
 		}
 	}
 
-	// input:false: falsy dropped, truthy rejected with FIELD_NOT_ALLOWED.
 	inFalse := map[string]types.FieldAttribute{
 		"emailVerified": {Type: types.FieldTypeBoolean, Input: boolPtrS6(false)},
 	}
@@ -312,32 +262,25 @@ func TestS6_AdditionalFieldDefaultsTransformsValidators(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// 3. ValidateUserInfo at every seam: exact redirect vs 403.
-// ---------------------------------------------------------------------------
 
 func TestS6_ValidateUserInfoSourceValidation(t *testing.T) {
-	// Missing method fails closed.
 	if err := auth.AssertValidUserInfoSource(types.ValidateUserInfoSource{}); err == nil {
 		t.Fatal("missing method must fail closed")
 	} else if codeOf(err) != "validation_source_missing" {
 		t.Fatalf("missing method must report validation_source_missing, got code %q (%v)", codeOf(err), err)
 	}
-	// OAuth without providerId fails closed.
 	src := types.ValidateUserInfoSource{Action: types.ValidateUserInfoActionCreateUser, Method: types.ValidateUserInfoMethodOAuth}
 	if err := auth.AssertValidUserInfoSource(src); err == nil {
 		t.Fatal("oauth without provider must fail closed")
 	} else if codeOf(err) != "validation_source_missing" {
 		t.Fatalf("oauth without provider must report validation_source_missing, got %v", err)
 	}
-	// SSO without provider fails closed.
 	src = types.ValidateUserInfoSource{Action: types.ValidateUserInfoActionCreateUser, Method: types.ValidateUserInfoMethodSSOOIDC}
 	if err := auth.AssertValidUserInfoSource(src); err == nil {
 		t.Fatal("sso-oidc without provider must fail closed")
 	} else if codeOf(err) != "validation_source_missing" {
 		t.Fatalf("sso without provider must report validation_source_missing, got %v", err)
 	}
-	// Well-formed sources pass.
 	okSrc := auth.OAuthProvisioningSource("google", nil).WithAction(types.ValidateUserInfoActionCreateUser)
 	if err := auth.AssertValidUserInfoSource(okSrc); err != nil {
 		t.Fatalf("well-formed oauth source must pass: %v", err)
@@ -346,7 +289,6 @@ func TestS6_ValidateUserInfoSourceValidation(t *testing.T) {
 
 func TestS6_ValidateUserInfoSeams(t *testing.T) {
 	ctx := context.Background()
-	// Gate that rejects one domain.
 	gate := types.ValidateUserInfoFunc(func(data types.ValidateUserInfoData, _ types.EndpointContext) (*types.ValidateUserInfoResult, error) {
 		if email, _ := data.User["email"].(string); strings.HasSuffix(email, "@blocked.com") {
 			return &types.ValidateUserInfoResult{Error: "email_not_allowed", ErrorDescription: "Only company emails are allowed"}, nil
@@ -355,7 +297,6 @@ func TestS6_ValidateUserInfoSeams(t *testing.T) {
 	})
 	epCtx := types.RequestEndpointContext(nil, types.AuthContext{}, "POST", "/sign-up/email")
 
-	// create-user seam (email-password): programmatic 403, nothing written.
 	createSrc := types.ValidateUserInfoSource{Action: types.ValidateUserInfoActionCreateUser, Method: types.ValidateUserInfoMethodEmailPassword}
 	err := auth.AssertValidUserInfo(ctx, gate, epCtx, map[string]any{"email": "a@blocked.com"}, createSrc)
 	if err == nil {
@@ -375,7 +316,6 @@ func TestS6_ValidateUserInfoSeams(t *testing.T) {
 		t.Fatalf("allowed identity must pass: %v", err)
 	}
 
-	// link-account seam (oauth): same 403 for programmatic callers...
 	linkSrc := auth.OAuthProvisioningSource("google", map[string]any{"sub": "1"}).WithAction(types.ValidateUserInfoActionLinkAccount)
 	if linkSrc.Method != types.ValidateUserInfoMethodOAuth {
 		t.Fatalf("link source method must be oauth, got %q", linkSrc.Method)
@@ -385,8 +325,6 @@ func TestS6_ValidateUserInfoSeams(t *testing.T) {
 		t.Fatalf("link-account rejection must carry the gate code, got %v", err)
 	}
 
-	// ...but browser flows redirect to the error URL with
-	// ?error=<code>&error_description=<msg> (callback.ts redirectOnError).
 	redirect := auth.ValidateUserInfoRedirectURL("https://app.example/error", "email_not_allowed", "Only company emails are allowed")
 	if !strings.Contains(redirect, "error=email_not_allowed") {
 		t.Fatalf("browser redirect must carry error code, got %q", redirect)
@@ -395,14 +333,12 @@ func TestS6_ValidateUserInfoSeams(t *testing.T) {
 		t.Fatalf("browser redirect must carry error_description, got %q", redirect)
 	}
 
-	// sign-in seam (oauth returning user, fresh provider data).
 	signInSrc := auth.OAuthProvisioningSource("google", map[string]any{"sub": "1"}).WithAction(types.ValidateUserInfoActionSignIn)
 	err = auth.AssertValidUserInfo(ctx, gate, epCtx, map[string]any{"email": "moved@blocked.com", "id": "u1"}, signInSrc)
 	if err == nil || codeOf(err) != "email_not_allowed" {
 		t.Fatalf("sign-in gate must see fresh provider email, got %v", err)
 	}
 
-	// Hook throw fails closed as validation_failed (never silently allowed).
 	throwing := types.ValidateUserInfoFunc(func(types.ValidateUserInfoData, types.EndpointContext) (*types.ValidateUserInfoResult, error) {
 		return nil, errors.New("hook exploded")
 	})
@@ -412,16 +348,12 @@ func TestS6_ValidateUserInfoSeams(t *testing.T) {
 		t.Fatalf("throwing hook must map to validation_failed, got %v", err)
 	}
 
-	// Nil hook allows everything (no gate configured).
 	if err := auth.AssertValidUserInfo(ctx, nil, epCtx, map[string]any{"email": "a@blocked.com"}, createSrc); err != nil {
 		t.Fatalf("nil hook must allow: %v", err)
 	}
 }
 
-// ---------------------------------------------------------------------------
 // 4. D05: non-transactional after-hook errors must throw (upstream
-// transaction.ts:170 rejects). The write stays committed; the call fails.
-// ---------------------------------------------------------------------------
 
 func TestS6_D05_NonTransactionalAfterHookThrows(t *testing.T) {
 	ctx := context.Background()

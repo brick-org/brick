@@ -9,10 +9,6 @@ import (
 )
 
 // TestHookedPreserve_FiresDeleteHooksWithoutDeleting mirrors upstream
-// endPreservedSessions (internal-adapter.ts:91-106): the session-delete
-// hooks run while the physical write is replaced by an end update, so OAuth
-// revocation and back-channel logout fire on preserve-mode session end. The
-// row survives with expiresAt set to now; update hooks must not fire.
 func TestHookedPreserve_FiresDeleteHooksWithoutDeleting(t *testing.T) {
 	ctx := context.Background()
 	inner := newMemoryAdapter()

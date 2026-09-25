@@ -14,8 +14,6 @@ import (
 // GET /delete-user/callback hook mapping were flagged open in the agent
 // report and closed at integration.
 
-// ChangeEmail direct-update leg (unverified user +
-// UpdateEmailWithoutVerification) must fan out to secondary sessions like
 // UpdateUser post-commit (upstream updateUser -> refreshUserSessions).
 func TestWiringV1_ChangeEmailDirectPropagatesToSecondary(t *testing.T) {
 	db := newParityMemAdapter()
@@ -45,8 +43,6 @@ func TestWiringV1_ChangeEmailDirectPropagatesToSecondary(t *testing.T) {
 }
 
 // GET /delete-user/callback must propagate hook-thrown APIErrors instead of
-// collapsing to 500 INVALID_USER (same errors.As pattern as the other
-// delete/verify hook sites).
 func TestWiringV1_DeleteCallbackHookAPIErrorPropagates(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)

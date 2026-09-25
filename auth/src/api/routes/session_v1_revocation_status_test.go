@@ -33,7 +33,6 @@ func TestV1_ExpiredSessionListRevokeIs401(t *testing.T) {
 		t.Fatalf("revoke-session with expired session: got %d, want 401: %s", resp.Code, resp.Body.String())
 	}
 
-	// Unknown tokens stay 401 FAILED_TO_GET_SESSION on both routes.
 	unknown := signedSessionHeader(t, opts, "tok-missing")
 	if resp := listAPI.Get("/api/auth/list-sessions", "Cookie: "+unknown); resp.Code != http.StatusUnauthorized {
 		t.Fatalf("list-sessions unknown token: got %d, want 401: %s", resp.Code, resp.Body.String())
@@ -42,7 +41,6 @@ func TestV1_ExpiredSessionListRevokeIs401(t *testing.T) {
 		t.Fatalf("revoke-session unknown token: got %d, want 401: %s", resp.Code, resp.Body.String())
 	}
 
-	// Sanity: a live session still lists.
 	seedSessionUser(t, db, "live-gate@example.com", "tok-live-gate", time.Now().UTC().Add(time.Hour))
 	if resp := listAPI.Get("/api/auth/list-sessions", "Cookie: "+signedSessionHeader(t, opts, "tok-live-gate")); resp.Code != http.StatusOK {
 		t.Fatalf("list-sessions live session: got %d, want 200: %s", resp.Code, resp.Body.String())

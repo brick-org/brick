@@ -9,7 +9,6 @@ import (
 )
 
 // schemaFixPlugin is a minimal auth.Plugin stub for schema-fix regression
-// tests (kept separate from parityPlugin so this file is self-contained).
 type schemaFixPlugin struct {
 	id     string
 	schema auth.PluginSchema
@@ -30,7 +29,6 @@ func (p *schemaFixPlugin) RouteHooks() auth.PluginRouteHooks { return auth.Plugi
 func (p *schemaFixPlugin) ErrorCodes() map[string]string { return nil }
 
 // GetModelName must resolve physical aliases through GetDefaultModelName so
-// they round-trip instead of double-pluralizing (app_users → app_userss).
 func TestSchemaFix_GetModelNameAliasRoundTrip(t *testing.T) {
 	opts := auth.Options{}
 	opts.User.Model.ModelName = "app_users"
@@ -52,7 +50,6 @@ func TestSchemaFix_GetModelNameAliasRoundTrip(t *testing.T) {
 }
 
 // Options additionalFields must merge AFTER plugin fields (upstream order
-// core→plugin→options) so options win on name collisions.
 func TestSchemaFix_OptionAdditionalFieldsWinOverPlugin(t *testing.T) {
 	plugin := &schemaFixPlugin{
 		id: "test",
@@ -86,8 +83,6 @@ func TestSchemaFix_OptionAdditionalFieldsWinOverPlugin(t *testing.T) {
 }
 
 // Plugin entries on core tables must contribute only Fields and Indexes:
-// ModelName, Order, and DisableMigration from plugins are ignored there,
-// while non-core tables still merge fully.
 func TestSchemaFix_PluginContainedOnCoreTables(t *testing.T) {
 	plugin := &schemaFixPlugin{
 		id: "test",
@@ -154,9 +149,6 @@ func TestSchemaFix_GetDefaultFieldNameID(t *testing.T) {
 
 // Long generated names must strip "_<kind>" before truncating to 63 bytes
 // and re-append "_<fnv1a32>_<kind>". Golden value computed from the upstream
-// algorithm (FNV-1a/32 over the full generated name):
-// generated = "app_organization_invitations_organization_id_email_expires_at_idx"
-// (65 bytes) → base minus "_idx", cut to 50 bytes, + "_d28bd6a5_idx".
 func TestSchemaFix_DatabaseIndexNameTruncationGolden(t *testing.T) {
 	got := auth.GetDatabaseIndexName("app_organization_invitations", auth.TableIndex{
 		Fields: []string{"organization_id", "email", "expires_at"},
@@ -180,16 +172,12 @@ func TestSchemaFix_DatabaseIndexNameTruncationGolden(t *testing.T) {
 	if len(uidx) < len(wantSuffix) || uidx[len(uidx)-len(wantSuffix):] != wantSuffix {
 		t.Fatalf("truncated unique name must keep _uidx suffix: %q", uidx)
 	}
-	// The kind tail must be replaced by the hash suffix, not merely cut:
-	// base keeps the full column prefix minus "_uidx" (suffix is 14 bytes,
-	// so the prefix is 63-14 = 49 bytes here).
 	if uidx[:49] != "app_organization_invitations_organization_id_emai" {
 		t.Fatalf("unique truncation must keep the column prefix: %q", uidx)
 	}
 }
 
 // The index dedup key must not collide between one field "a,b" and two
-// fields ["a","b"].
 func TestSchemaFix_MergeTableIndexesNoFieldCollision(t *testing.T) {
 	merged := auth.MergeTableIndexes(
 		[]auth.TableIndex{{Fields: []string{"a,b"}}},
@@ -208,8 +196,6 @@ func TestSchemaFix_MergeTableIndexesNoFieldCollision(t *testing.T) {
 }
 
 // CloneSchema must deep-copy nested References pointers and index field
-// slices; hook funcs and func-valued DefaultValues stay shared (documented
-// in CloneSchema: funcs cannot be cloned).
 func TestSchemaFix_CloneSchemaDeepCopiesReferences(t *testing.T) {
 	defaultFn := func() any { return "default" }
 	onUpdate := func() any { return "updated" }
@@ -230,7 +216,6 @@ func TestSchemaFix_CloneSchemaDeepCopiesReferences(t *testing.T) {
 	}
 	cloned := auth.CloneSchema(schema)
 
-	// Mutate the source through its nested pointers/slices.
 	schema["session"].Fields["userId"].References.Model = "evil"
 	schema["session"].Indexes[0].Fields[0] = "evil"
 
@@ -241,7 +226,6 @@ func TestSchemaFix_CloneSchemaDeepCopiesReferences(t *testing.T) {
 	if cloned["session"].Indexes[0].Fields[0] != "userId" {
 		t.Fatalf("clone index fields must be independent: got %q", cloned["session"].Indexes[0].Fields[0])
 	}
-	// Funcs stay shared by design.
 	if reflect.ValueOf(got.DefaultValue).Pointer() != reflect.ValueOf(defaultFn).Pointer() {
 		t.Fatal("func-valued DefaultValue must stay shared")
 	}
@@ -257,7 +241,6 @@ func TestSchemaFix_CloneSchemaDeepCopiesReferences(t *testing.T) {
 }
 
 // Ambiguous aliases must resolve deterministically (schema keys are scanned
-// in sorted order).
 func TestSchemaFix_AmbiguousAliasResolutionDeterministic(t *testing.T) {
 	schema := auth.PluginSchema{
 		"beta":  {ModelName: "shared"},
@@ -302,7 +285,6 @@ func TestSchemaFix_DisableMigrationsPresenceLastWins(t *testing.T) {
 	if merged["m"].DisableMigration {
 		t.Fatal("legacy bool must sync from explicit false")
 	}
-	// Legacy true sticks for backwards compat.
 	legacy := auth.PluginSchema{
 		"m": {Fields: map[string]auth.FieldAttribute{}, DisableMigration: true},
 	}

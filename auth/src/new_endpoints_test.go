@@ -202,7 +202,6 @@ func TestRevokeOtherSessions_KeepsCurrent(t *testing.T) {
 func TestUpdateSession_PersistsAdditionalFields(t *testing.T) {
 	db := newMemoryAdapter()
 	// B2 upstream parity: undeclared-only bodies 400, so declare the field
-	// under test (intent unchanged: declared additional fields persist).
 	opts := baseTestOptions()
 	opts.Session.Model.AdditionalFields = map[string]auth.FieldAttribute{"favoriteColor": {}}
 	srv := newCoreTestServer(t, db, opts)
@@ -377,14 +376,12 @@ func TestDeleteUserCallback_JSONSuccessAndInvalidToken(t *testing.T) {
 		t.Fatalf("unexpected callback body %+v", cbBody)
 	}
 
-	// Reusing the consumed token must fail.
 	reuseResp := getWithCookie(t, srv.URL+"/api/auth/delete-user/callback?token="+sent.Token, cookie)
 	defer reuseResp.Body.Close()
 	if reuseResp.StatusCode != http.StatusNotFound {
 		t.Fatalf("reused token expected 404, got %d", reuseResp.StatusCode)
 	}
 
-	// A fresh user with a bogus token also gets 404.
 	resp2, cookie2 := signUp(t, srv.URL, "delete-cb-bad@example.com")
 	resp2.Body.Close()
 	badResp := getWithCookie(t, srv.URL+"/api/auth/delete-user/callback?token=bogus", cookie2)

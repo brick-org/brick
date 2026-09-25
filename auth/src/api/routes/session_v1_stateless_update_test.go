@@ -19,7 +19,6 @@ import (
 // ("still refreshes the cookie in a DB-less deployment when no row exists").
 
 // mintStatelessHeader builds a Cookie header for a session that exists only
-// in the signed cookie cache (no database row anywhere).
 func mintStatelessHeader(t *testing.T, opts types.Options, token string, session types.Session, user types.User) string {
 	t.Helper()
 	signed, err := cookies.Sign(opts.CurrentSecret(), token)
@@ -61,8 +60,6 @@ func statelessTestOptions() types.Options {
 
 func TestV1_DBlessUpdateSessionFromCookieCache(t *testing.T) {
 	opts := statelessTestOptions()
-	// Declared additional field so the update has a known updatable field
-	// (upstream drops truly-unknown keys; unknown-only bodies 400).
 	opts.Session.Model.AdditionalFields = map[string]types.FieldAttribute{
 		"theme": {},
 	}
@@ -82,7 +79,6 @@ func TestV1_DBlessUpdateSessionFromCookieCache(t *testing.T) {
 		t.Fatal("DB-less update must refresh the cookie")
 	}
 
-	// Unknown token with no cache: 401, cookies expired.
 	badResp := api.Post("/api/auth/update-session", "Cookie: "+signedSessionHeader(t, opts, "tok-missing"), map[string]any{"theme": "x"})
 	if badResp.Code != http.StatusUnauthorized {
 		t.Fatalf("DB-less unknown token expected 401, got %d: %s", badResp.Code, badResp.Body.String())
@@ -90,8 +86,6 @@ func TestV1_DBlessUpdateSessionFromCookieCache(t *testing.T) {
 }
 
 func TestV1_DBlessGetSessionFromCookieCache(t *testing.T) {
-	// Upstream "should work without database (session stored in cookie only)":
-	// a valid cache serves with no database round-trip even when DB is nil.
 	opts := statelessTestOptions()
 	session, user := statelessSessionFixture("tok-cache-only")
 	header := mintStatelessHeader(t, opts, "tok-cache-only", session, user)

@@ -11,7 +11,6 @@ import (
 // F6-01 request-context tests (upstream: utils/url.ts resolveDynamicBaseURL,
 // context/helpers.ts resolveRequestContext, api/to-auth-endpoints.test.ts
 // dynamic baseURL resolution, api/state/oauth.ts serverContext).
-//
 // These tests target the NEW request-scoped helpers owned by AUTH-F6-01.
 // They fail before implementation (undefined symbols) and pass after.
 
@@ -55,13 +54,11 @@ func TestRequestContextConcurrentTwoHostsIsolated(t *testing.T) {
 }
 
 func TestRequestContextOAuthServerContextProducerReserved(t *testing.T) {
-	// Trusted producer merges context-carried + explicit, explicit wins.
 	base := AddOAuthServerContextValue(context.Background(), map[string]any{"tenant": "t1", "flow": "signin"})
 	merged := ResolveOAuthServerContext(base, map[string]any{"flow": "link"})
 	if merged["tenant"] != "t1" || merged["flow"] != "link" {
 		t.Fatalf("serverContext merge = %v", merged)
 	}
-	// Empty layers resolve to nil (omitted on the wire like upstream undefined).
 	if got := ResolveOAuthServerContext(context.Background(), nil); got != nil {
 		t.Fatalf("empty serverContext = %v, want nil", got)
 	}

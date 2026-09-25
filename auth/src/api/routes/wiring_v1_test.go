@@ -46,10 +46,7 @@ func wiringTokenOf(t *testing.T, resp *httptest.ResponseRecorder) string {
 	return *body.Token
 }
 
-// wiringSignUpIn creates one user with two live sessions, returning both raw
-// tokens. Sign-up mints the first session, sign-in the second; with secondary
-// storage configured both pairs are mirrored there (upstream createSession
-// mirroring, internal-adapter.ts:520-564).
+// wiringSignUpIn: two sessions mirrored (upstream createSession).
 func wiringSignUpIn(t *testing.T, api humatest.TestAPI, email, password string) (string, string) {
 	t.Helper()
 	signUp := api.Post("/api/auth/sign-up/email", map[string]any{
@@ -68,9 +65,7 @@ func wiringSignUpIn(t *testing.T, api humatest.TestAPI, email, password string) 
 	return first, wiringTokenOf(t, signIn)
 }
 
-// Task A.1: secondary-backed UpdateUser propagates to both sessions
 // (upstream refreshUserSessions, internal-adapter.ts:108-137). Pre-fix the
-// secondary copies keep the stale user.
 func TestWiringV1_UpdateUserPropagatesToSecondarySessions(t *testing.T) {
 	db := newParityMemAdapter()
 	store := newMapSecondaryStorage(true)
@@ -98,9 +93,6 @@ func TestWiringV1_UpdateUserPropagatesToSecondarySessions(t *testing.T) {
 	}
 }
 
-// wiringToggleStorage fails Set on demand so the loud-failure pin can seed
-// through the working store first (handlers capture opts at registration,
-// so the same store instance must serve both phases).
 type wiringToggleStorage struct {
 	*mapSecondaryStorage
 	fail bool
@@ -129,17 +121,13 @@ func TestWiringV1_UpdateUserSecondaryFailureIsLoud(t *testing.T) {
 	}
 }
 
-// Task A.2: ChangePassword with revokeOtherSessions clears secondary sessions
 // (upstream deleteUserSessions fan-out) while preserving the replacement
-// session. Pre-fix the revoked tokens survive in secondary storage.
 func TestWiringV1_ChangePasswordClearsSecondarySessions(t *testing.T) {
 	ctx := context.Background()
 	db := newParityMemAdapter()
 	store := newMapSecondaryStorage(true)
 	opts := emailAuthTestOptions(db)
 	opts.SecondaryStorage = store
-	// ChangePassword resolves the calling session from the database, so rows
-	// must be persisted there for this leg.
 	opts.Session.StoreSessionInDatabase = true
 	api := wiringSecondaryAPI(t, opts)
 	first, second := wiringSignUpIn(t, api, "wire-change-pw@test.com", "password123")
@@ -174,7 +162,6 @@ func TestWiringV1_ChangePasswordClearsSecondarySessions(t *testing.T) {
 }
 
 // Task A.3: verify-email flips emailVerified across secondary sessions.
-// Pre-fix the cached users keep emailVerified=false after verification.
 func TestWiringV1_VerifyEmailFlipsSecondarySessions(t *testing.T) {
 	db := newParityMemAdapter()
 	store := newMapSecondaryStorage(true)
@@ -188,8 +175,6 @@ func TestWiringV1_VerifyEmailFlipsSecondarySessions(t *testing.T) {
 	api := wiringSecondaryAPI(t, opts)
 	first, second := wiringSignUpIn(t, api, "wire-verify@test.com", "password123")
 
-	// Authenticated resend (no anti-enumeration floor): the session user's own
-	// unverified email.
 	if resp := api.Post("/api/auth/send-verification-email", map[string]any{
 		"email": "wire-verify@test.com",
 	}, "Cookie: "+signedSessionHeader(t, opts, first)); resp.Code != 200 {
@@ -212,8 +197,6 @@ func TestWiringV1_VerifyEmailFlipsSecondarySessions(t *testing.T) {
 	}
 }
 
-// Task B: a hook-thrown APIError keeps its status on the verify-email path
-// instead of collapsing to 500 (established pattern:
 // email-verification.go sendVerificationEmailForUser, upstream #8757).
 func TestWiringV1_VerifyEmailHookAPIErrorPropagates(t *testing.T) {
 	boot := func(t *testing.T, mutate func(*types.Options)) (humatest.TestAPI, string) {
@@ -264,7 +247,6 @@ func TestWiringV1_VerifyEmailHookAPIErrorPropagates(t *testing.T) {
 }
 
 // Task B: a hook-thrown APIError keeps its status on the delete-user path
-// instead of collapsing to 500.
 func TestWiringV1_DeleteUserHookAPIErrorPropagates(t *testing.T) {
 	boot := func(t *testing.T, mutate func(*types.Options)) (humatest.TestAPI, string) {
 		t.Helper()

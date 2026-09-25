@@ -27,7 +27,7 @@ func mustRedirect(t *testing.T, rawURL string, opts Options, want bool) {
 	}
 }
 
-// --- Upstream: trusted origins list support ---
+// Upstream: trusted origins list support
 
 func TestPublicTrustedOrigins_AppOriginAlwaysTrusted(t *testing.T) {
 	opts := Options{BaseURL: "http://localhost:3000"}
@@ -43,15 +43,13 @@ func TestPublicTrustedOrigins_RejectPrefixAndSubdomain(t *testing.T) {
 	mustTrusted(t, "http://sub-domain.trusted.com", opts, nil, false)
 }
 
-// --- Upstream: relative paths support ---
+// Upstream: relative paths support
 
 func TestPublicTrustedOrigins_RelativeDefaultReject(t *testing.T) {
 	opts := Options{BaseURL: "http://localhost:3000"}
-	// MatchesOriginPattern never trusts relative URLs on its own.
 	mustMatch(t, "/", "http://localhost:3000", false)
 	mustMatch(t, "/some-absolute-url", "http://localhost:3000", false)
 	mustTrusted(t, "/", opts, nil, false)
-	// Tilde paths are still relative: rejected without the redirect mode.
 	mustTrusted(t, "/my-team/~settings/account", opts, nil, false)
 }
 
@@ -110,12 +108,11 @@ func TestPublicTrustedOrigins_RelativeAmbiguousAndEncoded(t *testing.T) {
 			t.Errorf("allow-relative MatchesOriginPattern(%q) = true, want false", u)
 		}
 	}
-	// Non-relative dangerous schemes never match.
 	mustMatch(t, "javascript:alert('xss')", "https://trusted.com", false)
 	mustMatch(t, "data:text/html,<script>alert('xss')</script>", "https://trusted.com", false)
 }
 
-// --- Upstream: wildcards support ---
+// Upstream: wildcards support
 
 func TestPublicTrustedOrigins_HostWildcard(t *testing.T) {
 	opts := Options{TrustedOrigins: []string{"*.my-site.com"}}
@@ -149,7 +146,7 @@ func TestPublicTrustedOrigins_CustomSchemeWildcards(t *testing.T) {
 	mustTrusted(t, "exp://203.0.113.0:8081/--/", opts, nil, false)
 }
 
-// --- Upstream: custom-scheme origin matching ---
+// Upstream: custom-scheme origin matching
 
 func TestPublicTrustedOrigins_CustomSchemeExact(t *testing.T) {
 	opts := Options{TrustedOrigins: []string{"myapp://callback"}}
@@ -211,7 +208,7 @@ func TestPublicTrustedOrigins_CustomSchemeWildcardStillWorks(t *testing.T) {
 	mustTrusted(t, "exp://10.0.0.1:8081/--/", opts, nil, false)
 }
 
-// --- Canonicalization ---
+// Canonicalization
 
 func TestPublicTrustedOrigins_Canonicalization(t *testing.T) {
 	opts := Options{TrustedOrigins: []string{"https://example.com"}}
@@ -224,12 +221,11 @@ func TestPublicTrustedOrigins_Canonicalization(t *testing.T) {
 	mustTrusted(t, "http://example.com:80", httpOpts, nil, true)
 	mustTrusted(t, "http://example.com:8080", httpOpts, nil, false)
 
-	// BaseURL origin canonicalizes the same way.
 	baseOpts := Options{BaseURL: "https://Example.COM:443/api/auth"}
 	mustTrusted(t, "https://example.com/dashboard", baseOpts, nil, true)
 }
 
-// --- Absolute hardening: backslash / control / encoded separators ---
+// Absolute hardening: backslash / control / encoded separators
 
 func TestPublicTrustedOrigins_AbsoluteHardening(t *testing.T) {
 	opts := Options{TrustedOrigins: []string{"https://trusted.com"}}
@@ -238,14 +234,12 @@ func TestPublicTrustedOrigins_AbsoluteHardening(t *testing.T) {
 	mustTrusted(t, "https://trusted.com/\u0000evil", opts, nil, false)
 	mustTrusted(t, "https://trusted.com/safe%2famd", opts, nil, false)
 	mustTrusted(t, "https://trusted.com/safe%5cAMD", opts, nil, false)
-	// Encoded separators in the query are legitimate and still trusted.
 	mustTrusted(t, "https://trusted.com/callback?next=%2Fdashboard", opts, nil, true)
-	// Authority confusion never matches the pinned origin.
 	mustTrusted(t, "https://trusted.com@evil.com", opts, nil, false)
 	mustTrusted(t, "https://trusted.com.evil.com", opts, nil, false)
 }
 
-// --- Request-aware resolution + env ---
+// Request-aware resolution + env
 
 func TestPublicTrustedOrigins_RequestAwareResolver(t *testing.T) {
 	req, _ := http.NewRequest(http.MethodGet, "https://app.example.com/", nil)
@@ -263,7 +257,6 @@ func TestPublicTrustedOrigins_RequestAwareResolver(t *testing.T) {
 	mustTrusted(t, "https://dynamic.example.com/x", opts, nil, false)
 	mustTrusted(t, "https://unknown.example.com", opts, req, false)
 
-	// Resolver results are null/empty filtered.
 	got := ResolveTrustedOrigins(opts, req)
 	for _, origin := range got {
 		if origin == "" {
@@ -333,14 +326,7 @@ func TestPublicTrustedOrigins_FilterNeverMutatesInput(t *testing.T) {
 }
 
 func TestPublicTrustedOrigins_IDNADecision(t *testing.T) {
-	// DECISION (Wave 4): no punycode conversion. golang.org/x/net/idna is
-	// not in auth/go.mod (not even an indirect dependency), so
-	// canonicalHostname lowercases only. The mismatch direction is
-	// fail-closed: a unicode pattern matches only the identical unicode
-	// spelling, and an xn-- punycode pattern never matches its unicode
-	// form (nor vice versa) — mismatches reject rather than bypass trust.
 	// Upstream's WHATWG URL parser would emit punycode for both sides and
-	// match them; deployments needing that must add x/net explicitly.
 	mustMatch(t, "https://münchen.example.com/cb", "https://münchen.example.com", true)
 	mustMatch(t, "https://xn--mnchen-3ya.example.com/cb", "https://xn--mnchen-3ya.example.com", true)
 	mustMatch(t, "https://münchen.example.com/cb", "https://xn--mnchen-3ya.example.com", false)

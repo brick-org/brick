@@ -1,25 +1,6 @@
 package types
 
-// AUTH-V10-02 — adversarial and cross-language conformance (tests only).
-//
-// This file owns the types package's Wave 10 adversarial coverage for the
-// trust boundary: open-redirect rejection, origin-pattern fuzzing, and
-// concurrent trust evaluation.
-//
-// Upstream references (pinned Better Auth v1.7.5 at 5468e6bf):
-//   - packages/better-auth/src/utils/trusted-origins.ts (origin matching,
-//     wildcard shapes, custom-scheme authority + path pinning)
-//   - packages/better-auth/src/context/helpers.ts (getTrustedOrigins)
-//   - vendor trusted-origins.test.ts cases (exact origins, wildcards,
-//     relative allowRelativePaths mode, control-character and encoded-
-//     separator rejection)
-//
-// The evil/safe redirect matrix below is additionally checked into
-// auth/testdata/wave10_redirects.json and consumed by
-// auth/testutil/wave10_vectors_test.go so the same vectors pin both the Go
-// implementation here and any cross-language reader. Work limits pinned for
-// this file: fuzz URLs/patterns are capped at 2KiB; larger inputs skip. No
-// production code is changed here.
+// wave10_redirect_test.go: upstream conformance (Better Auth v1.7.5).
 
 import (
 	"net/http"
@@ -36,43 +17,34 @@ func wave10RedirectOpts() Options {
 }
 
 // Open-redirect matrix: attacker-controlled URLs must never be trusted as
-// redirects under the default configuration, while first-party URLs are.
 // Every row mirrors a class from the upstream trusted-origins tests.
 func TestWave10_OpenRedirectEvilMatrix(t *testing.T) {
 	opts := wave10RedirectOpts()
 	evil := []string{
-		// Scheme confusion.
 		"javascript:alert(1)",
 		"JaVaScRiPt:alert(1)",
 		"data:text/html,<script>alert(1)</script>",
 		"vbscript:msgbox(1)",
 		"file:///etc/passwd",
-		// Authority confusion.
 		"https://app.example.com.attacker.com/",
 		"https://attacker.com/?x=https://app.example.com",
 		"https://trusted.example.com.attacker.com/",
 		"//evil.com/phish",
 		"https:///evil.com",
-		// Backslash / separator smuggling.
 		`https://app.example.com\evil.com`,
 		`/\\evil.com`,
 		`/\evil.com`,
-		// Encoded separators in the path.
 		"/%2f/evil.com",
 		"/%2Fevil.com",
 		"/%5cevil.com",
 		"https://app.example.com/%2f..%2f..%2fetc",
-		// Control characters.
 		"/dash\x00board",
 		"/dash\x1fboard",
 		"/dash\x7fboard",
 		"https://app.example.com/\nSet-Cookie: x=1",
-		// Custom-scheme authority escape.
 		"myapp://callback.attacker.tld",
-		// Wildcard escape: the *.wildcard pattern must not match siblings.
 		"https://wildcard.example.com.evil.com/",
 		"https://evilwildcard.example.com/",
-		// Non-URL garbage.
 		"",
 		"not a url",
 		"::::",
@@ -99,7 +71,6 @@ func TestWave10_OpenRedirectEvilMatrix(t *testing.T) {
 }
 
 // Trust evaluation is pure and race-clean under burst: static lists plus
-// per-request resolvers compose deterministically across goroutines.
 func TestWave10_TrustEvaluationConcurrentUse(t *testing.T) {
 	base := wave10RedirectOpts()
 	base.TrustedOriginsFunc = func(r *http.Request) []string {
@@ -137,8 +108,6 @@ func TestWave10_TrustEvaluationConcurrentUse(t *testing.T) {
 	}
 	wg.Wait()
 
-	// The resolver result is tenant-scoped: acme origins trust only on acme
-	// requests, even under concurrency.
 	acmeReq, _ := http.NewRequest("GET", "https://app.example.com/", nil)
 	acmeReq.Header.Set("X-Tenant", "acme")
 	if !IsTrustedOrigin("https://acme.example.com/x", base, acmeReq) {
@@ -151,9 +120,6 @@ func TestWave10_TrustEvaluationConcurrentUse(t *testing.T) {
 }
 
 // FuzzWave10_MatchesOriginPattern fuzzes the origin matcher: it never
-// panics, empty inputs never match, decoding is deterministic, and
-// non-http(s) URLs never match web wildcard patterns (no scheme confusion
-// through the wildcard path).
 func FuzzWave10_MatchesOriginPattern(f *testing.F) {
 	f.Add("https://app.example.com/cb", "https://app.example.com")
 	f.Add("https://a.wildcard.example.com/x", "https://*.wildcard.example.com")
@@ -182,9 +148,6 @@ func FuzzWave10_MatchesOriginPattern(f *testing.F) {
 }
 
 // FuzzWave10_RelativeRedirectSafety fuzzes the allowRelativePaths gate:
-// every trusted "/" URL must satisfy the safe-relative shape (no "//"
-// prefix, no backslash, no control characters, no encoded path separator in
-// the path slice).
 func FuzzWave10_RelativeRedirectSafety(f *testing.F) {
 	f.Add("/dashboard")
 	f.Add("//evil.com")

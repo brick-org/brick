@@ -1,21 +1,6 @@
 package auth_test
 
-// Wave 2 Agent C (framework context and options) tests.
-//
-// Each test pins upstream behavior from the pinned Better Auth v1.7.5 source
-// before the implementation runs (failing-first workflow):
-//   - HookedAdapter construction through NewHookedAdapterWithOptions: plugin
-//     adapter overrides apply, FieldSchemas populate from the resolved
-//     schema, and Options.OnAfterCommitHookError reports post-commit
-//     failures (vendor/.../src/db/with-hooks.ts, core/src/context/transaction.ts).
-//   - Full context services on AuthContext (create-context.ts).
-//   - Logger level filtering (core/src/env/logger.ts shouldPublishLog).
-//   - Secret entropy + default-secret production diagnostics
-//     (context/secret-utils.ts, create-context.ts validateSecret).
-//   - Per-request dynamic baseURL resolution (utils/url.ts
-//     resolveDynamicBaseURL, context/helpers.ts resolveRequestContext).
-//   - ID-generation overrides (create-context.ts generateIdFunc).
-//   - Nested defu option-patch merging (context/helpers.ts runPluginInit).
+// framework_wave2_test.go: upstream conformance (Better Auth v1.7.5).
 
 import (
 	"context"
@@ -29,8 +14,6 @@ import (
 )
 
 // wave2Plugin is a configurable stub implementing auth.Plugin plus the
-// optional Wave 1/2 provider surfaces (adapter overrides, named endpoints,
-// TS route hooks, init patches).
 type wave2Plugin struct {
 	id        string
 	overrides types.PluginAdapterOverrides
@@ -165,7 +148,6 @@ func TestWave2OnAfterCommitHookErrorOption(t *testing.T) {
 			OnAfterCommitHookError: handler,
 		})
 	}
-	// Without a handler the first flush failure fails the call.
 	a := newAuth(t, nil)
 	err := a.Context.Options.DB.Transaction(context.Background(), func(tx auth.Adapter) error {
 		_, err := tx.Create(context.Background(), "user", map[string]any{"id": "1"}, nil)
@@ -226,10 +208,6 @@ func TestWave2InitPatchHooksKeepPluginSource(t *testing.T) {
 		DB:      db,
 		Plugins: []auth.Plugin{legacy},
 	})
-	// Merge order: legacy hooks run before init-patch hooks, both merge.
-	// AUTH-S6-01 D05 (aligned to throw): the failing patch after-hook
-	// propagates without rolling back, so the call fails AND the merged
-	// write persists.
 	row, err := a.Context.Options.DB.Create(context.Background(), "user", map[string]any{"id": "1"}, nil)
 	if err == nil || !strings.Contains(err.Error(), "patch after failed") {
 		t.Fatalf("after-hook error must propagate (D05 throw), got row=%v err=%v", row, err)
@@ -241,8 +219,6 @@ func TestWave2InitPatchHooksKeepPluginSource(t *testing.T) {
 	if raw["legacy"] != true || raw["patched"] != true {
 		t.Fatalf("both hook payloads must merge, got %#v", raw)
 	}
-	// The patch failure must carry the plugin:<id> source label, proving the
-	// patch traveled as a sourced entry rather than a generic user hook.
 	err = a.Context.Options.DB.Transaction(context.Background(), func(tx auth.Adapter) error {
 		_, err := tx.Create(context.Background(), "user", map[string]any{"id": "2"}, nil)
 		return err
@@ -306,7 +282,6 @@ func TestWave2FullContextServices(t *testing.T) {
 		t.Fatal("PublishTelemetry must be attached")
 	}
 	ctx.PublishTelemetry(types.TelemetryEvent{Type: "test", Payload: map[string]any{}})
-	// Explicit opt-out removes the validator.
 	a2 := mustBetterAuth(t, auth.Options{
 		Secret:  "test-secret-that-is-long-enough-1234",
 		Adapter: adapter,
@@ -378,13 +353,11 @@ func TestWave2DynamicRequestContext(t *testing.T) {
 	if !resolved.IsTrustedOrigin("https://example.com/ok") {
 		t.Fatal("resolved context must trust the resolved origin")
 	}
-	// Unlisted hosts fail closed without a fallback.
 	bad, _ := http.NewRequest(http.MethodGet, "https://evil.com/api/auth/get-session", nil)
 	bad.Host = "evil.com"
 	if _, err := auth.ResolveRequestContext(a.Context, bad, a.Context.Options); err == nil {
 		t.Fatal("unlisted host without fallback must fail")
 	}
-	// Fallback covers unlisted hosts.
 	a2 := mustBetterAuth(t, auth.Options{
 		Secret:  "test-secret-that-is-long-enough-1234",
 		Adapter: adapter,
@@ -400,7 +373,6 @@ func TestWave2DynamicRequestContext(t *testing.T) {
 	if resolved2.BaseURL != "https://fallback.example.com/api/auth" {
 		t.Fatalf("fallback baseURL = %q", resolved2.BaseURL)
 	}
-	// Static configurations return the input unchanged.
 	a3 := mustBetterAuth(t, auth.Options{
 		Secret:  "test-secret-that-is-long-enough-1234",
 		Adapter: adapter,
@@ -429,13 +401,11 @@ func TestWave2LoggerLevelFiltering(t *testing.T) {
 			},
 		}
 	}
-	// At level error, info notes (telemetry) and warnings (proxies) stay quiet.
 	got = nil
 	mustBetterAuth(t, levels(types.LogLevelError))
 	if len(got) != 0 {
 		t.Fatalf("level=error must suppress info/warn notes, got %v", got)
 	}
-	// At level debug everything publishes.
 	got = nil
 	mustBetterAuth(t, levels(types.LogLevelDebug))
 	if len(got) == 0 {
@@ -448,7 +418,6 @@ func TestWave2SecretsEntropyAndDefaultSecret(t *testing.T) {
 	warnf := func(format string, args ...any) {
 		warnings = append(warnings, format)
 	}
-	// 32 repeated chars pass the length floor but carry ~0 entropy.
 	if err := auth.ValidateSecretsArray([]auth.Secret{{Version: 0, Value: strings.Repeat("a", 32)}}, warnf); err != nil {
 		t.Fatalf("length-ok secret must validate: %v", err)
 	}
@@ -463,7 +432,6 @@ func TestWave2SecretsEntropyAndDefaultSecret(t *testing.T) {
 	if strings.Contains(strings.Join(warnings, "\n"), "low-entropy") {
 		t.Fatalf("high-entropy secret must not warn entropy, got %v", warnings)
 	}
-	// The documented default secret is rejected in production.
 	t.Setenv("NODE_ENV", "production")
 	adapter, _ := newTestAdapter(t)
 	if _, err := auth.BetterAuth(auth.Options{Secret: auth.DefaultSecret, Adapter: adapter}); err == nil {
@@ -555,8 +523,4 @@ func TestWave2MatchesHostPattern(t *testing.T) {
 	}
 }
 
-// REMOVED (AUTH-F6-03): TestWave2ValidateDBHints was deleted with the
 // DatabaseHints surface. Upstream `database` object-form selectors have no
-// Go adapter consumer, so the validated-but-inert fields were removed (see
-// the REMOVED note on types/auth.go); callers configure their adapter
-// directly.
