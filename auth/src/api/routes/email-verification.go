@@ -248,6 +248,63 @@ type verifyEmailOutput struct {
 // contract is kept as an alias and now also returns the verified user. One
 // registrar handles both methods so DisabledPaths gating stays a single
 // "/verify-email" entry.
+// mergeVerifyPostStoredRequest merges POST verify auth headers onto the real
+// request for downstream hooks (upstream safeCloneRequest semantics): the
+// middleware-reconstructed StoredRequestFromStd is authoritative for URL,
+// Host, RemoteAddr, and headers; Cookie/Authorization are only overwritten
+// when the typed input carries them (huma parses them from the same wire
+// headers). When no stored request exists the huma-rebuilt one is used; with
+// neither, a bare POST / fallback is built only if auth headers are present
+// (otherwise ctx passes through). Cloning preserves the real URL so hooks
+// observe the verify-email route instead of POST /.
+func mergeVerifyPostStoredRequest(ctx context.Context, cookie, authorization string) context.Context {
+	stored := StoredRequestFromStd(ctx)
+	if stored == nil {
+		if cb := callbackRequest(ctx); cb != nil {
+			stored = cb
+		}
+	}
+	if stored == nil {
+		if cookie == "" && authorization == "" {
+			return ctx
+		}
+		req, _ := http.NewRequest(http.MethodPost, "/", nil)
+		if req == nil {
+			return ctx
+		}
+		if req.Header == nil {
+			req.Header = make(http.Header)
+		}
+		if cookie != "" {
+			req.Header.Set("Cookie", cookie)
+		}
+		if authorization != "" {
+			req.Header.Set("Authorization", authorization)
+		}
+		return context.WithValue(ctx, storedRequestKey{}, req)
+	}
+	if cookie == "" && authorization == "" {
+		if StoredRequestFromStd(ctx) == nil {
+			return context.WithValue(ctx, storedRequestKey{}, stored)
+		}
+		return ctx
+	}
+	cloned := stored.Clone(ctx)
+	if cloned == nil {
+		return ctx
+	}
+	if cloned.Header == nil {
+		cloned.Header = make(http.Header)
+	}
+	if cookie != "" {
+		cloned.Header.Set("Cookie", cookie)
+	}
+	if authorization != "" {
+		cloned.Header.Set("Authorization", authorization)
+	}
+	return context.WithValue(ctx, storedRequestKey{}, cloned)
+}
+
 func VerifyEmail(api huma.API, basePath string, opts types.Options) {
 	registerAuthOperation(api, huma.Operation{
 		Tags:        []string{"Auth"},
@@ -256,17 +313,7 @@ func VerifyEmail(api huma.API, basePath string, opts types.Options) {
 		OperationID: "verifyEmail",
 		Summary:     "Verify email address",
 	}, opts, func(ctx context.Context, input *verifyEmailInput) (*verifyEmailOutput, error) {
-		rctx := ctx
-		if input.Cookie != "" || input.Authorization != "" {
-			req, _ := http.NewRequest(http.MethodPost, "/", nil)
-			if input.Cookie != "" {
-				req.Header.Set("Cookie", input.Cookie)
-			}
-			if input.Authorization != "" {
-				req.Header.Set("Authorization", input.Authorization)
-			}
-			rctx = context.WithValue(ctx, storedRequestKey{}, req)
-		}
+		rctx := mergeVerifyPostStoredRequest(ctx, input.Cookie, input.Authorization)
 		user, cookies, errCode, status := processVerifyEmail(rctx, opts, input.Body.Token, input.CookieRequestHeaders)
 		if errCode != "" {
 			return nil, huma.NewError(status, errCode)
@@ -465,8 +512,10 @@ func processStatelessUpdateTo(ctx context.Context, opts types.Options, payload *
 		return nil, nil, "", http.StatusOK
 	case "change-email-verification":
 		// User clicked verification -> update email, mark verified
-		// (email-verification.ts:371-414). A session is minted when none
-		// exists; the cookie carries the updated identity.
+		// (email-verification.ts:371-414). Reuse the live matching session
+		// when present (same present/live/email-matches rule as the plain
+		// leg); mint only on mismatch. The cookie carries the updated
+		// identity.
 		updatedRow, err := opts.DB.Update(ctx, "user", []types.Where{
 			{Field: "email", Value: strings.ToLower(payload.Email)},
 		}, map[string]any{
@@ -494,6 +543,9 @@ func processStatelessUpdateTo(ctx context.Context, opts types.Options, payload *
 			}
 			return nil, nil, "failed to handle email verification", http.StatusInternalServerError
 		}
+		if reused, ok := tryReuseVerificationSession(ctx, opts, headers, updated, now); ok {
+			return &updated, reused, "", http.StatusOK
+		}
 		sessionCookies, sessionErr := createVerificationSession(ctx, opts, headers, updated, now)
 		if sessionErr != nil {
 			return nil, nil, types.ErrFailedToCreateSession, types.StatusForCode(types.ErrFailedToCreateSession)
@@ -501,8 +553,9 @@ func processStatelessUpdateTo(ctx context.Context, opts types.Options, payload *
 		return &updated, sessionCookies, "", http.StatusOK
 	default:
 		// Legacy flow: update email immediately as unverified, send a fresh
-		// verification to the new address, mint a session
-		// (email-verification.ts:421-478).
+		// verification to the new address, reuse the live matching session
+		// when present (upstream email-verification.ts:421-478 reuses
+		// activeSession); mint only on mismatch.
 		updatedRow, err := opts.DB.Update(ctx, "user", []types.Where{
 			{Field: "email", Value: strings.ToLower(payload.Email)},
 		}, map[string]any{
@@ -531,6 +584,9 @@ func processStatelessUpdateTo(ctx context.Context, opts types.Options, payload *
 				URL:   fmt.Sprintf("%s/verify-email?token=%s&callbackURL=%s", basePath, url.QueryEscape(nextToken), url.QueryEscape(callbackURL)),
 				Token: nextToken,
 			})
+		}
+		if reused, ok := tryReuseVerificationSession(ctx, opts, headers, updated, now); ok {
+			return &updated, reused, "", http.StatusOK
 		}
 		sessionCookies, sessionErr := createVerificationSession(ctx, opts, headers, updated, now)
 		if sessionErr != nil {
