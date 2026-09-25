@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 	"time"
 
 	jose "github.com/go-jose/go-jose/v4"
@@ -111,7 +112,8 @@ func OctThumbprint(key []byte) (string, error) {
 
 // SymmetricEncodeJWT encrypts payload into a compact JWE, mirroring upstream
 // symmetricEncodeJWT (jwt.ts:90-110): HKDF-derived dir/A256CBC-HS512 key for
-// salt, kid set to the derived-key thumbprint, iat/exp/jti claims. key is a
+// salt, protected header exactly {alg,enc,kid} with kid set to the
+// derived-key thumbprint, iat/exp/jti claims. key is a
 // string (single secret) or SecretConfig (versioned envelope selection via
 // the current version). expiresInSeconds defaults to 3600 when zero, matching
 // the upstream default parameter.
@@ -147,8 +149,6 @@ func SymmetricEncodeJWT(payload map[string]any, key any, salt string, expiresInS
 		jose.A256CBC_HS512,
 		jose.Recipient{Algorithm: jose.DIRECT, Key: derived},
 		(&jose.EncrypterOptions{}).
-			WithType("JWT").
-			WithContentType("JWT").
 			WithHeader(jose.HeaderKey("kid"), kid),
 	)
 	if err != nil {
@@ -166,9 +166,10 @@ func SymmetricEncodeJWT(payload map[string]any, key any, salt string, expiresInS
 // secret whose derived-key thumbprint matches (unknown kids fail closed with
 // no fallback); kid-less tokens are tried against every candidate in order.
 // Expiry enforces the upstream 15s clock tolerance; A256GCM payloads are
-// accepted like jwtDecryptOpts (derived key truncated to 32 bytes). Empty
-// tokens and undecryptable/tampered/expired payloads fail closed with an
-// error (upstream returns null).
+// accepted like jwtDecryptOpts (derived key truncated to 32 bytes, gated on
+// the token's enc). Decoding stays tolerant of legacy typ/cty-bearing
+// tokens. Empty tokens and undecryptable/tampered/expired payloads fail
+// closed with an error (upstream returns null).
 func SymmetricDecodeJWT(token string, key any, salt string) (map[string]any, error) {
 	if token == "" {
 		return nil, fmt.Errorf("crypto: invalid jwe encoding")
@@ -201,16 +202,14 @@ func SymmetricDecodeJWT(token string, key any, salt string) (map[string]any, err
 	if len(candidates) == 0 {
 		return nil, fmt.Errorf("crypto: no jwe secret available")
 	}
-	tryKeys := func(c candidate) [][]byte {
-		if len(c.key) >= 32 {
-			return [][]byte{c.key, c.key[:32]}
-		}
-		return [][]byte{c.key}
+	enc, err := jweContentEncryption(token)
+	if err != nil {
+		return nil, err
 	}
 	decryptWith := func(c candidate) (map[string]any, error) {
 		var plaintext []byte
 		var decErr error
-		for _, k := range tryKeys(c) {
+		for _, k := range jweDecryptionKeys(c.key, enc) {
 			plaintext, decErr = object.Decrypt(k)
 			if decErr == nil {
 				break
@@ -251,6 +250,39 @@ func SymmetricDecodeJWT(token string, key any, salt string) (map[string]any, err
 		lastErr = err
 	}
 	return nil, lastErr
+}
+
+// jweDecryptionKeys selects the decryption key bytes for a content-encryption
+// algorithm, mirroring the cookies/jwt.go decryptionKeys policy (the more
+// faithful read of upstream jwtDecryptOpts): the full 64-byte derived key,
+// truncated to 32 bytes only for the A256GCM payloads jwtDecryptOpts still
+// accepts.
+func jweDecryptionKeys(key []byte, enc string) [][]byte {
+	if jose.ContentEncryption(enc) == jose.A256GCM && len(key) >= 32 {
+		return [][]byte{key[:32]}
+	}
+	return [][]byte{key}
+}
+
+// jweContentEncryption reads the "enc" protected-header parameter from a
+// compact JWE without a JOSE round-trip (go-jose surfaces only merged
+// headers, not the content-encryption selector).
+func jweContentEncryption(token string) (string, error) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 5 {
+		return "", fmt.Errorf("crypto: invalid jwe encoding")
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return "", fmt.Errorf("crypto: invalid jwe encoding")
+	}
+	var header struct {
+		Enc string `json:"enc"`
+	}
+	if err := json.Unmarshal(raw, &header); err != nil || header.Enc == "" {
+		return "", fmt.Errorf("crypto: invalid jwe encoding")
+	}
+	return header.Enc, nil
 }
 
 // jweCurrentSecret selects the encryption secret for issuance, mirroring
