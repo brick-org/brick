@@ -348,9 +348,13 @@ func ResetPassword(api huma.API, basePath string, opts types.Options) {
 		}
 
 		if opts.EmailAndPassword.RevokeSessionsOnPasswordReset {
-			_, _ = opts.DB.DeleteMany(ctx, "session", []types.Where{
-				{Field: "userId", Value: userID},
-			})
+			// Secondary-aware bulk revoke (upstream deleteUserSessions,
+			// password.ts:328-330): cache entries go first per the flag
+			// matrix so secondary copies don't survive; without a
+			// secondary backend this is exactly the DeleteMany below.
+			if err := deleteSecondaryAwareUserSessions(ctx, opts, userID); err != nil {
+				return nil, huma.Error500InternalServerError("failed to revoke sessions")
+			}
 		}
 
 		out := &resetPasswordOutput{}
