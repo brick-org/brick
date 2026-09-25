@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -111,6 +112,59 @@ func CreateCompactCookieCache(secret string, sessionData map[string]any, maxAge 
 	return base64.RawURLEncoding.EncodeToString(envelope), nil
 }
 
+// ErrCachePayloadSchema reports a correctly-signed cookie-cache payload
+// whose decoded shape fails the core contract. It mirrors upstream
+// parseCookieCachePayload returning null AFTER signature verification
+// (vendor/.../src/cookies/cache.ts:20-39 over cookieCachePayloadSchema,
+// wired in vendor/.../src/cookies/index.ts:328-353 for compact and the
+// jwt/jwe branches).
+//
+// Callers must treat it as a cache MISS: warn through the configured logger
+// and fall through to the database, never throw. Codecs take no opts and
+// never log themselves; the warn belongs at the session layer
+// (cachedSessionFromRequestFull and its strategy decoders). errors.Is
+// distinguishes it from signature failure.
+var ErrCachePayloadSchema = errors.New("cookies: invalid cookie cache payload schema")
+
+// ValidateCachePayloadSchema type-checks a decoded cookie-cache session/user
+// pair against the core contract, mirroring zod loose semantics: unknown
+// keys are allowed; present core fields must carry the right JSON type —
+// session requires string `token`, user requires string `id`, string
+// `email`, boolean `emailVerified`.
+//
+// Absent keys are permitted (upstream defaults apply, e.g. emailVerified
+// defaults to false, and the Go legacy/minimal codecs predate strict
+// issuance); explicit nulls decode to nil and fail the type check, as does
+// any wrong-typed value. No checks beyond this core contract: additional
+// fields, version, and updatedAt are left to the codec/caller, and the outer
+// expiry windows are enforced by the verify paths themselves.
+func ValidateCachePayloadSchema(session, user map[string]any) error {
+	if session == nil || user == nil {
+		return ErrCachePayloadSchema
+	}
+	if v, ok := session["token"]; ok {
+		if _, ok := v.(string); !ok {
+			return ErrCachePayloadSchema
+		}
+	}
+	if v, ok := user["id"]; ok {
+		if _, ok := v.(string); !ok {
+			return ErrCachePayloadSchema
+		}
+	}
+	if v, ok := user["email"]; ok {
+		if _, ok := v.(string); !ok {
+			return ErrCachePayloadSchema
+		}
+	}
+	if v, ok := user["emailVerified"]; ok {
+		if _, ok := v.(bool); !ok {
+			return ErrCachePayloadSchema
+		}
+	}
+	return nil
+}
+
 // VerifyCompactCookieCache validates a StrategyCompact session-data cookie
 // value against each candidate secret (secret rotation) and returns the
 // session payload and expiry. It mirrors the compact branch of upstream
@@ -144,6 +198,18 @@ func VerifyCompactCookieCache(secrets []string, value string) (session map[strin
 	}
 	if !valid {
 		return nil, 0, fmt.Errorf("cookies: invalid compact cache signature")
+	}
+	// Schema validation runs AFTER signature verification (upstream
+	// parseCookieCachePayload order): a correctly-signed but
+	// schema-invalid payload is a miss, reported with the sentinel so
+	// callers can Logf-warn + fall through to the database instead of
+	// throwing. The envelope session carries the CookieCachePayload pair;
+	// inner objects must be present maps and their core fields
+	// type-checked (explicit JSON nulls decode to nil and fail).
+	innerSession, _ := envelope.Session["session"].(map[string]any)
+	innerUser, _ := envelope.Session["user"].(map[string]any)
+	if err := ValidateCachePayloadSchema(innerSession, innerUser); err != nil {
+		return nil, 0, fmt.Errorf("cookies: invalid compact cache payload schema: %w", err)
 	}
 	now := time.Now().UnixMilli()
 	if envelope.ExpiresAt != 0 && envelope.ExpiresAt < now {

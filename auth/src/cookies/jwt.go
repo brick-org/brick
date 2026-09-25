@@ -177,6 +177,15 @@ func VerifySessionCacheJWT(secrets []string, value string) (SessionCacheData, in
 	if claims.Session == nil || claims.User == nil {
 		return SessionCacheData{}, 0, fmt.Errorf("cookies: invalid jwt cache payload")
 	}
+	// Schema validation runs AFTER signature verification (upstream
+	// parseCookieCachePayload order): a correctly-signed but
+	// schema-invalid payload is a miss, reported with the sentinel so
+	// callers can Logf-warn + fall through to the database instead of
+	// throwing. Wrong-typed core fields (including explicit JSON nulls,
+	// which decode to nil) fail here; unknown keys stay allowed.
+	if err := ValidateCachePayloadSchema(claims.Session, claims.User); err != nil {
+		return SessionCacheData{}, 0, fmt.Errorf("cookies: invalid jwt cache payload schema: %w", err)
+	}
 	if claims.Expires == 0 {
 		return SessionCacheData{}, 0, fmt.Errorf("cookies: jwt cache has no expiry")
 	}
@@ -319,6 +328,15 @@ func VerifySessionCacheJWE(secrets []string, value string) (SessionCacheData, in
 	}
 	if claims.Session == nil || claims.User == nil {
 		return SessionCacheData{}, 0, fmt.Errorf("cookies: invalid jwe cache payload")
+	}
+	// Schema validation runs AFTER decryption (upstream
+	// parseCookieCachePayload order): a correctly-decrypted but
+	// schema-invalid payload is a miss, reported with the sentinel so
+	// callers can Logf-warn + fall through to the database instead of
+	// throwing. Wrong-typed core fields (including explicit JSON nulls,
+	// which decode to nil) fail here; unknown keys stay allowed.
+	if err := ValidateCachePayloadSchema(claims.Session, claims.User); err != nil {
+		return SessionCacheData{}, 0, fmt.Errorf("cookies: invalid jwe cache payload schema: %w", err)
 	}
 	if claims.Expires == 0 {
 		return SessionCacheData{}, 0, fmt.Errorf("cookies: jwe cache has no expiry")

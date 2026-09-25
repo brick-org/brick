@@ -159,12 +159,12 @@ func cachedSessionFromRequestFull(ctx context.Context, cookieHeader string, secr
 				return nil, false
 			}
 		} else {
-			payload, _ = jwtCachePayload(value, secrets)
+			payload, _ = jwtCachePayloadWarn(value, secrets, opts)
 		}
 	} else if strategy == cookies.StrategyJWE {
-		payload, _ = jweCachePayload(value, secrets)
+		payload, _ = jweCachePayloadWarn(value, secrets, opts)
 	} else {
-		payload, _ = compactCachePayload(value, secrets)
+		payload, _ = compactCachePayloadWarn(value, secrets, opts)
 	}
 	if payload == nil {
 		return nil, false
@@ -269,6 +269,46 @@ func signViaCustomSigner(ctx context.Context, opts types.Options, signer any, se
 // verifyViaCustomSigner verifies a session_data value through the JWT
 // plugin's custom signer, converting the verified payload into the shared
 // cache shape. Any failure is a miss (authoritative fallback).
+// warnCacheSchemaIssue routes schema-invalid cache payloads to the
+// configured logger (upstream parseCookieCachePayload warn in
+// cookies/cache.ts:32-35). All such payloads miss regardless — the warn is
+// observability only, never a throw.
+func warnCacheSchemaIssue(opts types.Options, err error) {
+	if errors.Is(err, cookies.ErrCachePayloadSchema) {
+		Logf(opts, "warn", "Cookie cache payload failed schema validation")
+	}
+}
+
+func jwtCachePayloadWarn(value string, secrets []string, opts types.Options) (*sessionCookieCachePayload, bool) {
+	payload, err := jwtCachePayload(value, secrets)
+	warnCacheSchemaIssue(opts, err)
+	if err != nil {
+		return nil, false
+	}
+	return payload, true
+}
+
+func jweCachePayloadWarn(value string, secrets []string, opts types.Options) (*sessionCookieCachePayload, bool) {
+	payload, err := jweCachePayload(value, secrets)
+	warnCacheSchemaIssue(opts, err)
+	if err != nil {
+		return nil, false
+	}
+	return payload, true
+}
+
+func compactCachePayloadWarn(value string, secrets []string, opts types.Options) (*sessionCookieCachePayload, bool) {
+	payload, err := compactCachePayload(value, secrets)
+	warnCacheSchemaIssue(opts, err)
+	if err != nil {
+		return nil, false
+	}
+	return payload, true
+}
+
+// verifyViaCustomSigner verifies a session_data value through the JWT
+// plugin's custom signer, converting the verified payload into the shared
+// cache shape. Any failure is a miss (authoritative fallback).
 func verifyViaCustomSigner(ctx context.Context, opts types.Options, signer any, value string) (*sessionCookieCachePayload, bool) {
 	v := reflect.ValueOf(signer)
 	method := v.MethodByName("VerifyCookieCache")
@@ -296,6 +336,13 @@ func verifyViaCustomSigner(ctx context.Context, opts types.Options, signer any, 
 	userMap, _ := payloadField.FieldByName("User").Interface().(map[string]any)
 	version, _ := payloadField.FieldByName("Version").Interface().(string)
 	if sessionMap == nil || userMap == nil {
+		return nil, false
+	}
+	// Schema-shape validation shared with the secret codecs (upstream
+	// parseCookieCachePayload): a verified-but-invalid custom payload
+	// misses with a configured-logger warn, never a hit.
+	if verr := cookies.ValidateCachePayloadSchema(sessionMap, userMap); verr != nil {
+		warnCacheSchemaIssue(opts, verr)
 		return nil, false
 	}
 	data := cookies.SessionCacheData{

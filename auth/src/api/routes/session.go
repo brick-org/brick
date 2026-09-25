@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -1011,7 +1012,14 @@ func cachedSessionFromRequest(cookieHeader string, secrets []string, token strin
 }
 
 // compactCachePayload decodes the compact outer envelope: signed value,
-// base64url JSON, then the typed payload.
+// base64url JSON, then the typed payload. Signature verification comes
+// first; the typed unmarshal alone is not a shape check (it silently coerces
+// e.g. null `emailVerified` to `false`), so the decoded bytes are also
+// validated as raw maps against the shared cookie-cache contract
+// (upstream parseCookieCachePayload, cookies/cache.ts:20-39). A
+// schema-invalid payload surfaces the shared sentinel — callers must treat
+// it as a miss (Logf-warn through the configured logger + fall through to
+// the database, never throw), exactly like the codec-level verdict.
 func compactCachePayload(value string, secrets []string) (*sessionCookieCachePayload, error) {
 	raw, ok := cookies.VerifyAny(secrets, value)
 	if !ok {
@@ -1024,6 +1032,16 @@ func compactCachePayload(value string, secrets []string) (*sessionCookieCachePay
 	var payload sessionCookieCachePayload
 	if err := json.Unmarshal(decoded, &payload); err != nil {
 		return nil, err
+	}
+	var shape struct {
+		Session map[string]any `json:"session"`
+		User    map[string]any `json:"user"`
+	}
+	if err := json.Unmarshal(decoded, &shape); err != nil {
+		return nil, err
+	}
+	if err := cookies.ValidateCachePayloadSchema(shape.Session, shape.User); err != nil {
+		return nil, fmt.Errorf("auth: invalid compact cache payload schema: %w", err)
 	}
 	return &payload, nil
 }
