@@ -203,10 +203,7 @@ func sendVerificationEmailForUser(ctx context.Context, opts types.Options, userR
 	// Upstream originCheck throws FORBIDDEN for an untrusted callbackURL
 	// (origin-check.ts:123-124); StatusForCode pins 403. The stored request
 	// (when present) is authoritative for trust decisions.
-	reqForTrust := StoredRequestFromStd(ctx)
-	if reqForTrust == nil {
-		reqForTrust = callbackRequest(ctx)
-	}
+	reqForTrust := trustRequest(ctx)
 	if !types.IsTrustedRedirect(target, opts, reqForTrust) {
 		return huma.NewError(types.StatusForCode(types.ErrInvalidCallbackURL), types.ErrInvalidCallbackURL)
 	}
@@ -367,10 +364,7 @@ func VerifyEmailGet(api huma.API, basePath string, opts types.Options) {
 
 		token := ctx.Query("token")
 		callbackURL := ctx.Query("callbackURL")
-		reqForTrust := StoredRequestFromStd(ctx.Context())
-		if reqForTrust == nil {
-			reqForTrust = RequestFromHuma(ctx)
-		}
+		reqForTrust := trustRequestFromHuma(ctx)
 		if callbackURL != "" && !types.IsTrustedRedirect(callbackURL, opts, reqForTrust) {
 			writeError(types.StatusForCode(types.ErrInvalidCallbackURL), types.ErrInvalidCallbackURL)
 			return
@@ -1188,10 +1182,7 @@ func consumeSecondaryVerification(opts types.Options, identifier string) (map[st
 	if err != nil {
 		return nil, err
 	}
-	candidates := []string{stored}
-	if verificationStoreUsesPlainFallback(option) && stored != identifier {
-		candidates = append(candidates, identifier)
-	}
+	candidates := verificationCandidates(option, identifier, stored)
 	for _, candidate := range candidates {
 		raw, err := opts.SecondaryStorage.GetAndDelete(verificationSecondaryKey(candidate))
 		if err != nil {

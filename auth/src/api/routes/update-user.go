@@ -286,10 +286,7 @@ func ChangeEmail(api huma.API, basePath string, opts types.Options) {
 		// (origin-check.ts): an untrusted value fails with 403
 		// INVALID_CALLBACK_URL instead of being embedded in the mailed link.
 		if input.Body.CallbackURL != nil && *input.Body.CallbackURL != "" {
-			reqForTrust := StoredRequestFromStd(ctx)
-			if reqForTrust == nil {
-				reqForTrust = callbackRequest(ctx)
-			}
+			reqForTrust := trustRequest(ctx)
 			if !types.IsTrustedRedirect(*input.Body.CallbackURL, opts, reqForTrust) {
 				return nil, huma.NewError(types.StatusForCode(types.ErrInvalidCallbackURL), types.ErrInvalidCallbackURL)
 			}
@@ -471,10 +468,7 @@ func DeleteUser(api huma.API, basePath string, opts types.Options) {
 		// Checked before any token issuance or mail dispatch so the
 		// rejection is fail-closed with no side effects.
 		if input.Body.CallbackURL != nil && *input.Body.CallbackURL != "" {
-			reqForTrust := StoredRequestFromStd(ctx)
-			if reqForTrust == nil {
-				reqForTrust = callbackRequest(ctx)
-			}
+			reqForTrust := trustRequest(ctx)
 			if !types.IsTrustedRedirect(*input.Body.CallbackURL, opts, reqForTrust) {
 				return nil, huma.NewError(types.StatusForCode(types.ErrInvalidCallbackURL), types.ErrInvalidCallbackURL)
 			}
@@ -718,10 +712,7 @@ func consumeDeleteAccountToken(ctx context.Context, opts types.Options, token st
 		// (db.ConsumeOneWithFallback): the first concurrent caller wins and
 		// every racer gets an error; a wrong-owner token is still burned
 		// (ownership is checked by the caller after this returns).
-		candidates := []string{stored}
-		if verificationStoreUsesPlainFallback(option) && stored != identifier {
-			candidates = append(candidates, identifier)
-		}
+		candidates := verificationCandidates(option, identifier, stored)
 		var row map[string]any
 		for _, candidate := range candidates {
 			consumed, cerr := db.ConsumeOneWithFallback(ctx, opts.DB, "verification", []types.Where{

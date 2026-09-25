@@ -60,10 +60,7 @@ func DeleteUserCallback(api huma.API, basePath string, opts types.Options) {
 		// 403 INVALID_CALLBACK_URL without consuming the token or deleting.
 		// Relative paths stay trusted (allowRelativePaths).
 		if callbackURL != "" {
-			reqForTrust := StoredRequestFromStd(ctx.Context())
-			if reqForTrust == nil {
-				reqForTrust = RequestFromHuma(ctx)
-			}
+			reqForTrust := trustRequestFromHuma(ctx)
 			if !types.IsTrustedRedirect(callbackURL, opts, reqForTrust) {
 				writeJSON(http.StatusForbidden, map[string]any{
 					"status": http.StatusForbidden,
@@ -137,10 +134,7 @@ func DeleteUserCallback(api huma.API, basePath string, opts types.Options) {
 			ctx.AppendHeader("Set-Cookie", cookie.String())
 		}
 
-		reqForTrust := StoredRequestFromStd(ctx.Context())
-		if reqForTrust == nil {
-			reqForTrust = RequestFromHuma(ctx)
-		}
+		reqForTrust := trustRequestFromHuma(ctx)
 		if callbackURL != "" && types.IsTrustedRedirect(callbackURL, opts, reqForTrust) {
 			redirect(callbackURL)
 			return

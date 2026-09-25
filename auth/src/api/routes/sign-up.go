@@ -314,10 +314,7 @@ func SignUpEmail(api huma.API, basePath string, opts types.Options) {
 		// Upstream global middleware validates callbackURL before the handler
 		// (origin-check.ts:89-151): an untrusted value 403s INVALID_CALLBACK_URL.
 		if input.Body.CallbackURL != nil && *input.Body.CallbackURL != "" {
-			reqForTrust := StoredRequestFromStd(ctx)
-			if reqForTrust == nil {
-				reqForTrust = callbackRequest(ctx)
-			}
+			reqForTrust := trustRequest(ctx)
 			if !types.IsTrustedRedirect(*input.Body.CallbackURL, opts, reqForTrust) {
 				return nil, huma.NewError(types.StatusForCode(types.ErrInvalidCallbackURL), types.ErrInvalidCallbackURL)
 			}

@@ -313,6 +313,39 @@ func WithStoredRequest(ctx huma.Context, r *http.Request) huma.Context {
 	return huma.WithValue(ctx, storedRequestKey{}, r)
 }
 
+// trustRequest resolves the *http.Request used for redirect-trust decisions
+// (upstream origin-check.ts): the stored middleware request when present,
+// else a best-effort rebuild. It collapses the 4-line resolve-fallback
+// repeated at every trust call site; the trust verdict itself stays with
+// types.IsTrustedRedirect at each site (error shapes differ per route).
+func trustRequest(ctx context.Context) *http.Request {
+	if req := StoredRequestFromStd(ctx); req != nil {
+		return req
+	}
+	return callbackRequest(ctx)
+}
+
+// trustRequestFromHuma is trustRequest for raw (non-typed) handlers whose
+// context is a huma.Context rather than context.Context.
+func trustRequestFromHuma(ctx huma.Context) *http.Request {
+	if req := StoredRequestFromStd(ctx.Context()); req != nil {
+		return req
+	}
+	return RequestFromHuma(ctx)
+}
+
+// verificationCandidates lists the verification-row keys to try in order:
+// the store-identifier form first, then the plain identifier when the
+// option keeps a plain fallback. It collapses the 4-line candidate build
+// repeated at every consume/read site.
+func verificationCandidates(option types.VerificationStoreIdentifier, identifier, stored string) []string {
+	candidates := []string{stored}
+	if verificationStoreUsesPlainFallback(option) && stored != identifier {
+		candidates = append(candidates, identifier)
+	}
+	return candidates
+}
+
 // StoredRequestFromStd returns the middleware-reconstructed request, or nil.
 func StoredRequestFromStd(ctx context.Context) *http.Request {
 	if ctx == nil {

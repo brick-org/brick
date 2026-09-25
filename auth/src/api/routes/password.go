@@ -71,10 +71,7 @@ func RequestPasswordReset(api huma.API, basePath string, opts types.Options) {
 		}
 		// Upstream gates redirectTo via originCheck (password.ts:87); the
 		// stored request is authoritative when present.
-		reqForTrust := StoredRequestFromStd(ctx)
-		if reqForTrust == nil {
-			reqForTrust = callbackRequest(ctx)
-		}
+		reqForTrust := trustRequest(ctx)
 		if redirectTo != "" && !types.IsTrustedRedirect(redirectTo, opts, reqForTrust) {
 			return nil, huma.NewError(types.StatusForCode(types.ErrInvalidRedirectURL), types.ErrInvalidRedirectURL)
 		}
@@ -401,10 +398,7 @@ func consumeResetPasswordToken(ctx context.Context, opts types.Options, token st
 			// (db.ConsumeOneWithFallback: ConsumeOne fast path, id-pinned
 			// FindOne+Delete fallback). Dual-key iteration preserves the
 			// stored+plain fallback: the first consumed row wins.
-			candidates := []string{stored}
-			if verificationStoreUsesPlainFallback(option) && stored != identifier {
-				candidates = append(candidates, identifier)
-			}
+			candidates := verificationCandidates(option, identifier, stored)
 			var row map[string]any
 			for _, candidate := range candidates {
 				consumed, cerr := db.ConsumeOneWithFallback(ctx, opts.DB, "verification", []types.Where{
@@ -565,10 +559,7 @@ func RequestPasswordResetCallback(api huma.API, basePath string, opts types.Opti
 			ctx.SetStatus(http.StatusFound)
 		}
 
-		reqForTrust := StoredRequestFromStd(ctx.Context())
-		if reqForTrust == nil {
-			reqForTrust = RequestFromHuma(ctx)
-		}
+		reqForTrust := trustRequestFromHuma(ctx)
 		// Upstream originCheck guards the query callbackURL
 		// (origin-check.ts, password.ts:162): an untrusted value fails with
 		// 403 INVALID_CALLBACK_URL instead of redirecting with INVALID_TOKEN.
