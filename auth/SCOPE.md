@@ -88,3 +88,14 @@ Go-only (no TS counterpart, kept): `generate-id.go`, `schema-fields.go`,
 `hooks.go`, `api/dispatch.go`, `api/to-auth-endpoints.go`.
 Merges of the `*-extra.go` / `session-c701.go` splits into single-file TS
 owners are deferred as high-churn, behavior-neutral (see `index.go`).
+
+## Explicit v1 exclusions within core files
+
+- `setPassword` has no HTTP route upstream (`createAuthEndpoint.serverOnly`);
+  Go exposes server-only `routes.SetPassword` instead (tested).
+- `sendOnSignUp: false` + `requireEmailVerification` still sends: needs
+  `SendOnSignUp *bool` tri-state; `types` is frozen for v1, recorded here
+  instead of implemented.
+- Huma schema-validation failures are 422 vs upstream 400 (framework-wide
+  convention, not per-route drift).
+- Chunked multi-cookie writes: read path only (safe degradation).

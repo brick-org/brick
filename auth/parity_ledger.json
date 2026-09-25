@@ -555,8 +555,17 @@
         "it: should return provider logout url without redirect when disabled",
         "it: should use the most recently updated provider when multiple linked accounts exist"
       ],
-      "covered": [],
-      "notes": "DB/secondary-aware deletion and cookie clearing covered (TestSignOutSecondaryAware); hook/background/header parity open."
+      "covered": [
+        {
+          "case": "should sign out",
+          "goTest": "TestCredsV1_SignOutDeletesSessionAndClearsCookies"
+        },
+        {
+          "case": "should clear local session cookie when reading the session fails",
+          "goTest": "TestCredsV1_SignOutClearsCookiesOnUnreadableSession"
+        }
+      ],
+      "notes": "Core sign-out legs covered; provider-logout URL legs v1-excluded (no social providers)."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/api/routes/sign-up.test.ts",
@@ -747,9 +756,13 @@
         {
           "case": "rejects /delete-user/callback when the backing session was revoked",
           "goTest": "TestCredsV1_DeleteUserCallbackRevokedSession"
+        },
+        {
+          "case": "sets the password on the existing passwordless credential account",
+          "goTest": "TestCredsV1_SetPasswordOnPasswordlessAccount + CreatesMissingAccount (server-only SetPassword, no HTTP route upstream)"
         }
       ],
-      "notes": "Update/change-email/delete-user matrices covered by creds_v1_account suite; secondary-storage propagation legs open."
+      "notes": "Update/change-email/delete-user matrices plus server-only setPassword covered by creds_v1_account/setpassword suites; secondary-storage propagation legs open."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/cookies/cookies.test.ts",

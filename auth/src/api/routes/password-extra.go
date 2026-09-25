@@ -161,3 +161,73 @@ func appendRedirectQuery(rawURL, key, value string) string {
 	}
 	return rawURL + sep + url.QueryEscape(key) + "=" + url.QueryEscape(value)
 }
+
+// --- set-password (server-only) ---
+
+// SetPassword is the server-only counterpart of upstream `setPassword`
+// (update-user.ts:314-368, `createAuthEndpoint.serverOnly`): it sets the
+// password on the caller's existing passwordless credential account and
+// reports `{status: true}`. There is intentionally no HTTP route — upstream
+// exposes it only as `auth.api.setPassword`, so Go callers invoke this
+// function with the already-authenticated user ID (the sensitive-session
+// gate lives at the HTTP layer and has no server-only equivalent).
+//
+// Behavior mirrors upstream exactly: length gates with warn logs, link a new
+// credential account when none exists, fill a null password, and reject an
+// already-set password with PASSWORD_ALREADY_SET. Errors are
+// types.HttpError values carrying the canonical status.
+func SetPassword(ctx context.Context, opts types.Options, userID, newPassword string) (bool, error) {
+	if len(newPassword) < passwordMinLength(opts) {
+		Logf(opts, "warn", "Password is too short")
+		return false, types.NewHttpError(types.ErrPasswordTooShort)
+	}
+	if len(newPassword) > passwordMaxLength(opts) {
+		Logf(opts, "warn", "Password is too long")
+		return false, types.NewHttpError(types.ErrPasswordTooLong)
+	}
+	if opts.DB == nil {
+		return false, types.NewHttpError(types.ErrFailedToGetSession)
+	}
+	accountRow, err := opts.DB.FindOne(ctx, "account", []types.Where{
+		{Field: "userId", Value: userID},
+		{Field: "providerId", Value: "credential", Connector: "AND"},
+	}, nil)
+	if err != nil {
+		return false, err
+	}
+	hash, err := hashPassword(opts, newPassword)
+	if err != nil {
+		return false, err
+	}
+	now := time.Now().UTC()
+	if accountRow == nil {
+		credentialID, credentialHasID := mintModelID(opts, "account")
+		credentialData := map[string]any{
+			"userId":     userID,
+			"providerId": "credential",
+			"accountId":  userID,
+			"password":   hash,
+			"createdAt":  now,
+			"updatedAt":  now,
+		}
+		setRowID(credentialData, credentialID, credentialHasID)
+		if _, err := opts.DB.Create(ctx, "account", credentialData, nil); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	stored, _ := accountRow["password"].(string)
+	if stored != "" {
+		return false, types.NewHttpError(types.ErrPasswordAlreadySet)
+	}
+	if _, err := opts.DB.Update(ctx, "account", []types.Where{
+		{Field: "userId", Value: userID},
+		{Field: "providerId", Value: "credential", Connector: "AND"},
+	}, map[string]any{
+		"password":  hash,
+		"updatedAt": now,
+	}); err != nil {
+		return false, err
+	}
+	return true, nil
+}
