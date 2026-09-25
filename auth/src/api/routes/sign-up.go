@@ -51,38 +51,63 @@ func (b *signUpBody) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 	if v, ok := raw["name"]; ok {
-		if s, ok := v.(string); ok {
+		if v == nil {
+			// JSON null reads as absent; required validation downstream
+			// reports the missing field.
+		} else if s, ok := v.(string); ok {
 			b.Name = s
+		} else {
+			return fmt.Errorf("name must be a string")
 		}
 		delete(raw, "name")
 	}
 	if v, ok := raw["email"]; ok {
-		if s, ok := v.(string); ok {
+		if v == nil {
+			// Null reads as absent; required validation downstream reports it.
+		} else if s, ok := v.(string); ok {
 			b.Email = s
+		} else {
+			return fmt.Errorf("email must be a string")
 		}
 		delete(raw, "email")
 	}
 	if v, ok := raw["password"]; ok {
-		if s, ok := v.(string); ok {
+		if v == nil {
+			// Null reads as absent; required validation downstream reports it.
+		} else if s, ok := v.(string); ok {
 			b.Password = s
+		} else {
+			return fmt.Errorf("password must be a string")
 		}
 		delete(raw, "password")
 	}
 	if v, ok := raw["image"]; ok {
-		if s, ok := v.(string); ok {
+		if v == nil {
+			// Null reads as absent for the optional field.
+		} else if s, ok := v.(string); ok {
 			b.Image = &s
+		} else {
+			return fmt.Errorf("image must be a string")
 		}
 		delete(raw, "image")
 	}
 	if v, ok := raw["callbackURL"]; ok {
-		if s, ok := v.(string); ok {
+		if v == nil {
+			// Null reads as absent for the optional field.
+		} else if s, ok := v.(string); ok {
 			b.CallbackURL = &s
+		} else {
+			return fmt.Errorf("callbackURL must be a string")
 		}
 		delete(raw, "callbackURL")
 	}
 	if v, ok := raw["rememberMe"]; ok {
-		if bv, ok := v.(bool); ok {
+		if v == nil {
+			// Null reads as absent for the optional field.
+		} else if bv, ok := v.(bool); ok {
 			b.RememberMe = &bv
+		} else {
+			return fmt.Errorf("rememberMe must be a boolean")
 		}
 		delete(raw, "rememberMe")
 	}
@@ -152,17 +177,6 @@ func parseSignUpForm(values url.Values) map[string]any {
 		}
 	}
 	return obj
-}
-
-// decodeSignUpForm populates b from a parsed form body, mirroring
-// UnmarshalJSON's known/rest split (same fields + additionalFields) through
-// the shared JSON round trip.
-func (b *signUpBody) decodeSignUpForm(values url.Values) error {
-	raw, err := json.Marshal(parseSignUpForm(values))
-	if err != nil {
-		return err
-	}
-	return json.Unmarshal(raw, b)
 }
 
 // isSignUpFormRequest reports whether ctx carries a form-urlencoded body.
