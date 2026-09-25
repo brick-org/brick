@@ -44,8 +44,8 @@ func TestProcessVerifyEmail_AlreadyVerifiedReturnsUser(t *testing.T) {
 	if errCode != "" {
 		t.Fatalf("expected success, got %s (%d)", errCode, status)
 	}
-	if user == nil || !user.EmailVerified {
-		t.Fatalf("expected verified user object, got %#v", user)
+	if user != nil {
+		t.Fatalf("already-verified must return null user, got %#v", user)
 	}
 }
 

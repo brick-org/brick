@@ -238,7 +238,7 @@ type verifyEmailOutput struct {
 	SetCookie []http.Cookie `header:"Set-Cookie"`
 	Body      struct {
 		Status bool      `json:"status"`
-		User   *flatUser `json:"user,omitempty"`
+		User   *flatUser `json:"user"`
 	}
 }
 
@@ -730,7 +730,11 @@ func verifyEmailForAddress(ctx context.Context, opts types.Options, email string
 	}
 	user := rowToUser(userRow, opts)
 	if user.EmailVerified {
-		return &user, nil, "", http.StatusOK
+		// Upstream already-verified without callbackURL answers
+		// {status:true,user:null} (email-verification.ts:480-488,540-543):
+		// no user object. The redirect-with-callbackURL path stays as-is
+		// (the GET handler still 302s on success when callbackURL is set).
+		return nil, nil, "", http.StatusOK
 	}
 	if err := runBeforeEmailVerificationHook(ctx, opts, &user); err != nil {
 		// A hook-thrown APIError keeps its own status (upstream hooks are
