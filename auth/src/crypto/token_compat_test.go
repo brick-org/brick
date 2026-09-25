@@ -7,8 +7,7 @@ import (
 )
 
 func TestMakeSignatureFixedVector(t *testing.T) {
-	// Cross-language known answer: standard-base64 HMAC-SHA256 (upstream
-	// makeSignature returns btoa(...) — padded standard base64).
+	// Standard-base64 HMAC-SHA256 (upstream makeSignature btoa).
 	const want = "97yD9DBThCSxMpjmqm+xQ+9NWaFJRhdZl0edvC0aPNg="
 	if got := MakeSignature("The quick brown fox jumps over the lazy dog", "key"); got != want {
 		t.Fatalf("MakeSignature = %q, want %q", got, want)
@@ -31,7 +30,7 @@ func TestGenerateTokenWithExpiry(t *testing.T) {
 	if err != nil || email != "user@example.com" {
 		t.Fatalf("explicit-expiry verify = %q, %v", email, err)
 	}
-	// Wire format is unchanged (two-part HMAC like GenerateToken).
+	// Wire format unchanged (two-part HMAC).
 	if len(strings.Split(token, ".")) != 2 {
 		t.Fatalf("token format changed: %q", token)
 	}
@@ -49,7 +48,7 @@ func TestEncryptedTokenRoundTripRotationAndTampering(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Upstream XChaCha20 wire format: bare hex, no HMAC dot separator.
+	// Upstream XChaCha20: bare hex, no HMAC dot.
 	if strings.Contains(token, ".") {
 		t.Fatalf("encrypted token must be bare hex, got %q", token)
 	}
@@ -65,9 +64,7 @@ func TestEncryptedTokenRoundTripRotationAndTampering(t *testing.T) {
 	if _, err := VerifyEncryptedToken("current", token); err != nil {
 		t.Fatalf("single-secret verify: %v", err)
 	}
-	// Tampered, wrong-secret, and malformed inputs fail closed.
-	// Flip the first hex char to a guaranteed-different value (a fixed
-	// "0" prefix flakes 1/16 when the token already starts with "0").
+	// Tampered/wrong/malformed fail closed (first-hex flip avoids 1/16 flake).
 	tamperChar := byte('0')
 	if token[0] == '0' {
 		tamperChar = '1'

@@ -30,9 +30,7 @@ func TestTokenRoundTripRotationAndTampering(t *testing.T) {
 	}
 }
 
-// flipFirstChar alters the first character deterministically: the old
-// "x"-prefix tamper was a no-op whenever the random payload/sig already
-// started with 'x' (~1/64 flake), verifying a nominally tampered token.
+// Deterministic first-char flip (old "x"-prefix flaked ~1/64).
 func flipFirstChar(s string) string {
 	if s == "" {
 		return "x"

@@ -1262,107 +1262,107 @@
         },
         {
           "case": "handles Expires with commas and multiple cookies",
-          "goTest": "TestV1_ParseSetCookieExpiresWithCommas"
+          "goTest": "TestSetCookie_ParseSetCookieExpiresWithCommas"
         },
         {
           "case": "decodes URI-encoded cookie values",
-          "goTest": "TestV1_ParseSetCookieDecodesValues"
+          "goTest": "TestSetCookie_ParseSetCookieDecodesValues"
         },
         {
           "case": "handles cookie with Expires followed by cookie without Expires",
-          "goTest": "TestV1_ParseSetCookieExpiresThenBare"
+          "goTest": "TestSetCookie_ParseSetCookieExpiresThenBare"
         },
         {
           "case": "handles Expires when cookie value contains gmt substring",
-          "goTest": "TestV1_ParseSetCookieGMTSubstring"
+          "goTest": "TestSetCookie_ParseSetCookieGMTSubstring"
         },
         {
           "case": "handles non-standard Expires=0",
-          "goTest": "TestV1_ParseSetCookieNonStandardExpires"
+          "goTest": "TestSetCookie_ParseSetCookieNonStandardExpires"
         },
         {
           "case": "handles RFC 850 date format",
-          "goTest": "TestV1_ParseSetCookieRFC850Expires"
+          "goTest": "TestSetCookie_ParseSetCookieRFC850Expires"
         },
         {
           "case": "handles asctime date format (no comma in date)",
-          "goTest": "TestV1_ParseSetCookieAsctimeExpires"
+          "goTest": "TestSetCookie_ParseSetCookieAsctimeExpires"
         },
         {
           "case": "handles mixed cookies with and without Expires",
-          "goTest": "TestV1_ParseSetCookieMixed"
+          "goTest": "TestSetCookie_ParseSetCookieMixed"
         },
         {
           "case": "parses partitioned as a boolean cookie attribute",
-          "goTest": "TestV1_ParseSetCookiePartitioned"
+          "goTest": "TestSetCookie_ParseSetCookiePartitioned"
         },
         {
           "case": "converts parsed cookie attributes into cookie options",
-          "goTest": "TestV1_ToCookieOptions"
+          "goTest": "TestSetCookie_ToCookieOptions"
         },
         {
           "case": "should handle empty string",
-          "goTest": "TestV1_StripSecureCookiePrefixEdges (empty/exact-prefix/priority/dotted/mid-string edges)"
+          "goTest": "TestSetCookie_StripSecureCookiePrefixEdges (empty/exact-prefix/priority/dotted/mid-string edges)"
         },
         {
           "case": "writes a cookie when the header is empty",
-          "goTest": "TestV1_SetRequestCookieHeader (all 6 setRequestCookie cases)"
+          "goTest": "TestSetCookie_SetRequestCookieHeader (all 6 setRequestCookie cases)"
         },
         {
           "case": "merges into empty Cookie header",
-          "goTest": "TestV1_ApplySetCookiesHeader (all 6 applySetCookies cases)"
+          "goTest": "TestSetCookie_ApplySetCookiesHeader (all 6 applySetCookies cases)"
         },
         {
           "case": "preserves attributes",
-          "goTest": "TestV1_ExpireCookie"
+          "goTest": "TestSetCookie_ExpireCookie"
         },
         {
           "case": "scrubs collapsed Set-Cookie headers when getSetCookie is unavailable",
-          "goTest": "TestV1_ScrubSetCookieEntries"
+          "goTest": "TestSetCookie_ScrubSetCookieEntries"
         },
         {
           "case": "parseCookies returns each pair when separator is `;` only",
-          "goTest": "TestV1_SemicolonOnlySeparators"
+          "goTest": "TestSetCookie_SemicolonOnlySeparators"
         },
         {
           "case": "ignores non-canonical chunk name %s",
-          "goTest": "TestV1_NonCanonicalChunkNamesIgnored"
+          "goTest": "TestSetCookie_NonCanonicalChunkNamesIgnored"
         },
         {
           "case": "should return correct cookie options based on configuration",
-          "goTest": "TestV1_CookieOptionsFromConfig"
+          "goTest": "TestSetCookie_CookieOptionsFromConfig"
         },
         {
           "case": "should return null if the cookie is invalid",
-          "goTest": "TestV1_CompactCacheInvalidAndMissingSecret"
+          "goTest": "TestCacheExpiry_CompactCacheInvalidAndMissingSecret"
         },
         {
           "case": "should throw an error if the secret is not provided",
-          "goTest": "TestV1_CompactCacheInvalidAndMissingSecret"
+          "goTest": "TestCacheExpiry_CompactCacheInvalidAndMissingSecret"
         },
         {
           "case": "should return null for invalid JWT token",
-          "goTest": "TestV1_JWTCacheInvalidToken"
+          "goTest": "TestCacheExpiry_JWTCacheInvalidToken"
         },
         {
           "case": "returns the session for a fresh snapshot",
-          "goTest": "TestV1_CompactCacheFreshSnapshot"
+          "goTest": "TestCacheExpiry_CompactCacheFreshSnapshot"
         },
         {
           "case": "returns null when the embedded session has expired",
-          "goTest": "TestV1_CompactCacheEmbeddedSessionExpired"
+          "goTest": "TestCacheExpiry_CompactCacheEmbeddedSessionExpired"
         },
         {
           "case": "returns null when the cache window has elapsed",
-          "goTest": "TestV1_CompactCacheWindowElapsed"
+          "goTest": "TestCacheExpiry_CompactCacheWindowElapsed"
         },
         {
           "case": "rejects token with mismatched kid (no fallback)",
-          "goTest": "TestV1_JWECacheMismatchedKidNoFallback"
+          "goTest": "TestCacheExpiry_JWECacheMismatchedKidNoFallback"
         },
         {
           "case": "decode kid-less JWT tries all secrets (fallback)",
-          "goTest": "TestV1_JWECacheKidLessFallbackTriesAllSecrets"
+          "goTest": "TestCacheExpiry_JWECacheKidLessFallbackTriesAllSecrets"
         },
         {
           "case": "should exclude user fields with returned: false from cookie cache",
@@ -1394,31 +1394,31 @@
         },
         {
           "case": "should reconstruct chunked cookies correctly",
-          "goTest": "TestTriageV1_ChunkedCompactCacheReadRoundTrip (READ leg; writes excluded)"
+          "goTest": "TestCookieTriage_ChunkedCompactCacheReadRoundTrip (READ leg; writes excluded)"
         },
         {
           "case": "should securely parse the signed cookies with padding",
-          "goTest": "TestTriageV1_ParseCookiesPaddedSignedValues"
+          "goTest": "TestCookieTriage_ParseCookiesPaddedSignedValues"
         },
         {
           "case": "parseCookies tolerates mixed `;`, `; `, and `;\\\\t` separators",
-          "goTest": "TestTriageV1_ParseCookiesMixedSeparators (tab leg)"
+          "goTest": "TestCookieTriage_ParseCookiesMixedSeparators (tab leg)"
         },
         {
           "case": "rejects names containing characters outside RFC 7230 token",
-          "goTest": "TestTriageV1_ParseCookiesRejectBadNames"
+          "goTest": "TestCookieTriage_ParseCookiesRejectBadNames"
         },
         {
           "case": "rejects values containing control chars, double-quote, or backslash",
-          "goTest": "TestTriageV1_ParseCookiesRejectBadValues"
+          "goTest": "TestCookieTriage_ParseCookiesRejectBadValues"
         },
         {
           "case": "splits on first `=` only, preserving subsequent `=` in value",
-          "goTest": "TestTriageV1_ParseCookiesSplitsOnFirstEquals"
+          "goTest": "TestCookieTriage_ParseCookiesSplitsOnFirstEquals"
         },
         {
           "case": "rejects entries with CR/LF in raw key or value (no trim escape)",
-          "goTest": "TestTriageV1_ParseCookiesRejectCRLFEntries"
+          "goTest": "TestCookieTriage_ParseCookiesRejectCRLFEntries"
         },
         {
           "case": "should use the configured logger for an invalid signed compact cookie",
@@ -1602,39 +1602,39 @@
         },
         {
           "case": "single secret string - bare hex, no envelope",
-          "goTest": "TestV1_SymmetricSingleStringBareHex"
+          "goTest": "TestEnvelope_SymmetricSingleStringBareHex"
         },
         {
           "case": "SecretConfig with one key - produces envelope",
-          "goTest": "TestV1_SymmetricOneKeyEnvelope"
+          "goTest": "TestEnvelope_SymmetricOneKeyEnvelope"
         },
         {
           "case": "rotation - encrypt with version 2, decrypt with both keys",
-          "goTest": "TestV1_SymmetricRotation"
+          "goTest": "TestEnvelope_SymmetricRotation"
         },
         {
           "case": "decrypt old key - data encrypted with v1, config now on v2",
-          "goTest": "TestV1_SymmetricDecryptOldKeyAfterRotation"
+          "goTest": "TestEnvelope_SymmetricDecryptOldKeyAfterRotation"
         },
         {
           "case": "legacy bare hex + SecretConfig with legacySecret",
-          "goTest": "TestV1_SymmetricLegacyBareHex"
+          "goTest": "TestEnvelope_SymmetricLegacyBareHex"
         },
         {
           "case": "unknown version in envelope - throws",
-          "goTest": "TestV1_SymmetricUnknownVersion"
+          "goTest": "TestEnvelope_SymmetricUnknownVersion"
         },
         {
           "case": "version gaps work fine",
-          "goTest": "TestV1_SymmetricVersionGaps"
+          "goTest": "TestEnvelope_SymmetricVersionGaps"
         },
         {
           "case": "decode kid-less JWT tries all secrets (fallback)",
-          "goTest": "TestV1_JWECacheKidLessFallbackTriesAllSecrets"
+          "goTest": "TestCacheExpiry_JWECacheKidLessFallbackTriesAllSecrets"
         },
         {
           "case": "rejects token with mismatched kid (no fallback)",
-          "goTest": "TestV1_JWECacheMismatchedKidNoFallback"
+          "goTest": "TestCacheExpiry_JWECacheMismatchedKidNoFallback"
         },
         {
           "case": "JWE encode/decode single + same-config + rotated + legacy + kid-less + mismatched-kid",

@@ -1,21 +1,6 @@
 package crypto
 
-// Wave 4 conformance: remaining upstream JWT/JWE parsing cases, fuzz
-// targets, race tests, and malformed-input limits.
-//
-// Upstream references (pinned v1.7.5):
-//   - packages/better-auth/src/crypto/secret-rotation.test.ts (envelope
-//     format, symmetricEncrypt/symmetricDecrypt rotation matrix, JWE
-//     multi-secret kid selection).
-//   - packages/better-auth/src/crypto/jwt.ts (signJWT/verifyJWT via jose:
-//     algorithm pinning, kid selection, exp/nbf/iss/aud validation).
-//
-// Port-blocked gaps (reported, not implemented — non-test files are
-// out of scope for this agent):
-//   - Generic SecretConfig-backed symmetric JWT issue/verify
-//     (symmetricEncodeJWT/symmetricDecodeJWT with versioned keys) has no Go
-//     equivalent beyond the session-cache JWE path in cookies/; the crypto
-//     package intentionally exposes only derivation + kid (see jwe.go).
+// Wave 4 conformance: upstream JWT/JWE parsing, fuzz, race, malformed limits (v1.7.5).
 
 import (
 	"strings"
@@ -24,7 +9,7 @@ import (
 	"time"
 )
 
-// --- Ported upstream cases: generic JWT verify matrix ---
+// Ported upstream cases: generic JWT verify matrix.
 
 func wave4TestKeys(t *testing.T) (pub, priv string, keys []PublicKey) {
 	t.Helper()
@@ -45,9 +30,8 @@ func wave4Sign(t *testing.T, priv, kid string, claims map[string]any) string {
 	return token
 }
 
-// Upstream verifyJWT: exact kid match (no fallback), claim validation,
-// malformed inputs fail closed.
-func TestWave4_VerifyJWTMatrix(t *testing.T) {
+// Upstream verifyJWT: exact kid, claims, fail closed.
+func TestCryptoConform_VerifyJWTMatrix(t *testing.T) {
 	_, priv, keys := wave4TestKeys(t)
 	now := time.Now().Unix()
 	base := map[string]any{
@@ -59,7 +43,7 @@ func TestWave4_VerifyJWTMatrix(t *testing.T) {
 	if _, err := VerifyJWT(valid, keys, VerifyOptions{}); err != nil {
 		t.Fatalf("valid token must verify: %v", err)
 	}
-	// Claim-gated verification.
+	// Claim-gated check.
 	gated := map[string]any{"sub": "u", "iat": now - 10, "exp": now + 600, "iss": "auth", "aud": "app"}
 	signed := wave4Sign(t, priv, "k1", gated)
 	if _, err := VerifyJWT(signed, keys, VerifyOptions{Issuer: "auth", Audience: []string{"app"}}); err != nil {
@@ -95,12 +79,12 @@ func TestWave4_VerifyJWTMatrix(t *testing.T) {
 			t.Errorf("%s: malformed JWT must fail closed", b.name)
 		}
 	}
-	// Rotation: retired kids fail closed even with a valid signature.
+	// Rotation: retired kids fail closed.
 	rotated := []PublicKey{{Kid: "k2", Alg: "EdDSA", PublicJWKJSON: keys[0].PublicJWKJSON}}
 	if _, err := VerifyJWT(valid, rotated, VerifyOptions{}); err == nil {
 		t.Error("retired kid must fail closed (no fallback)")
 	}
-	// Missing kid header fails closed.
+	// Missing kid fails closed.
 	if _, err := SelectKey(keys, ""); err == nil {
 		t.Error("missing kid must fail closed")
 	}
@@ -122,9 +106,8 @@ func tamperJWTSegment(t *testing.T, token string, idx int) string {
 	return strings.Join(parts, ".")
 }
 
-// Upstream: unsupported algorithms are rejected at key generation and
-// signing time.
-func TestWave4_UnsupportedAlgRejected(t *testing.T) {
+// Upstream: unsupported algs rejected at generation/signing.
+func TestCryptoConform_UnsupportedAlgRejected(t *testing.T) {
 	if _, _, _, err := GenerateKeyPair("HS999"); err == nil {
 		t.Error("unknown alg must fail at key generation")
 	}
@@ -140,28 +123,24 @@ func TestWave4_UnsupportedAlgRejected(t *testing.T) {
 	}
 }
 
-// --- Ported upstream cases: envelope edge matrix ---
+// Ported upstream cases: envelope edge matrix.
 
-// Upstream parseEnvelope: negative/non-integer versions rejected; version
-// gaps fine; unknown versions throw at decrypt; legacy bare-hex without a
-// legacy secret throws.
-func TestWave4_EnvelopeEdgeMatrix(t *testing.T) {
+// Upstream parseEnvelope: bad versions rejected; gaps ok; unknown/legacy throw at decrypt.
+func TestCryptoConform_EnvelopeEdgeMatrix(t *testing.T) {
 	for _, bad := range []string{"", "hexonly", "$ba$", "$ba$$ct", "$ba$-1$ct", "$ba$x$ct", "$ba$1", " $ba$1$ct"} {
 		if _, _, ok := ParseEnvelope(bad); ok {
 			t.Errorf("ParseEnvelope(%q) must reject", bad)
 		}
 	}
-	// Upstream-faithful: an empty ciphertext parses (slice after the last
-	// "$" may be "") and fails later at decrypt, not at parse.
+	// Upstream: empty ciphertext parses, fails at decrypt.
 	if v, ct, ok := ParseEnvelope("$ba$1$"); !ok || v != 1 || ct != "" {
 		t.Fatalf("empty-ciphertext envelope must parse per upstream: %d %q %v", v, ct, ok)
 	}
 	if _, err := SymmetricDecrypt("secret", "$ba$1$"); err == nil {
-		// String keys ignore envelopes and try the whole input as bare hex,
-		// which fails on "$".
+		// String keys try whole input as bare hex (fails on "$").
 		t.Error("empty-ciphertext envelope must fail decrypt")
 	}
-	// Version gaps work: non-contiguous versions decrypt via their own key.
+	// Version gaps work via own key.
 	cfg := SecretConfig{Keys: map[int]string{1: "s1", 7: "s7"}, CurrentVersion: 7}
 	env, err := SymmetricEncrypt(cfg, "gap-data")
 	if err != nil {
@@ -178,7 +157,7 @@ func TestWave4_EnvelopeEdgeMatrix(t *testing.T) {
 	if _, err := SymmetricDecrypt(cfg, unknown); err == nil {
 		t.Error("unknown envelope version must throw")
 	}
-	// Legacy bare-hex without a legacy secret throws.
+	// Legacy bare-hex without legacy secret throws.
 	bare, err := SymmetricEncrypt("legacy-secret", "old-data")
 	if err != nil {
 		t.Fatalf("encrypt: %v", err)
@@ -187,12 +166,12 @@ func TestWave4_EnvelopeEdgeMatrix(t *testing.T) {
 	if _, err := SymmetricDecrypt(noLegacy, bare); err == nil {
 		t.Error("legacy payload without legacySecret must throw")
 	}
-	// ... and decrypts with the legacy secret present.
+	// ... and decrypts with legacy secret.
 	withLegacy := SecretConfig{Keys: map[int]string{2: "s2"}, CurrentVersion: 2, LegacySecret: "legacy-secret"}
 	if plain, err := SymmetricDecrypt(withLegacy, bare); err != nil || plain != "old-data" {
 		t.Fatalf("legacy decrypt = %q, %v", plain, err)
 	}
-	// Empty/nil secrets fail closed on every path.
+	// Empty/nil secrets fail closed.
 	for _, key := range []any{"", SecretConfig{}, (*SecretConfig)(nil), 42} {
 		if _, err := SymmetricEncrypt(key, "x"); err == nil {
 			t.Errorf("encrypt with %#v must fail", key)
@@ -203,16 +182,10 @@ func TestWave4_EnvelopeEdgeMatrix(t *testing.T) {
 	}
 }
 
-// --- Cross-language golden vectors ---
-//
-// TS-shaped fixtures as static data (no network):
-//   - The "$ba$" envelope shape pins the upstream formatEnvelope wire
-//     format shared with SecretConfig rotation.
-//   - The JWE kid fixture pins the RFC 7638 oct-thumbprint kid selection
-//     contract (kid == OctThumbprint(derived key)) both sides implement.
+// Cross-language golden vectors (static fixtures, no network).
 
-func TestWave4_EnvelopeShapeGolden(t *testing.T) {
-	// Static fixture: envelope is exactly "$ba$<version>$<ciphertext>".
+func TestCryptoConform_EnvelopeShapeGolden(t *testing.T) {
+	// Envelope is "$ba$<version>$<ciphertext>".
 	if got := FormatEnvelope(3, "abcdef"); got != "$ba$3$abcdef" {
 		t.Fatalf("envelope shape = %q", got)
 	}
@@ -220,16 +193,15 @@ func TestWave4_EnvelopeShapeGolden(t *testing.T) {
 	if !ok || v != 3 || ct != "abcdef" {
 		t.Fatalf("envelope parse = %d %q %v", v, ct, ok)
 	}
-	// Ciphertext containing "$" survives (split on FIRST separator only).
+	// "$" in ciphertext survives (first-separator split).
 	v, ct, ok = ParseEnvelope("$ba$3$a$b")
 	if !ok || v != 3 || ct != "a$b" {
 		t.Fatalf("dollar payload parse = %d %q %v", v, ct, ok)
 	}
 }
 
-func TestWave4_JWEKidGolden(t *testing.T) {
-	// Upstream contract: the JWE "kid" is the JWK SHA-256 thumbprint of the
-	// derived key, so rotation selects without trial decryption.
+func TestCryptoConform_JWEKidGolden(t *testing.T) {
+	// JWE kid is RFC 7638 thumbprint (rotation without trial decryption).
 	key, err := DeriveEncryptionSecret("kid-golden-secret", SessionCookieEncryptionSalt)
 	if err != nil {
 		t.Fatalf("derive: %v", err)
@@ -241,7 +213,7 @@ func TestWave4_JWEKidGolden(t *testing.T) {
 	if len(key) != DerivedEncryptionKeyLen {
 		t.Fatalf("derived key length = %d", len(key))
 	}
-	// Session vs account salts derive unrelated keys from one secret.
+	// Session vs account salts derive unrelated keys.
 	other, err := DeriveEncryptionSecret("kid-golden-secret", AccountCookieEncryptionSalt)
 	if err != nil {
 		t.Fatalf("derive: %v", err)
@@ -261,24 +233,24 @@ func TestWave4_JWEKidGolden(t *testing.T) {
 	}
 }
 
-// --- Malformed-input limits ---
+// Malformed-input limits.
 
-func TestWave4_CryptoMalformedInputLimits(t *testing.T) {
+func TestCryptoConform_CryptoMalformedInputLimits(t *testing.T) {
 	_, _, keys := wave4TestKeys(t)
-	// 1MB single JWK JSON fails closed promptly.
+	// 1MB JWK JSON fails closed.
 	if _, err := VerifyJWT("a.b.c", []PublicKey{{Kid: "k", Alg: "EdDSA", PublicJWKJSON: strings.Repeat("x", 1<<20)}}, VerifyOptions{}); err == nil {
 		t.Error("1MB JWK JSON on a garbage token must fail closed")
 	}
-	// 256+ segment-count abuse and header bombs fail closed.
+	// Segment flood / header bombs fail closed.
 	if _, err := VerifyJWT(strings.Repeat("a.", 10000)+"a", keys, VerifyOptions{}); err == nil {
 		t.Error("segment flood must fail closed")
 	}
-	// Oversized envelope payloads fail at hex decode, not at AEAD.
+	// Oversized envelope fails at hex decode.
 	big := FormatEnvelope(1, strings.Repeat("z", 1<<20))
 	if _, err := SymmetricDecrypt("secret", big); err == nil {
 		t.Error("1MB envelope payload must fail closed")
 	}
-	// Non-hex, odd-length, and short payloads fail distinctly from wrong-key.
+	// Non-hex/short fail distinctly from wrong-key.
 	bare, _ := SymmetricEncrypt("secret", "data")
 	for _, bad := range []string{"xyz", "abc", "00", strings.Repeat("0", 10)} {
 		_ = bad
@@ -292,9 +264,9 @@ func TestWave4_CryptoMalformedInputLimits(t *testing.T) {
 	}
 }
 
-// --- Race tests ---
+// Race tests.
 
-func TestWave4_CryptoConcurrentUse(t *testing.T) {
+func TestCryptoConform_CryptoConcurrentUse(t *testing.T) {
 	_, priv, keys := wave4TestKeys(t)
 	var wg sync.WaitGroup
 	for g := 0; g < 8; g++ {
@@ -325,7 +297,7 @@ func TestWave4_CryptoConcurrentUse(t *testing.T) {
 	wg.Wait()
 }
 
-// --- Fuzz targets ---
+// Fuzz targets.
 
 func FuzzParseEnvelope(f *testing.F) {
 	for _, s := range []string{"", "$ba$", "$ba$1$ct", "$ba$-1$ct", "$ba$x$ct", "hexonly", "$ba$3$a$b", "$ba$0$"} {
@@ -339,10 +311,7 @@ func FuzzParseEnvelope(f *testing.F) {
 		if v < 0 {
 			t.Fatalf("negative version parsed: %d from %q", v, data)
 		}
-		// Round-trip up to canonical form: re-parsing the formatted
-		// envelope yields the same version and ciphertext. (Byte identity
-		// does NOT hold: fuzz corpus 237106de55ddb866 "$ba$00$" parses to
-		// version 0 like upstream parseInt, and formats back as "$ba$0$".)
+		// Canonical round-trip (byte identity need not hold: "$ba$00$" -> "$ba$0$").
 		v2, ct2, ok2 := ParseEnvelope(FormatEnvelope(v, ct))
 		if !ok2 || v2 != v || ct2 != ct {
 			t.Fatalf("envelope canonical round trip failed for %q", data)
@@ -366,7 +335,7 @@ func FuzzSymmetricRoundTrip(f *testing.F) {
 		if err != nil {
 			t.Fatalf("encrypt failed: %v", err)
 		}
-		// Bare-hex shape for string keys (upstream rawEncrypt).
+		// Bare-hex for string keys (upstream rawEncrypt).
 		for _, c := range enc {
 			if !strings.ContainsRune("0123456789abcdef", c) {
 				t.Fatalf("non-hex char in bare payload %q", enc)
@@ -376,11 +345,11 @@ func FuzzSymmetricRoundTrip(f *testing.F) {
 		if err != nil || plain != message {
 			t.Fatalf("round trip failed: %q %v", plain, err)
 		}
-		// Wrong secret must fail.
+		// Wrong secret fails.
 		if _, err := SymmetricDecrypt(secret+"\x00", enc); err == nil {
 			t.Fatal("wrong secret decrypted ciphertext")
 		}
-		// Decrypt path must never panic on arbitrary bytes.
+		// Decrypt never panics.
 		_, _ = SymmetricDecrypt(secret, message)
 		_, _ = DecryptStringCompatible([]string{secret}, message)
 	})
@@ -401,11 +370,7 @@ func FuzzVerifyJWTUnforgeable(f *testing.F) {
 		if err != nil {
 			return
 		}
-		// Signature binding (time-stable unforgeability): every accepted
-		// token is signature-bound, so flipping one bit of any segment
-		// must break verification. (A byte-equality check against the
-		// run-local token would be unsound: exp embeds time, so older
-		// genuinely-issued seeds differ byte-wise.)
+		// HMAC-bound: flipping any segment must break verification (time-stable check).
 		parts := strings.Split(token, ".")
 		if len(parts) != 3 {
 			t.Fatalf("verified non-3-part token: %q", token)

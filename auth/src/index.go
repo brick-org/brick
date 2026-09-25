@@ -111,13 +111,9 @@ const (
 )
 
 // PluginErrorCodes holds merged error messages from the most recent
-// BetterAuth() call, kept in sync with the returned Auth.ErrorCodes for
-// backward compatibility.
+// BetterAuth() call for backward compatibility.
 //
-// Deprecated: read Auth.ErrorCodes (map[string]RawError{code,message},
-// merged {plugin..., BASE...} in upstream order) from the BetterAuth return
-// value instead. This global is reset-and-repopulated on every BetterAuth()
-// call under pluginErrorCodesMu so entries never leak across calls.
+// Deprecated: read Auth.ErrorCodes from the BetterAuth return value instead.
 var PluginErrorCodes = map[string]string{}
 
 // pluginErrorCodesMu guards PluginErrorCodes.
@@ -243,9 +239,8 @@ func GetSessionFromRequest(r *http.Request, opts Options) (*Session, *User, []ht
 	return authroutes.GetSessionFromRequest(r, opts)
 }
 
-// defaultAppName resolves the construction display-name default, mirroring
-// upstream `appName: options.appName || "Better Auth"` at context build
-// (create-context.ts:284). It applies to the context reference only; the
+// defaultAppName resolves the construction display-name default.
+// It applies to the context reference only; the
 // Options field itself defaults after plugin init so option patches can
 // still fill an unset AppName defu-style.
 func defaultAppName(appName string) string {
@@ -256,21 +251,11 @@ func defaultAppName(appName string) string {
 }
 
 // applyStatelessDefaults applies upstream's stateless defu defaults at
-// construction (create-context.ts:106-128 @ 5468e6bf):
-//
-//	if (!isStateful) // !database && !secondaryStorage:
-//	  session.cookieCache defaults to
-//	  {enabled:true, strategy:"jwe", refreshCache:true,
-//	   maxAge:session.expiresIn||7d} defu-style (existing values win);
-//	if (!options.database):
-//	  account.storeAccountCookie defaults to true defu-style.
-//
+// construction.
 // Go zero-value deviation (pinned by TestInitDefuScalarZeroValueDeviation):
 // plain bool falsy values cannot distinguish "unset" from explicit false,
 // so a false Enabled/StoreAccountCookie is treated as unset and filled.
-// Presence-tracked kinds (non-empty Strategy, non-zero MaxAge, configured
-// RefreshCache) honor base-wins exactly. Stateful deployments stay opt-in:
-// no cache fields are touched when a server store is present.
+// Presence-tracked kinds honor base-wins exactly. Stateful stays opt-in.
 //
 // Call before plugin init so plugins see the final options (base wins in
 // defuOptions). RefreshCache threshold resolution stays in
@@ -335,75 +320,23 @@ func applyStatelessDefaults(opts *Options) {
 // with `plugin:<id>` source labels). Legacy Init(AuthContext) error keeps
 // working (runs first; either error aborts).
 //
-// Stateless defaults (upstream create-context.ts:106-128): when neither
-// Options.DB nor Options.SecondaryStorage is configured, Session.CookieCache
-// defaults defu-style to {enabled:true, strategy:"jwe", refreshCache:true,
-// maxAge:Session.ExpiresIn||7d} and Account.StoreAccountCookie defaults to
-// true when Options.DB is unset (secondary-only keeps the account-cookie
-// default but stays opt-in for the cache). Stateful deployments stay opt-in:
-// an empty Strategy resolves to "compact" at the route layer
-// (cookies.StrategyCompact), matching the historical Go default; stateless
-// defaults to "jwe". All three strategies (compact/jwt/jwe), RefreshCache,
-// and VersionFunc are wired (see auth/api/routes/session.go). A missing
-// static BaseURL without DynamicBaseURL warns via Options.Logger (upstream
-// "Base URL is not set"), quiet by default. Per-request baseURL rewriting is active:
-// Options.DynamicBaseURL allowedHosts/protocol/fallback expand into
-// TrustedOrigins at construction, resolve per request via
-// ResolveRequestContext/api.ResolveDynamicBaseURLForRequest, drive middleware
-// origin derivation, and are authoritative for route URL builders
-// (callbacks, callback URIs, error URLs, cookie secure/domain) through the
-// request-scoped helpers in auth/api/routes.
-//
-// Secondary storage (Options.SecondaryStorage) is wired: session reads,
-// refreshes, revokes, lists, and updates consult it with
-// Session.StoreSessionInDatabase / Session.PreserveSessionInDatabase
-// selecting database mirroring and preserve-on-revoke semantics (see the
-// secondary-storage runtime in auth/api/routes/session.go); verification
-// rows honor Verification.StoreInDatabase, Verification.StoreIdentifier, and
-// Verification.DisableCleanup (see auth/api/routes/email_verification.go);
-// rate limiting consumes Storage "secondary-storage" via
-// SecondaryStorage.Increment and Storage "database" via the atomic adapter
-// backend (see auth/api.ValidateRateLimitStorage). Creation paths that still
-// write database rows directly without mirroring (sign-up/sign-in session
-// issuance, change-email verification issuance) fall back to the database on
-// a secondary miss and backfill it — see the transitional notes on
-// writeSecondarySession and findChangeEmailVerificationRow.
-//
-// Telemetry publishes no network traffic in this runtime (there is no
-// telemetry endpoint or custom-track plumbing — upstream createTelemetry
-// returns a noop without one): when Options.Telemetry.Enabled (or
-// BETTER_AUTH_TELEMETRY=1/true) is set, construction publishes a local
-// "init" diagnostic and AuthContext.PublishTelemetry reports per-event
-// diagnostics via Options.Logger (level-gated; Debug logs payloads).
-// Instrumentation (Experimental.Instrumentation, default enabled) runs
-// WithSpan as a direct passthrough preserving name/attribute plumbing.
-//
-// Framework runtime knobs honored by this constructor and the api
-// middleware: DynamicBaseURL expansion + validation + per-request
-// resolution (ResolveRequestContext), rate-limit storage selection
-// (ValidateRateLimitStorage), trusted-proxy validation (invalid
-// Advanced.IPAddress.TrustedProxies entries warn and are ignored;
-// resolution with IPv6-subnet collapsing lives in api.RequestClientIP),
-// DisableOriginCheck (skips the origin middleware, with the upstream
-// backward-compatible CSRF skip), SkipTrailingSlashes (slash-variant route
-// registration in api.Router plus middleware path normalization),
-// endpoint-conflict detection (logged error via Options.Logger, mirroring
-// upstream checkEndpointConflicts), and schema checks (opts.SchemaCheck
-// attached when Advanced.Database.ValidateSchema is not explicitly false;
-// the api middleware runs it per request, mirroring upstream checkSchema).
-// Background tasks (Advanced.BackgroundTasks) dispatch through
-// RunInBackground: the configured Handler receives the task thunk, otherwise
-// the task runs fire-and-forget in its own goroutine (panics contained).
-// Each honored-or-deferred option is noted once at construction via
-// Options.Logger when logging is configured; the quiet default is unchanged.
+// Stateless defaults: when neither Options.DB nor Options.SecondaryStorage
+// is configured, Session.CookieCache and Account.StoreAccountCookie default
+// defu-style (see applyStatelessDefaults); stateful stays opt-in.
+// DynamicBaseURL expands into TrustedOrigins at construction and resolves
+// per request via ResolveRequestContext.
+// Secondary storage is wired for sessions, verifications, and rate limiting.
+// Telemetry publishes a local "init" diagnostic only (no network);
+// Instrumentation runs WithSpan as a direct passthrough.
+// Framework knobs (rate-limit storage, trusted proxies, origin checks,
+// schema checks, background tasks) are honored; each is noted once via
+// Options.Logger when configured.
 //
 // Plugins are initialised in declaration order before routes are registered.
 //
 // Error codes: the returned Auth.ErrorCodes merges plugin $ERROR_CODES with
-// BASE_ERROR_CODES in upstream order ({...pluginCodes, ...BASE...}),
-// mirroring `$ERROR_CODES` in vendor/.../src/auth/base.ts. The global
-// PluginErrorCodes is kept in sync (code->message strings) as a deprecated
-// wrapper for old readers.
+// BASE_ERROR_CODES in upstream order. The global
+// PluginErrorCodes is kept in sync as a deprecated wrapper.
 func BetterAuth(opts Options) (Auth, error) {
 	if opts.BasePath == "" {
 		opts.BasePath = "/api/auth"
@@ -419,9 +352,8 @@ func BetterAuth(opts Options) (Auth, error) {
 	if opts, secret, secretCfg, err = resolveSecrets(opts); err != nil {
 		return Auth{}, err
 	}
-	// Stateless defu defaults (upstream create-context.ts:106-128): applied
-	// before plugin init so plugins see the final options (base wins in
-	// defuOptions). See applyStatelessDefaults.
+	// Stateless defu defaults: applied
+	// before plugin init so plugins see the final options. See applyStatelessDefaults.
 	applyStatelessDefaults(&opts)
 	opts.Schema = ResolveSchema(opts)
 	if opts.SecondaryStorage == nil && (opts.Session.StoreSessionInDatabase || opts.Session.PreserveSessionInDatabase) {
@@ -438,11 +370,8 @@ func BetterAuth(opts Options) (Auth, error) {
 
 	// --- Plugin init with optional patches ---
 	merged := make(map[string]RawError)
-	// Init-patch databaseHooks keep their `plugin:<id>` source label by
-	// traveling through NewHookedAdapterWithOptions as synthetic plugins
-	// (see patchHooksPlugin); collecting them here in declaration order
-	// preserves upstream's interleaving (each plugin's legacy hooks, then
-	// its init-returned hooks).
+	// Init-patch databaseHooks keep their `plugin:<id>` source label in
+	// declaration order.
 	var patchEntries []patchHookEntry
 	allStatic := append([]string(nil), opts.TrustedOrigins...)
 	var allDyn []func(*http.Request) []string
@@ -457,9 +386,7 @@ func BetterAuth(opts Options) (Auth, error) {
 		for k, v := range p.ErrorCodes() {
 			merged[k] = RawError{Code: k, Message: v}
 		}
-		// Legacy plugin Hooks() are collected by NewHookedAdapterWithOptions
-		// below with `plugin:<id>` source labels; nothing to merge here.
-		// Optional init patches (upstream init returns).
+		// Optional init patches.
 		if patcher, ok := p.(PluginInitPatches); ok {
 			patch, err := patcher.InitPatches(ctx)
 			if err != nil {
@@ -523,17 +450,12 @@ func BetterAuth(opts Options) (Auth, error) {
 	if err := authapi.ValidateRateLimitStorage(opts); err != nil {
 		return Auth{}, err
 	}
-	// Expand dynamic allowedHosts/fallback into the finalized static origins
-	// (mirrors upstream getTrustedOrigins' dynamic branch; see
-	// auth/api.ExpandDynamicBaseURLOrigins). Static BaseURL behavior is
-	// unchanged when DynamicBaseURL is nil.
+	// Expand dynamic origins into static origins.
 	if opts.DynamicBaseURL != nil {
 		opts.TrustedOrigins = append(opts.TrustedOrigins, authapi.ExpandDynamicBaseURLOrigins(opts.DynamicBaseURL)...)
 		ctx.Options = opts
 	}
-	// Upstream getTrustedOrigins also merges BETTER_AUTH_TRUSTED_ORIGINS env
-	// (comma-separated); the api middleware re-derives it per request for
-	// direct Router callers via the same helper.
+	// Merge trusted-origins env.
 	opts.TrustedOrigins = append(opts.TrustedOrigins, types.ParseTrustedOriginsEnv(os.Getenv(types.TrustedOriginsEnvVar))...)
 	ctx.Options = opts
 	// One construction-time parity note per honored-or-deferred framework
@@ -557,22 +479,10 @@ func BetterAuth(opts Options) (Auth, error) {
 	}
 	pluginErrorCodesMu.Unlock()
 
-	// Resolve the full framework context services (mirroring upstream
-	// createAuthContext's ctx fields that this layer owns).
 	applyCookieRefreshCacheConstruction(&opts)
 	finalizeAuthContext(&ctx, opts, secret, secretCfg, publish)
 
-	// Wrap the adapter with lifecycle hooks via NewHookedAdapterWithOptions
-	// (upstream getWithHooks): legacy plugin Hooks() plus init-patch hooks
-	// (as synthetic plugins preserving `plugin:<id>` sources) run before
-	// user databaseHooks; plugin adapter overrides apply unless an explicit
-	// entry wins (none are set explicitly here — collection is
-	// plugin-driven); field validator/transform schemas come from the
-	// resolved tables; post-commit failures report to
-	// Options.OnAfterCommitHookError when set. When nothing applies the
-	// inner adapter is returned unwrapped.
-	// After-hook failures are reported to opts.Logger when configured;
-	// the default (disabled or nil Log) stays quiet.
+	// Wrap the adapter with lifecycle hooks.
 	if opts.DB != nil {
 		opts.DB = NewHookedAdapterWithOptions(
 			opts.DB,
@@ -587,11 +497,7 @@ func BetterAuth(opts Options) (Auth, error) {
 		ctx.Options = opts
 	}
 
-	// Attach the per-request schema validator (nil when
-	// Advanced.Database.ValidateSchema is explicitly false). Construction
-	// never awaits the verdict (mirroring upstream: migration tooling can
-	// still use a context whose schema needs repair); the api middleware
-	// runs it per request via opts.SchemaCheck.
+	// Attach the per-request schema validator.
 	opts.SchemaCheck = buildSchemaCheck(opts)
 	ctx.Options = opts
 
@@ -605,11 +511,7 @@ func BetterAuth(opts Options) (Auth, error) {
 }
 
 // loggerFromOptions adapts Options.Logger to HookLogger for DB after-hook
-// error reporting. It returns nil (quiet, no output) when logging is
-// disabled or no Log callback is configured, preserving the historical
-// default. Error reports are level-gated like any other log (upstream levels
-// order debug < info < success < warn < error, so error passes unless the
-// configured level is unknown).
+// error reporting. It returns nil (quiet) when logging is disabled.
 func loggerFromOptions(opts Options) HookLogger {
 	if opts.Logger.Disabled || opts.Logger.Log == nil {
 		return nil
@@ -624,12 +526,7 @@ func loggerFromOptions(opts Options) HookLogger {
 }
 
 // authNotef reports a framework parity note via Options.Logger. It stays
-// quiet when logging is disabled or no Log callback is configured, and
-// honors the configured minimum level (types.ShouldPublishLog, default
-// "warn" — mirroring upstream createLogger filtering), preserving the
-// historical quiet default (mirrors context secretWarnf gating). Levels follow the
-// upstream logger levels ("debug", "info", "success", "warn", "error");
-// "success" is normalized to "info" for custom handlers.
+// quiet when logging is disabled or no Log callback is configured.
 func authNotef(opts Options, level, format string, args ...any) {
 	if opts.Logger.Disabled || opts.Logger.Log == nil {
 		return
@@ -645,21 +542,11 @@ func authNotef(opts Options, level, format string, args ...any) {
 }
 
 // validateDynamicBaseURL enforces the DynamicBaseURL contract at
-// construction (mirroring upstream createAuthContext's allowedHosts check
-// plus the mutual-exclusion and literal rules pinned by ValidateOptions in
-// package types, which BetterAuth cannot call wholesale because secret env
-// fallback resolves separately in resolveSecrets):
-//
-//   - BaseURL and DynamicBaseURL are mutually exclusive (upstream baseURL is
-//     `string | DynamicBaseURLConfig`);
+// construction:
+//   - BaseURL and DynamicBaseURL are mutually exclusive;
 //   - AllowedHosts must be non-empty;
-//   - Protocol must be "http", "https", or "auto" (empty means upstream's
-//     unset behavior — https required, http only for loopback hosts — see
-//     auth/api.ExpandDynamicBaseURLOrigins);
+//   - Protocol must be "http", "https", or "auto";
 //   - Fallback, when set, must be an absolute http(s) URL.
-//
-// Upstream TypeScript names: createAuthContext (allowedHosts throw),
-// isDynamicBaseURLConfig.
 func validateDynamicBaseURL(opts Options) error {
 	cfg := opts.DynamicBaseURL
 	if cfg == nil {
@@ -682,9 +569,7 @@ func validateDynamicBaseURL(opts Options) error {
 	return nil
 }
 
-// checkAbsoluteHTTPURL requires a parseable absolute http(s) URL (local
-// mirror of the types-level check so BetterAuth validates Fallback without
-// importing unexported helpers).
+// checkAbsoluteHTTPURL requires a parseable absolute http(s) URL.
 func checkAbsoluteHTTPURL(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -698,34 +583,7 @@ func checkAbsoluteHTTPURL(raw string) error {
 
 // noteFrameworkRuntimeOptions emits one construction-time parity note per
 // honored-or-deferred framework option via authNotef (level-gated on
-// Options.Logger; quiet by default, so default-config construction stays
-// silent):
-//
-//   - Options.Telemetry.Enabled (or BETTER_AUTH_TELEMETRY env) → local
-//     no-network publish note (the Go runtime publishes an "init"
-//     diagnostic via Options.Logger, never over the network — upstream
-//     createTelemetry POSTs to a telemetry endpoint or custom track
-//     function, neither of which exists here).
-//   - Advanced.BackgroundTasks.Handler → dispatch note (honored by
-//     RunInBackground; without a handler tasks run fire-and-forget).
-//   - Options.DynamicBaseURL → expansion note (allowedHosts/protocol/
-//     fallback expanded into TrustedOrigins; middleware derives the request
-//     origin per request).
-//   - Options.RateLimit non-default storage → selection note (memory is the
-//     default with a production-default enabled gate; custom, secondary, and
-//     database backends are named when active).
-//   - Invalid Advanced.IPAddress.TrustedProxies entries → warning (ignored
-//     by resolution, mirroring upstream's "Ignoring invalid
-//     trustedProxies" warning).
-//   - Advanced.DisableOriginCheck → warning (middleware origin validation
-//     skipped, with upstream's backward-compatible CSRF skip).
-//   - Options.OnAfterCommitHookError → note (post-commit failures report to
-//     the handler instead of failing the Transaction call).
-//   - Endpoint conflicts across plugins → error diagnostic via the api
-//     layer (checkEndpointConflicts runs at Router start; see
-//     auth/api.FindEndpointConflicts).
-//   - Missing static BaseURL without DynamicBaseURL → upstream "Base URL is
-//     not set" warning (create-context.ts:152-156), quiet by default.
+// Options.Logger; quiet by default).
 func noteFrameworkRuntimeOptions(opts Options) {
 	if opts.BaseURL == "" && opts.DynamicBaseURL == nil {
 		authNotef(opts, "warn", "[better-auth] Base URL is not set. Set the baseURL option or BETTER_AUTH_URL env, or use a dynamic baseURL with allowedHosts for multi-host setups. Without it the origin is derived from the incoming request, and callbacks and redirects may not work correctly.")
@@ -760,8 +618,7 @@ func noteFrameworkRuntimeOptions(opts Options) {
 	}
 }
 
-// dynamicProtocolName names the effective dynamic protocol for log lines
-// (empty means upstream's unset behavior, not "auto").
+// dynamicProtocolName names the effective dynamic protocol for log lines.
 func dynamicProtocolName(p types.BaseURLProtocol) string {
 	if p == "" {
 		return "unset (https required, http for loopback only)"
@@ -770,10 +627,7 @@ func dynamicProtocolName(p types.BaseURLProtocol) string {
 }
 
 // effectiveRateLimitStorageName names the enforced rate-limit backend for
-// log lines: "custom" when CustomStorage is set (Storage ignored, mirroring
-// upstream precedence), otherwise the explicit Storage, defaulting to
-// "memory" — or "secondary-storage" when Storage is unset but a secondary
-// backend is present (mirroring upstream's default).
+// log lines.
 func effectiveRateLimitStorageName(opts Options) string {
 	if opts.RateLimit.CustomStorage != nil {
 		return "custom"
@@ -788,25 +642,7 @@ func effectiveRateLimitStorageName(opts Options) string {
 }
 
 // RunInBackground dispatches a unit of deferred work to run after the
-// response is sent, mirroring upstream ctx.runInBackground
-// (vendor/.../src/context/create-context.ts:404-408):
-//
-//   - with Advanced.BackgroundTasks.Handler configured, the handler receives
-//     the task thunk (upstream receives the pending promise; Go has no
-//     promise value, so the thunk stands in — see the DEVIATION note on
-//     types.BackgroundTaskHandler). Handler panics propagate to the caller,
-//     mirroring upstream's logger.error-and-continue only in spirit: prefer
-//     non-panicking handlers.
-//   - without a handler, the task runs fire-and-forget in its own goroutine
-//     (upstream: the promise is floated with a no-op catch). A deferred
-//     recover contains task panics so a background task can never crash the
-//     process, mirroring upstream's .catch(()=>{}) containment.
-//
-// A nil task is a no-op. There is no await variant: upstream's
-// runInBackgroundOrAwait awaits the promise when no handler is set, which
-// has no meaningful Go equivalent at the call sites that matter here;
-// callers that must wait should invoke the work synchronously instead.
-//
+// response is sent. A nil task is a no-op.
 // Upstream TypeScript name: runInBackground.
 func RunInBackground(opts Options, task func()) {
 	if task == nil {
@@ -822,8 +658,6 @@ func RunInBackground(opts Options, task func()) {
 	}()
 }
 
-// --- Wave 2 framework context services ---
-
 // patchHookEntry carries one plugin's init-patch databaseHooks with its
 // source plugin ID so NewHookedAdapterWithOptions can preserve the
 // `plugin:<id>` source label via synthetic plugins.
@@ -833,11 +667,7 @@ type patchHookEntry struct {
 }
 
 // patchHooksPlugin is a synthetic Plugin carrying init-patch databaseHooks
-// through NewHookedAdapterWithOptions so they keep their `plugin:<id>`
-// source label (mirroring upstream runPluginInit's dbHooks entries in
-// vendor/.../src/context/helpers.ts:44-53). Only ID and Hooks carry data;
-// every other method preserves the surrounding plugin's behavior by
-// contributing nothing.
+// so they keep their `plugin:<id>` source label. Only ID and Hooks carry data.
 type patchHooksPlugin struct {
 	id    string
 	hooks DBHooks
@@ -852,11 +682,7 @@ func (p patchHooksPlugin) RouteHooks() PluginRouteHooks  { return PluginRouteHoo
 func (p patchHooksPlugin) ErrorCodes() map[string]string { return nil }
 
 // expandPluginsWithPatchHooks interleaves each plugin's init-patch hooks
-// after its legacy entry (upstream declaration order): the final plugin
-// list (including defu-added plugins) is walked, and every collected patch
-// entry for that plugin ID is inserted immediately after it. Patch entries
-// for IDs absent from the final list are appended at the end so none are
-// silently dropped.
+// after its legacy entry in declaration order.
 func expandPluginsWithPatchHooks(plugins []Plugin, patches []patchHookEntry) []Plugin {
 	if len(patches) == 0 {
 		return plugins
@@ -893,12 +719,7 @@ func expandPluginsWithPatchHooks(plugins []Plugin, patches []patchHookEntry) []P
 }
 
 // fieldSchemasFromTables builds HookedAdapterOptions.FieldSchemas from the
-// resolved tables: every model's field attributes (validators/transforms)
-// execute around hooked writes/reads. Models without fields are skipped; a
-// schema without any fields yields nil (adapter untouched).
-//
-// Upstream TypeScript name: the schema-derived field metadata consumed by
-// parseInputData/output filtering in with-hooks.ts.
+// resolved tables.
 func fieldSchemasFromTables(tables PluginSchema) map[string]map[string]types.FieldAttribute {
 	if len(tables) == 0 {
 		return nil
@@ -921,10 +742,7 @@ func fieldSchemasFromTables(tables PluginSchema) map[string]map[string]types.Fie
 }
 
 // finalizeAuthContext resolves the framework-owned AuthContext services from
-// the finalized options (mirroring the ctx fields built by upstream
-// createAuthContext in vendor/.../src/context/create-context.ts:283-430
-// that this layer owns). Cookie stores, password hashing, and the internal
-// adapter remain with their owning packages.
+// the finalized options.
 func finalizeAuthContext(ctx *types.AuthContext, opts Options, secret string, secretCfg SecretConfig, publish func(types.TelemetryEvent)) {
 	ctx.Options = opts
 	// AppName/Secret/Config keep init-patch overwrites from the plugin loop:
@@ -969,9 +787,7 @@ func finalizeAuthContext(ctx *types.AuthContext, opts Options, secret string, se
 	}
 }
 
-// originOfBaseURL returns the scheme://host origin of a configured BaseURL,
-// falling back to the raw value when it does not parse (validation rejects
-// such values at construction; this stays total for context consumers).
+// originOfBaseURL returns the scheme://host origin of a configured BaseURL.
 func originOfBaseURL(raw string) string {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || u.Host == "" {
@@ -984,11 +800,7 @@ func originOfBaseURL(raw string) string {
 	return scheme + "://" + u.Host
 }
 
-// resolveTrustedProviders returns the account-linking trust list, mirroring
-// upstream getTrustedProviders (vendor/.../src/context/helpers.ts:292-305):
-// static entries filtered for empties, plus the function resolver evaluated
-// with the given request (nil at construction, mirroring upstream
-// context-init invocations — resolvers must tolerate nil).
+// resolveTrustedProviders returns the account-linking trust list.
 func resolveTrustedProviders(opts Options, r *http.Request) []string {
 	static := make([]string, 0, len(opts.Account.AccountLinking.TrustedProviders))
 	for _, provider := range opts.Account.AccountLinking.TrustedProviders {
@@ -1006,11 +818,7 @@ func resolveTrustedProviders(opts Options, r *http.Request) []string {
 	return static
 }
 
-// resolveRateLimitContext resolves the rate-limit triple, mirroring
-// upstream ctx.rateLimit (create-context.ts:354-362): explicit Enabled wins,
-// otherwise production-gated (NODE_ENV=production); window/max fall back to
-// 10/100; storage falls back to secondary-storage with a secondary backend,
-// else memory.
+// resolveRateLimitContext resolves the rate-limit triple.
 func resolveRateLimitContext(opts Options) types.ResolvedRateLimit {
 	enabled := false
 	if opts.RateLimit.Enabled != nil {
@@ -1034,10 +842,7 @@ func resolveRateLimitContext(opts Options) types.ResolvedRateLimit {
 	}
 }
 
-// resolveSessionConfig resolves the session lifetime knobs, mirroring
-// upstream ctx.sessionConfig defaults (create-context.ts:308-317): updateAge
-// 86400 (1 day), expiresIn 604800 (7 days), freshAge 86400 unless explicitly
-// set (an explicit 0 disables the freshness check).
+// resolveSessionConfig resolves the session lifetime knobs.
 func resolveSessionConfig(opts Options) types.ResolvedSessionConfig {
 	updateAge := types.ResolveUpdateAgeSeconds(opts.Session.UpdateAge)
 	expiresIn := opts.Session.ExpiresIn
@@ -1052,23 +857,9 @@ func resolveSessionConfig(opts Options) types.ResolvedSessionConfig {
 }
 
 // applyCookieRefreshCacheConstruction wires the stateless cookie-cache
-// refresh decision into BetterAuth construction, mirroring upstream
-// ctx.sessionConfig.cookieRefreshCache (create-context.ts:318-351) with
-// hasServerSessionStore = database || secondaryStorage
-// (store-capabilities.ts:3-5):
-//
-//   - unset refreshCache stays disabled quietly;
-//   - stateful (DB or SecondaryStorage) + configured refreshCache logs the
-//     upstream warn and forces the effective RefreshCache off so issued
-//     configs carry the disabled state;
-//   - stateless + configured stays enabled with the explicit updateAge or the
-//     20%-of-maxAge floor.
-//
-// It delegates the decision table to authstate.ResolveCookieRefreshCache and
-// only mutates the effective RefreshCache on opts; the table itself and the
-// per-request flag mechanics are untouched. Call after plugin init so the
-// final options are resolved, before finalizeAuthContext so the context and
-// router carry the effective state.
+// refresh decision into BetterAuth construction.
+// Call after plugin init so the final options are resolved, before
+// finalizeAuthContext so the context and router carry the effective state.
 func applyCookieRefreshCacheConstruction(opts *Options) {
 	if opts == nil {
 		return
@@ -1095,19 +886,14 @@ func applyCookieRefreshCacheConstruction(opts *Options) {
 	opts.Session.CookieCache.RefreshCache.UpdateAge = effectiveUpdateAge
 }
 
-// schemaCheckEnabled reports whether the per-request schema validator
-// applies, mirroring upstream checksSchema
-// (vendor/.../core/src/db/schema-check.ts:16-18): enabled in every
-// environment unless explicitly disabled.
+// schemaCheckEnabled reports whether the per-request schema validator applies.
 func schemaCheckEnabled(opts Options) bool {
 	return opts.Advanced.Database.ValidateSchema == nil || *opts.Advanced.Database.ValidateSchema
 }
 
 // buildSchemaCheck returns the per-request schema validator attached as
-// opts.SchemaCheck (nil when disabled). The closure captures the resolved
-// tables snapshot so requests share one immutable view; a mismatch fails
-// closed with a descriptive error, mirroring upstream's SchemaMismatchError
-// failure mode without any database I/O (index validation is pure).
+// opts.SchemaCheck (nil when disabled). A mismatch fails
+// closed with a descriptive error.
 func buildSchemaCheck(opts Options) func() error {
 	if !schemaCheckEnabled(opts) {
 		return nil
@@ -1119,19 +905,7 @@ func buildSchemaCheck(opts Options) func() error {
 }
 
 // ResolveGenerateID resolves the model ID minter honoring
-// Advanced.Database.GenerateID, mirroring upstream generateIdFunc
-// (create-context.ts:248-263). It delegates to types.MintModelID — the single
-// minter shared by the context service and every model-row creation site —
-// so custom/serial/UUID behavior is identical at construction and at creation:
-//
-//   - a custom Func wins (receives model + optional size hint, may return
-//     false for database-issued IDs);
-//   - Mode "uuid" mints a random UUID (crypto.randomUUID upstream);
-//   - Mode "serial" resolves to ("", false) so the database issues the ID
-//     (upstream generateId:false);
-//   - otherwise the default random identifier applies (upstream generateId;
-//     size hint <= 0 falls back to the 32-character default).
-//
+// Advanced.Database.GenerateID. It delegates to types.MintModelID.
 // Callers must treat ("", false) as "omit the ID and let the database
 // generate it".
 //
@@ -1143,19 +917,7 @@ func ResolveGenerateID(opts Options) types.GenerateIDFunc {
 }
 
 // ResolveRequestContext returns the per-request auth context for a dynamic
-// baseURL configuration, mirroring upstream resolveRequestContext
-// (vendor/.../src/context/helpers.ts:210-276): the baseURL is resolved from
-// the request (or Fallback), trusted origins re-expand for the dynamic
-// config, trusted providers re-resolve with the request, and the returned
-// shallow clone leaves the shared context untouched. Static configurations
-// return the input context unchanged. Resolution failures are descriptive
-// errors (direct-API callers without a request or fallback surface them as
-// 500s upstream via APIError).
-//
-// Route URL builders consume the same resolution through the request-scoped
-// helpers in auth/api/routes (EffectiveBaseURL/EffectiveFullBaseURL), which
-// the api middleware installs per request; this helper serves direct-API
-// callers that never pass through HTTP middleware.
+// baseURL configuration. Static configurations return the input unchanged.
 //
 // Upstream TypeScript name: resolveRequestContext.
 func ResolveRequestContext(ctx types.AuthContext, r *http.Request, opts Options) (types.AuthContext, error) {

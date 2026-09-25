@@ -1,10 +1,6 @@
 package crypto
 
-// v1 ports of the crypto-owned cases in
-// vendor/better-auth/packages/better-auth/src/crypto/secret-rotation.test.ts
-// (envelope format + symmetricEncrypt/symmetricDecrypt rotation). The
-// context secret helpers (parseSecretsEnv/validateSecretsArray/
-// buildSecretConfig) live in src/context and belong to the sibling agent.
+// v1 ports of secret-rotation.test.ts (envelope + symmetric rotation).
 
 import (
 	"strings"
@@ -16,7 +12,7 @@ const (
 	v1SecretB = "secret-b-at-least-32-chars-long!!"
 )
 
-func TestV1_ParseEnvelopeVectors(t *testing.T) {
+func TestEnvelope_ParseEnvelopeVectors(t *testing.T) {
 	if _, _, ok := ParseEnvelope("abcdef1234567890"); ok {
 		t.Error("bare hex must not parse as envelope")
 	}
@@ -35,7 +31,7 @@ func TestV1_ParseEnvelopeVectors(t *testing.T) {
 	}
 }
 
-func TestV1_SymmetricSingleStringBareHex(t *testing.T) {
+func TestEnvelope_SymmetricSingleStringBareHex(t *testing.T) {
 	encrypted, err := SymmetricEncrypt(v1SecretA, "hello world")
 	if err != nil {
 		t.Fatal(err)
@@ -49,7 +45,7 @@ func TestV1_SymmetricSingleStringBareHex(t *testing.T) {
 	}
 }
 
-func TestV1_SymmetricOneKeyEnvelope(t *testing.T) {
+func TestEnvelope_SymmetricOneKeyEnvelope(t *testing.T) {
 	cfg := SecretConfig{Keys: map[int]string{1: v1SecretA}, CurrentVersion: 1}
 	encrypted, err := SymmetricEncrypt(cfg, "hello world")
 	if err != nil {
@@ -64,7 +60,7 @@ func TestV1_SymmetricOneKeyEnvelope(t *testing.T) {
 	}
 }
 
-func TestV1_SymmetricRotation(t *testing.T) {
+func TestEnvelope_SymmetricRotation(t *testing.T) {
 	cfg := SecretConfig{Keys: map[int]string{2: v1SecretB, 1: v1SecretA}, CurrentVersion: 2}
 	encrypted, err := SymmetricEncrypt(cfg, "rotated data")
 	if err != nil {
@@ -78,7 +74,7 @@ func TestV1_SymmetricRotation(t *testing.T) {
 	}
 }
 
-func TestV1_SymmetricDecryptOldKeyAfterRotation(t *testing.T) {
+func TestEnvelope_SymmetricDecryptOldKeyAfterRotation(t *testing.T) {
 	oldCfg := SecretConfig{Keys: map[int]string{1: v1SecretA}, CurrentVersion: 1}
 	encrypted, err := SymmetricEncrypt(oldCfg, "old data")
 	if err != nil {
@@ -91,7 +87,7 @@ func TestV1_SymmetricDecryptOldKeyAfterRotation(t *testing.T) {
 	}
 }
 
-func TestV1_SymmetricLegacyBareHex(t *testing.T) {
+func TestEnvelope_SymmetricLegacyBareHex(t *testing.T) {
 	bareHex, err := SymmetricEncrypt(v1SecretA, "legacy data")
 	if err != nil {
 		t.Fatal(err)
@@ -101,7 +97,7 @@ func TestV1_SymmetricLegacyBareHex(t *testing.T) {
 	if err != nil || decrypted != "legacy data" {
 		t.Fatalf("legacy decrypt = %q, %v", decrypted, err)
 	}
-	// Without the legacy secret the bare-hex payload fails closed.
+	// Without legacy secret, bare-hex fails closed.
 	noLegacy := SecretConfig{Keys: map[int]string{2: v1SecretB}, CurrentVersion: 2}
 	_, err = SymmetricDecrypt(noLegacy, bareHex)
 	if err == nil || !strings.Contains(err.Error(), "no legacy secret available") {
@@ -109,7 +105,7 @@ func TestV1_SymmetricLegacyBareHex(t *testing.T) {
 	}
 }
 
-func TestV1_SymmetricUnknownVersion(t *testing.T) {
+func TestEnvelope_SymmetricUnknownVersion(t *testing.T) {
 	cfg := SecretConfig{Keys: map[int]string{1: v1SecretA}, CurrentVersion: 1}
 	encrypted, err := SymmetricEncrypt(cfg, "test")
 	if err != nil {
@@ -122,7 +118,7 @@ func TestV1_SymmetricUnknownVersion(t *testing.T) {
 	}
 }
 
-func TestV1_SymmetricVersionGaps(t *testing.T) {
+func TestEnvelope_SymmetricVersionGaps(t *testing.T) {
 	cfg := SecretConfig{Keys: map[int]string{3: v1SecretB, 1: v1SecretA}, CurrentVersion: 3}
 	encrypted, err := SymmetricEncrypt(cfg, "gapped")
 	if err != nil {

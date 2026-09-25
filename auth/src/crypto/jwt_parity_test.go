@@ -11,7 +11,7 @@ func TestCreateEmailVerificationTokenRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Compact JWT shape with HS256 header.
+	// Compact JWT HS256 shape.
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
 		t.Fatalf("token is not a compact JWT: %q", token)
@@ -52,7 +52,7 @@ func TestCreateEmailVerificationTokenUpdateToAndExtras(t *testing.T) {
 	if payload.Extra["custom"] != "kept" {
 		t.Fatalf("extra = %v", payload.Extra)
 	}
-	// Zero expiry selects the upstream 3600s default.
+	// Zero expiry selects upstream 3600s default.
 	if time.Until(payload.ExpiresAt) < 59*time.Minute {
 		t.Fatalf("default expiry too short: %v", payload.ExpiresAt)
 	}
@@ -81,8 +81,7 @@ func TestVerifyEmailVerificationTokenRotationAndTampering(t *testing.T) {
 			t.Errorf("tampered token verified: %q", tampered)
 		}
 	}
-	// Cross-algorithm confusion: legacy custom-HMAC tokens must NOT verify
-	// as JWTs.
+	// Legacy custom-HMAC tokens must NOT verify as JWTs.
 	legacy, err := GenerateToken("current", "user@example.com", time.Hour)
 	if err != nil {
 		t.Fatal(err)
@@ -97,7 +96,7 @@ func TestVerifyEmailVerificationTokenExpiry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A 1s-lived token verifies immediately...
+	// 1s-lived token verifies immediately.
 	if _, err := VerifyEmailVerificationToken("secret", token); err != nil {
 		t.Fatalf("fresh token rejected: %v", err)
 	}

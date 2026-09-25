@@ -1,37 +1,6 @@
 package crypto_test
 
-// C2 coverage for PARITY_V2.md P11 caveat (upstream crypto/jwt.ts @ 5468e6bf):
-// existing JWE tests are Go-round-trips only (IV randomized, never pinned vs
-// a jose-minted fixture).
-//
-// VERDICT: property-pinned (NOT fixture-pinned).
-//
-// Why: vendor/better-auth upstream contains NO fixed (deterministic) JWE
-// compact-token vector. Every JWE leg in
-// packages/better-auth/src/crypto/secret-rotation.test.ts (JWE
-// multi-secret describe, lines 186-320) mints its token live via
-// symmetricEncodeJWT -> jose EncryptJWT (random CEK IV per encryption) with
-// .setJti(crypto.randomUUID()) (jwt.ts:104-109), then decodes it in the same
-// test. A grep for fixed compact tokens (eyJ... literals) across the crypto
-// and cookies upstream test files finds nothing mintable-deterministic to
-// pin a Go decode against: any hardcoded token would embed one random IV.
-// The only fixed vectors upstream are key-level (HKDF output, kid
-// thumbprint), already pinned by TestDeriveEncryptionSecretVectors and
-// TestOctThumbprintVector in jwe_test.go.
-//
-// So instead this file pins DETERMINISTIC properties across 50 iterations:
-//   - protected header is exactly {alg,enc,kid} (upstream EncryptJWT sets
-//     only those, jwt.ts:105), with alg=dir, enc=A256CBC-HS512, and
-//     kid == OctThumbprint(DeriveEncryptionSecret(secret, salt));
-//   - round-trip payload equality on every iteration;
-//   - distinct full tokens / ciphertext segments (randomness alive — the
-//     reason a fixed fixture cannot exist);
-//   - cross-stack decode: a crypto-stack-minted token verifies via the
-//     cookies stack (VerifySessionCacheJWE) and a cookies-stack-minted
-//     token decodes via the crypto stack (SymmetricDecodeJWT), proving the
-//     two JWE stacks agree on keys despite separate issue paths
-//     (P11 two-stacks note). All C2 tests use the session salt so the kid
-//     pin doubles as the cross-stack binding proof.
+// C2: upstream has no deterministic JWE vector (random IV/jti per mint @5468e6bf); pin deterministic properties across 50 mints.
 
 import (
 	"encoding/base64"
@@ -79,7 +48,7 @@ func c2WantKid(t *testing.T) string {
 	return kid
 }
 
-// Header is exactly {alg,enc,kid} with the thumbprint kid, on all 50 mints.
+// Header exactly {alg,enc,kid} with thumbprint kid (50 mints).
 func TestJWEDeterminism_JWEHeaderExactAndKidPinned(t *testing.T) {
 	wantKid := c2WantKid(t)
 	for i := 0; i < 50; i++ {
@@ -103,8 +72,7 @@ func TestJWEDeterminism_JWEHeaderExactAndKidPinned(t *testing.T) {
 	}
 }
 
-// Every mint round-trips its payload, and all 50 tokens differ (IV/jti
-// randomness alive — the reason no fixed upstream fixture exists).
+// Round-trip + randomness alive (no fixed fixture possible).
 func TestJWEDeterminism_JWERoundTripPayloadEqualityAndRandomness(t *testing.T) {
 	seenTokens := make(map[string]struct{}, 50)
 	seenCiphertext := make(map[string]struct{}, 50)
@@ -173,8 +141,7 @@ func TestJWEDeterminism_JWECrossStackCryptoToCookies(t *testing.T) {
 	}
 }
 
-// cookies-stack-minted token decodes via the crypto stack (which tolerates
-// the cookies issuer's typ/cty header params).
+// Cookies-minted token decodes via crypto stack.
 func TestJWEDeterminism_JWECrossStackCookiesToCrypto(t *testing.T) {
 	session, user := c2SessionUser()
 	token, err := cookies.CreateSessionCacheJWE(c2Secret, session, user, "1", 5*time.Minute)

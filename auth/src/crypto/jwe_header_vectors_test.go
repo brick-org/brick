@@ -1,13 +1,6 @@
 package crypto
 
-// G11 coverage for PARITY_V2.md second-pass P11 R6 + G8 (upstream
-// crypto/jwt.ts @ 5468e6bf):
-//   - R6: SymmetricDecodeJWT must gate A256GCM key truncation on the token's
-//     enc (the cookies/jwt.go decryptionKeys policy), not try both key widths
-//     unconditionally.
-//   - G8: SymmetricEncodeJWT must emit exactly {alg,enc,kid} (upstream
-//     EncryptJWT sets only those, jwt.ts:104-109) — no typ/cty — while
-//     SymmetricDecodeJWT stays tolerant of legacy typ/cty-bearing tokens.
+// G11: R6 enc-gated truncation + G8 exact {alg,enc,kid} (upstream jwt.ts @5468e6bf).
 
 import (
 	"encoding/base64"
@@ -95,7 +88,7 @@ func g11Payload() map[string]any {
 	}
 }
 
-// G8: issuance must set exactly {alg,enc,kid} — no typ/cty.
+// G8: issuance exactly {alg,enc,kid}.
 func TestJWE_JWEHeaderExactness(t *testing.T) {
 	token, err := SymmetricEncodeJWT(map[string]any{"foo": "bar"}, g11SecretA, g11Salt, 3600)
 	if err != nil {
@@ -130,7 +123,7 @@ func TestJWE_JWEHeaderExactness(t *testing.T) {
 	}
 }
 
-// G8 interop: decode stays tolerant of legacy typ/cty-bearing tokens.
+// G8: decode tolerates legacy typ/cty.
 func TestJWE_JWEDecodeTolerantOfLegacyTypCty(t *testing.T) {
 	token := g11MintManual(t, jose.A256CBC_HS512, g11SecretA, g11Salt, g11Payload(), true, true)
 	if got := g11ProtectedHeader(t, token); got["typ"] == nil || got["cty"] == nil {
@@ -145,8 +138,7 @@ func TestJWE_JWEDecodeTolerantOfLegacyTypCty(t *testing.T) {
 	}
 }
 
-// R6: A256GCM-wrapped tokens (truncated 32-byte key, thumbprint kid) decode;
-// the issued A256CBC-HS512 shape still round-trips.
+// R6: A256GCM (32-byte key) decodes; issued A256CBC-HS512 round-trips.
 func TestJWE_JWEA256GCMCompat(t *testing.T) {
 	gcm := g11MintManual(t, jose.A256GCM, g11SecretA, g11Salt, g11Payload(), true, false)
 	if got := g11ProtectedHeader(t, gcm); got["enc"] != string(jose.A256GCM) {
@@ -159,7 +151,7 @@ func TestJWE_JWEA256GCMCompat(t *testing.T) {
 	if decoded["foo"] != "bar" {
 		t.Fatalf("decoded = %v, want foo=bar", decoded)
 	}
-	// Kid-less A256GCM token falls back across rotated secrets.
+	// Kid-less A256GCM falls back across rotated secrets.
 	kidLess := g11MintManual(t, jose.A256GCM, g11SecretB, g11Salt, g11Payload(), false, false)
 	cfg := SecretConfig{
 		Keys:           map[int]string{2: g11SecretA, 1: g11SecretB},
@@ -172,7 +164,7 @@ func TestJWE_JWEA256GCMCompat(t *testing.T) {
 	if decoded["foo"] != "bar" {
 		t.Fatalf("decoded = %v, want foo=bar", decoded)
 	}
-	// Issued shape still round-trips alongside.
+	// Issued shape still round-trips.
 	issued, err := SymmetricEncodeJWT(map[string]any{"foo": "bar"}, g11SecretA, g11Salt, 3600)
 	if err != nil {
 		t.Fatal(err)
@@ -186,8 +178,7 @@ func TestJWE_JWEA256GCMCompat(t *testing.T) {
 	}
 }
 
-// R6: key-width selection is gated on enc — full 64-byte key except for
-// A256GCM payloads, which use the 32-byte truncation.
+// R6: key width gated on enc (64B, 32B truncation for A256GCM).
 func TestJWE_JWEDecryptionKeysEncGated(t *testing.T) {
 	full, err := DeriveEncryptionSecret(g11SecretA, g11Salt)
 	if err != nil {

@@ -1,24 +1,6 @@
 package cookies
 
-// AUTH-V10-02 — adversarial and cross-language conformance (tests only).
-//
-// This file owns the cookies package's Wave 10 adversarial coverage: session
-// refresh races with secret rotation during verification, cookie chunking
-// bursts and caps, Sign/Verify round-trip fuzzing, session JWE decoder
-// fuzzing, and chunk-index parser fuzzing.
-//
-// Upstream references (pinned Better Auth v1.7.5 at 5468e6bf):
-//   - packages/better-auth/src/cookies/cookies.test.ts ("Cookie Chunking"
-//     chunk-size gate, cleanup-on-delete, no-chunk-under-limit, too-large
-//     skip) and cookie-utils.ts (parseCookies, parseCookieChunkIndex,
-//     getChunkedCookie, setRequestCookie, parseSetCookieHeader)
-//   - packages/better-auth/src/cookies/index.ts (setCookieCache/
-//     decodeCookieCache, JWT + JWE branches)
-//   - packages/better-auth/src/crypto/jwt.ts (signSecretJWT/verifySecretJWT,
-//     symmetricEncodeJWT/symmetricDecodeJWT, deriveEncryptionSecret)
-//
-// Work limits pinned for this file: fuzz secrets ≤256B, values ≤4KiB, tokens
-// ≤64KiB; larger inputs skip. No production code is changed here.
+// AUTH-V10-02 adversarial conformance (tests only; upstream v1.7.5 @5468e6bf; fuzz caps: secrets ≤256B, values ≤4KiB, tokens ≤64KiB).
 
 import (
 	"strings"
@@ -27,12 +9,8 @@ import (
 	"time"
 )
 
-// Session refresh under secret rotation: a token minted with the old secret
-// keeps verifying while it is retained (in either order), a token minted
-// with the new secret verifies under the rotated set, and concurrent
-// refresh/verify traffic across the rotation is race-clean with exact
-// single-winner rotation semantics (no cross-secret confusion).
-func TestSessionStress_SessionRefreshRaceWithRotation(t *testing.T) {
+// Session refresh under secret rotation stays race-clean with single-winner semantics.
+func TestCookiesStress_SessionRefreshRaceWithRotation(t *testing.T) {
 	oldSecret, newSecret := "w10-old-secret", "w10-new-secret"
 	session := map[string]any{"id": "s1", "token": "tok-w10", "userId": "u1"}
 	user := map[string]any{"id": "u1", "email": "w10@example.com"}
@@ -98,10 +76,8 @@ func TestSessionStress_SessionRefreshRaceWithRotation(t *testing.T) {
 	}
 }
 
-// Chunking bursts: concurrent chunk/join traffic is race-clean, over-cap
-// values keep erroring (callers skip the cache and fall back to the
-// database), and exactly-at-cap values keep fitting.
-func TestWave10_ChunkBurstAndCap(t *testing.T) {
+// Chunking bursts stay race-clean; over-cap errors, at-cap fits.
+func TestCookiesStress_ChunkBurstAndCap(t *testing.T) {
 	name := "better-auth.session_data"
 	attrs := DefaultAttributes(true, "")
 	budget := MaxValueSizeFor(name, attrs)
@@ -124,7 +100,6 @@ func TestWave10_ChunkBurstAndCap(t *testing.T) {
 				errs <- "chunk burst reassembled wrong"
 				return
 			}
-			// Wire sizing holds on every burst value.
 			for chunkName, v := range chunks {
 				if line := attrs.ToHTTPCookie(chunkName, v).String(); len(line) > MaxCookieSize {
 					errs <- "burst chunk over wire size"
@@ -143,9 +118,7 @@ func TestWave10_ChunkBurstAndCap(t *testing.T) {
 	}
 }
 
-// FuzzWave10_SignVerifyRoundTrip fuzzes the value.hmac Sign/Verify wire
-// format shared with TypeScript: capped inputs round-trip byte-exactly,
-// wrong-secret and tampered inputs fail closed, and parsing never panics.
+// Fuzzes value.hmac Sign/Verify wire format shared with TypeScript.
 func FuzzWave10_SignVerifyRoundTrip(f *testing.F) {
 	f.Add("w10-secret", "hello")
 	f.Add("Jefe", "what do ya want for nothing?")
@@ -163,16 +136,11 @@ func FuzzWave10_SignVerifyRoundTrip(f *testing.F) {
 		if !ok || back != value {
 			t.Fatalf("round trip = %q, %v", back, ok)
 		}
-		// A wrong secret fails closed. (Note: secret+"\x00" is NOT a
-		// wrong secret — HMAC zero-pads short keys to the block size, so a
-		// trailing NUL pads identically. Flip a significant byte instead.)
+		// Wrong secret fails closed (secret+"\x00" pads identically via HMAC zero-pad).
 		if _, ok := Verify("wrong-"+secret, signed); ok {
 			t.Fatal("wrong secret verified")
 		}
-		// Flipping the first signature character must break verification
-		// (first-char flips are sound: every base64 leading-char change
-		// alters decoded bytes, unlike tail chars whose low bits may be
-		// padding-ignored).
+		// First-char flip must break verification (sound: alters decoded bytes).
 		if idx := strings.LastIndexByte(signed, '.'); idx >= 0 && idx+1 < len(signed) {
 			mut := signed[:idx+1] + flipB64CharW10(signed[idx+1:])
 			if mback, ok := Verify(secret, mut); ok && mback == value {
@@ -182,9 +150,7 @@ func FuzzWave10_SignVerifyRoundTrip(f *testing.F) {
 	})
 }
 
-// FuzzWave10_SessionCacheJWE fuzzes the 5-part compact JWE decoder: capped
-// inputs never panic, accepted payloads always carry session/user, and
-// mutating any segment of an accepted token breaks verification.
+// Fuzzes 5-part compact JWE decoder: no panic, session/user on accept.
 func FuzzWave10_SessionCacheJWE(f *testing.F) {
 	secret := "w10-fuzz-secret"
 	session := map[string]any{"id": "s1"}
@@ -230,9 +196,7 @@ func FuzzWave10_SessionCacheJWE(f *testing.F) {
 	})
 }
 
-// FuzzWave10_ParseChunkIndex fuzzes the chunk-index parser: it never panics,
-// accepted indexes are canonical (no leading zeros, no signs, no junk), and
-// decoding is deterministic.
+// Fuzzes chunk-index parser: no panic, canonical deterministic decode.
 func FuzzWave10_ParseChunkIndex(f *testing.F) {
 	f.Add("sess", "sess.0")
 	f.Add("sess", "sess.01")
@@ -254,7 +218,6 @@ func FuzzWave10_ParseChunkIndex(f *testing.F) {
 		if idx < 0 {
 			t.Fatalf("negative chunk index %d for %q", idx, name)
 		}
-		// Canonical form only: "<name>.<digits without leading zeros>".
 		want := cookieName + "." + itoaW10(idx)
 		if name != want {
 			t.Fatalf("non-canonical chunk name %q accepted (want %q)", name, want)

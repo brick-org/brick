@@ -28,10 +28,7 @@ func jwtTestData() (session, user map[string]any) {
 	}
 }
 
-// TestCreateVerifySessionCacheJWT_RoundTrip pins the upstream default JWT
-// cache shape (cookies/index.ts setCookieCache/decodeCookieCache, HS256 with
-// the auth secret): issue with the current secret, verify with rotation, and
-// recover session/user/version plus the outer expiry.
+// Upstream default JWT cache shape (cookies/index.ts HS256): issue, rotation verify, payload + expiry.
 func TestCreateVerifySessionCacheJWT_RoundTrip(t *testing.T) {
 	session, user := jwtTestData()
 	token, err := CreateSessionCacheJWT("secret-one", session, user, "1", 5*time.Minute)
@@ -58,8 +55,7 @@ func TestCreateVerifySessionCacheJWT_RoundTrip(t *testing.T) {
 	}
 }
 
-// TestVerifySessionCacheJWT_Rejects pins the fail-closed matrix for the JWT
-// cache: tampered payloads, wrong algorithms, and expired tokens never verify.
+// Fail-closed matrix: tampered, wrong alg, expired never verify.
 func TestVerifySessionCacheJWT_Rejects(t *testing.T) {
 	session, user := jwtTestData()
 	token, err := CreateSessionCacheJWT("secret-one", session, user, "", 5*time.Minute)
@@ -87,9 +83,7 @@ func TestVerifySessionCacheJWT_Rejects(t *testing.T) {
 	}
 }
 
-// TestCreateSessionCacheJWT_DefaultWindow pins the upstream caller default
-// (cookies/index.ts passes `maxAge || 60 * 5`): a non-positive window issues
-// with the 5-minute default instead of an already-expired token.
+// Upstream caller default `maxAge || 60*5`: non-positive issues with 5-minute default.
 func TestCreateSessionCacheJWT_DefaultWindow(t *testing.T) {
 	session, user := jwtTestData()
 	token, err := CreateSessionCacheJWT("secret-one", session, user, "", 0)
@@ -105,10 +99,7 @@ func TestCreateSessionCacheJWT_DefaultWindow(t *testing.T) {
 	}
 }
 
-// TestCreateVerifySessionCacheJWE_RoundTrip pins the upstream JWE cache shape
-// (cookies/index.ts jwe branch, crypto/jwt.ts symmetricEncodeJWT): dir /
-// A256CBC-HS512 with an HKDF-derived key whose thumbprint is the kid. The kid
-// must select the right secret under rotation, and unknown kids fail closed.
+// Upstream JWE cache shape (dir/A256CBC-HS512, HKDF key, thumbprint kid).
 func TestCreateVerifySessionCacheJWE_RoundTrip(t *testing.T) {
 	session, user := jwtTestData()
 	token, err := CreateSessionCacheJWE("secret-one", session, user, "7", 5*time.Minute)
@@ -139,8 +130,7 @@ func TestCreateVerifySessionCacheJWE_RoundTrip(t *testing.T) {
 	}
 }
 
-// TestSessionCacheJWEPayloadShape pins the protected-header contract upstream
-// relies on for kid-selected rotation (dir / A256CBC-HS512 / thumbprint kid).
+// Protected-header contract for kid-selected rotation.
 func TestSessionCacheJWEPayloadShape(t *testing.T) {
 	session, user := jwtTestData()
 	token, err := CreateSessionCacheJWE("header-secret", session, user, "", time.Minute)

@@ -1,14 +1,6 @@
 package cookies
 
-// v1 ports of the getCookieCache expiry and JWE multi-secret cases in
-// vendor/better-auth/packages/better-auth/src/cookies/cookies.test.ts and
-// the JWE leg of crypto/secret-rotation.test.ts.
-//
-// Upstream encodes with an arbitrary test salt ("test-salt"); this package
-// exposes per-purpose codecs (session salt here), so the vectors below use
-// the session codec against rotated secret lists — same code path (dir /
-// A256CBC-HS512, HKDF key, thumbprint kid, kid-less fallback, unknown-kid
-// fail-closed, A256GCM acceptance).
+// v1 ports: cookies.test.ts getCookieCache expiry + secret-rotation.test.ts JWE leg (session codec, rotated secrets).
 
 import (
 	"encoding/json"
@@ -43,7 +35,7 @@ func v1CachePayload(expiresAt time.Time) map[string]any {
 	}
 }
 
-func TestV1_CompactCacheFreshSnapshot(t *testing.T) {
+func TestCacheExpiry_CompactCacheFreshSnapshot(t *testing.T) {
 	value, err := CreateCompactCookieCache("better-auth.secret", v1CachePayload(time.Now().Add(time.Hour)), 5*time.Minute)
 	if err != nil {
 		t.Fatal(err)
@@ -58,7 +50,7 @@ func TestV1_CompactCacheFreshSnapshot(t *testing.T) {
 	}
 }
 
-func TestV1_CompactCacheEmbeddedSessionExpired(t *testing.T) {
+func TestCacheExpiry_CompactCacheEmbeddedSessionExpired(t *testing.T) {
 	value, err := CreateCompactCookieCache("better-auth.secret", v1CachePayload(time.Now().Add(-time.Minute)), 5*time.Minute)
 	if err != nil {
 		t.Fatal(err)
@@ -70,7 +62,7 @@ func TestV1_CompactCacheEmbeddedSessionExpired(t *testing.T) {
 	}
 }
 
-func TestV1_CompactCacheWindowElapsed(t *testing.T) {
+func TestCacheExpiry_CompactCacheWindowElapsed(t *testing.T) {
 	value, err := CreateCompactCookieCache("better-auth.secret", v1CachePayload(time.Now().Add(time.Hour)), -time.Minute)
 	if err != nil {
 		t.Fatal(err)
@@ -80,23 +72,22 @@ func TestV1_CompactCacheWindowElapsed(t *testing.T) {
 	}
 }
 
-func TestV1_CompactCacheInvalidAndMissingSecret(t *testing.T) {
+func TestCacheExpiry_CompactCacheInvalidAndMissingSecret(t *testing.T) {
 	value, err := CreateCompactCookieCache("better-auth.secret", v1CachePayload(time.Now().Add(time.Hour)), 5*time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Wrong secret: upstream "should return null if the cookie is invalid".
+	// Upstream "should return null if the cookie is invalid".
 	if _, _, err := VerifyCompactCookieCache([]string{"wrong-secret"}, value); err == nil {
 		t.Error("wrong secret accepted")
 	}
-	// No secret configured: upstream "should throw an error if the secret
-	// is not provided".
+	// Upstream "should throw an error if the secret is not provided".
 	if _, _, err := VerifyCompactCookieCache(nil, value); err == nil {
 		t.Error("missing secret accepted")
 	}
 }
 
-func TestV1_JWTCacheInvalidToken(t *testing.T) {
+func TestCacheExpiry_JWTCacheInvalidToken(t *testing.T) {
 	// Upstream "should return null for invalid JWT token".
 	if _, _, err := VerifySessionCacheJWT([]string{"better-auth.secret"}, "invalid.jwt.token"); err == nil {
 		t.Error("invalid JWT accepted")
@@ -106,7 +97,7 @@ func TestV1_JWTCacheInvalidToken(t *testing.T) {
 	}
 }
 
-func TestV1_JWECacheMismatchedKidNoFallback(t *testing.T) {
+func TestCacheExpiry_JWECacheMismatchedKidNoFallback(t *testing.T) {
 	// Upstream "rejects token with mismatched kid (no fallback)".
 	session, user := jwtTestData()
 	token, err := CreateSessionCacheJWE("secret-a-at-least-32-chars-long!!", session, user, "1", 5*time.Minute)
@@ -118,9 +109,8 @@ func TestV1_JWECacheMismatchedKidNoFallback(t *testing.T) {
 	}
 }
 
-func TestV1_JWECacheKidLessFallbackTriesAllSecrets(t *testing.T) {
-	// Upstream "decode kid-less JWT tries all secrets (fallback)": a token
-	// without kid must still decrypt when a non-first secret matches.
+func TestCacheExpiry_JWECacheKidLessFallbackTriesAllSecrets(t *testing.T) {
+	// Upstream "decode kid-less JWT tries all secrets (fallback)".
 	secretA := "secret-a-at-least-32-chars-long!!"
 	secretB := "secret-b-at-least-32-chars-long!!"
 	now := time.Now().Unix()
@@ -155,7 +145,6 @@ func TestV1_JWECacheKidLessFallbackTriesAllSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The matching secret is second: only the fallback loop finds it.
 	got, _, err := VerifySessionCacheJWE([]string{secretA, secretB}, token)
 	if err != nil {
 		t.Fatalf("kid-less fallback failed: %v", err)
@@ -168,9 +157,8 @@ func TestV1_JWECacheKidLessFallbackTriesAllSecrets(t *testing.T) {
 	}
 }
 
-func TestV1_JWECacheAcceptsA256GCM(t *testing.T) {
-	// Upstream jwtDecryptOpts accepts A256GCM payloads alongside the issued
-	// A256CBC-HS512 ones; the derived key truncates to 32 bytes there.
+func TestCacheExpiry_JWECacheAcceptsA256GCM(t *testing.T) {
+	// Upstream jwtDecryptOpts accepts A256GCM alongside A256CBC-HS512 (32-byte truncation).
 	secret := "gcm-compat-secret-at-least-32-chars!"
 	now := time.Now().Unix()
 	plaintext, err := json.Marshal(map[string]any{

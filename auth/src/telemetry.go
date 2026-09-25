@@ -8,35 +8,16 @@ import (
 )
 
 // Telemetry in this runtime (AUTH-F6-03).
-//
-// Pinned upstream: createTelemetry in
-// vendor/better-auth/packages/telemetry/src/index.ts.
-//
-// Upstream createTelemetry returns a noop publisher when neither a telemetry
-// endpoint (BETTER_AUTH_TELEMETRY_ENDPOINT) nor a custom track function is
-// configured; otherwise it POSTs events (or calls customTrack) with an
-// init-event fingerprint (config/runtime/database/framework fingerprints plus
-// an anonymous project ID) once enabled.
-//
-// EXCLUSION (explicit, privacy/platform): the Go runtime performs no network
-// publication and collects no host fingerprints (no endpoint plumbing, no
-// custom-track hook, no project-ID hashing). When enabled, construction
-// publishes a local "init" diagnostic and AuthContext.PublishTelemetry
-// reports per-event diagnostics via Options.Logger (level-gated; Debug logs
-// the full event). What IS preserved exactly:
-//   - event shape: TelemetryEvent{Type, AnonymousID, Payload} (upstream
-//     TelemetryEvent).
-//   - disable controls: publish is a noop unless enabled via
-//     Options.Telemetry.Enabled OR the BETTER_AUTH_TELEMETRY env var.
-//   - debug controls: payloads log only when Debug is set (option or
-//     BETTER_AUTH_TELEMETRY_DEBUG env).
+// EXCLUSION: no network publication and no host fingerprints; when enabled,
+// construction publishes a local "init" diagnostic via Options.Logger.
+// What IS preserved exactly: event shape TelemetryEvent{Type, AnonymousID,
+// Payload}; enable via Options.Telemetry.Enabled OR BETTER_AUTH_TELEMETRY;
+// debug via Debug or BETTER_AUTH_TELEMETRY_DEBUG.
 //
 // Upstream TypeScript names: createTelemetry, publish.
 
-// telemetryBoolEnv mirrors getBooleanEnvVar
-// (vendor/.../core/src/env/env-impl.ts:89-94): an unset or empty variable
-// yields the fallback; otherwise any value except "0" and case-insensitive
-// "false" enables.
+// telemetryBoolEnv mirrors getBooleanEnvVar: an unset or empty variable
+// yields the fallback; otherwise any value except "0" and "false" enables.
 func telemetryBoolEnv(key string, fallback bool) bool {
 	value, ok := os.LookupEnv(key)
 	if !ok || value == "" {
@@ -62,11 +43,7 @@ func telemetryEnabled(opts Options) bool {
 }
 
 // newTelemetryPublisher returns the AuthContext.PublishTelemetry function: a
-// no-network local diagnostic (see the package exclusion note above). When
-// telemetry is disabled it discards events; when enabled it notes the event
-// type via Options.Logger (level-gated info), and with Debug it logs the
-// full event shape (type, anonymous ID, payload) as well. It never fails the
-// caller.
+// no-network local diagnostic. It never fails the caller.
 func newTelemetryPublisher(opts Options) func(types.TelemetryEvent) {
 	if !telemetryEnabled(opts) {
 		return func(types.TelemetryEvent) {}
@@ -85,10 +62,7 @@ func newTelemetryPublisher(opts Options) func(types.TelemetryEvent) {
 }
 
 // telemetryInitPayload builds the local "init" diagnostic payload: plugin
-// IDs plus the resolved rate-limit storage backend. Upstream's init payload
-// carries config/runtime/database/framework fingerprints gathered from the
-// host environment; the Go runtime reports only what it configures (part of
-// the no-host-fingerprinting exclusion above).
+// IDs plus the resolved rate-limit storage backend.
 func telemetryInitPayload(opts Options) map[string]any {
 	pluginIDs := make([]string, 0, len(opts.Plugins))
 	for _, p := range opts.Plugins {

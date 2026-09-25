@@ -1,14 +1,6 @@
 package cookies
 
-// v1 ports of vendor/better-auth/packages/better-auth/src/cookies/
-// cookies.test.ts cases owned by this package: Set-Cookie response parsing
-// (parseSetCookieHeader/toCookieOptions), request-cookie writes
-// (setRequestCookie/applySetCookies), secure-prefix stripping, expiry, and
-// separator tolerance. Integration cases (sign-in flows, cookie cache
-// issuance, chunked multi-cookie writes, social/account sync, JWT-plugin
-// JWKS paths) belong to the route/plugin layers and are intentionally not
-// ported here; chunked writes are an explicit v1 exclusion (authoritative
-// lookup fallback instead).
+// v1 ports of cookies.test.ts owned by this package (parse, writes, prefix, expiry, separators).
 
 import (
 	"net/http"
@@ -17,7 +9,7 @@ import (
 	"time"
 )
 
-func TestV1_ParseSetCookieExpiresWithCommas(t *testing.T) {
+func TestSetCookie_ParseSetCookieExpiresWithCommas(t *testing.T) {
 	m := ParseSetCookieHeader("a=1; Expires=Wed, 21 Oct 2015 07:28:00 GMT; Path=/, b=2; Expires=Thu, 22 Oct 2015 07:28:00 GMT; Path=/")
 	if m["a"].Value != "1" || m["b"].Value != "2" {
 		t.Fatalf("values = %q %q", m["a"].Value, m["b"].Value)
@@ -30,14 +22,14 @@ func TestV1_ParseSetCookieExpiresWithCommas(t *testing.T) {
 	}
 }
 
-func TestV1_ParseSetCookieDecodesValues(t *testing.T) {
+func TestSetCookie_ParseSetCookieDecodesValues(t *testing.T) {
 	m := ParseSetCookieHeader("token=hello%20world%3Dfoo; Path=/")
 	if m["token"].Value != "hello world=foo" {
 		t.Fatalf("value = %q", m["token"].Value)
 	}
 }
 
-func TestV1_ParseSetCookieExpiresThenBare(t *testing.T) {
+func TestSetCookie_ParseSetCookieExpiresThenBare(t *testing.T) {
 	m := ParseSetCookieHeader("session=xyz; Expires=Mon, 01 Jan 2026 00:00:00 GMT, token=abc")
 	if m["session"].Value != "xyz" {
 		t.Fatalf("session = %q", m["session"].Value)
@@ -50,7 +42,7 @@ func TestV1_ParseSetCookieExpiresThenBare(t *testing.T) {
 	}
 }
 
-func TestV1_ParseSetCookieGMTSubstring(t *testing.T) {
+func TestSetCookie_ParseSetCookieGMTSubstring(t *testing.T) {
 	m := ParseSetCookieHeader("session_data=testsessiondata; Path=/; Expires=Mon, 02 Mar 2026 05:42:16 GMT; Max-Age=300; Secure; HttpOnly; SameSite=lax")
 	if m["session_data"].Value != "testsessiondata" {
 		t.Fatalf("value = %q", m["session_data"].Value)
@@ -63,14 +55,14 @@ func TestV1_ParseSetCookieGMTSubstring(t *testing.T) {
 	}
 }
 
-func TestV1_ParseSetCookieNonStandardExpires(t *testing.T) {
+func TestSetCookie_ParseSetCookieNonStandardExpires(t *testing.T) {
 	m := ParseSetCookieHeader("a=1; Expires=0, b=2")
 	if m["a"].Value != "1" || m["b"].Value != "2" {
 		t.Fatalf("split on non-standard Expires failed: %v", m)
 	}
 }
 
-func TestV1_ParseSetCookieRFC850Expires(t *testing.T) {
+func TestSetCookie_ParseSetCookieRFC850Expires(t *testing.T) {
 	m := ParseSetCookieHeader("a=1; Expires=Sunday, 06-Nov-94 08:49:37 GMT, b=2")
 	if m["a"].Value != "1" || m["b"].Value != "2" {
 		t.Fatalf("RFC 850 split failed: %v", m)
@@ -80,7 +72,7 @@ func TestV1_ParseSetCookieRFC850Expires(t *testing.T) {
 	}
 }
 
-func TestV1_ParseSetCookieAsctimeExpires(t *testing.T) {
+func TestSetCookie_ParseSetCookieAsctimeExpires(t *testing.T) {
 	m := ParseSetCookieHeader("a=1; Expires=Sun Nov 6 08:49:37 1994, b=2")
 	if m["a"].Value != "1" || m["b"].Value != "2" {
 		t.Fatalf("asctime split failed: %v", m)
@@ -90,7 +82,7 @@ func TestV1_ParseSetCookieAsctimeExpires(t *testing.T) {
 	}
 }
 
-func TestV1_ParseSetCookieMixed(t *testing.T) {
+func TestSetCookie_ParseSetCookieMixed(t *testing.T) {
 	m := ParseSetCookieHeader("a=1; Path=/; HttpOnly, b=2; Expires=Mon, 01 Jan 2026 00:00:00 GMT; Secure, c=3; SameSite=Lax")
 	if m["a"].Value != "1" || m["b"].Value != "2" || m["c"].Value != "3" {
 		t.Fatalf("mixed = %v", m)
@@ -103,7 +95,7 @@ func TestV1_ParseSetCookieMixed(t *testing.T) {
 	}
 }
 
-func TestV1_ParseSetCookiePartitioned(t *testing.T) {
+func TestSetCookie_ParseSetCookiePartitioned(t *testing.T) {
 	m := ParseSetCookieHeader("session=xyz; Path=/; Secure; HttpOnly; SameSite=None; Partitioned")
 	a := m["session"]
 	if a.Value != "xyz" || !a.Secure || !a.HttpOnly || a.SameSite != http.SameSiteNoneMode || !a.Partitioned {
@@ -111,7 +103,7 @@ func TestV1_ParseSetCookiePartitioned(t *testing.T) {
 	}
 }
 
-func TestV1_ToCookieOptions(t *testing.T) {
+func TestSetCookie_ToCookieOptions(t *testing.T) {
 	attr := ParseSetCookieHeader("session=xyz; Path=/auth; Expires=Mon, 01 Jan 2026 00:00:00 GMT; Max-Age=300; Secure; HttpOnly; SameSite=None; Partitioned")["session"]
 	got := attr.ToAttributes()
 	if got.Path != "/auth" {
@@ -128,7 +120,7 @@ func TestV1_ToCookieOptions(t *testing.T) {
 	}
 }
 
-func TestV1_StripSecureCookiePrefixEdges(t *testing.T) {
+func TestSetCookie_StripSecureCookiePrefixEdges(t *testing.T) {
 	if got := StripSecureCookiePrefix(""); got != "" {
 		t.Errorf("empty = %q", got)
 	}
@@ -138,7 +130,7 @@ func TestV1_StripSecureCookiePrefixEdges(t *testing.T) {
 	if got := StripSecureCookiePrefix(HostCookiePrefix); got != "" {
 		t.Errorf("exact host prefix = %q", got)
 	}
-	// __Secure- wins over __Host- when both lead.
+	// __Secure- wins over __Host-.
 	if got := StripSecureCookiePrefix(SecureCookiePrefix + HostCookiePrefix + "test"); got != HostCookiePrefix+"test" {
 		t.Errorf("priority = %q", got)
 	}
@@ -150,7 +142,7 @@ func TestV1_StripSecureCookiePrefixEdges(t *testing.T) {
 	}
 }
 
-func TestV1_SetRequestCookieHeader(t *testing.T) {
+func TestSetCookie_SetRequestCookieHeader(t *testing.T) {
 	if got := SetRequestCookieHeader("", "better-auth.session_token", "abc"); got != "better-auth.session_token=abc" {
 		t.Errorf("empty header = %q", got)
 	}
@@ -171,7 +163,7 @@ func TestV1_SetRequestCookieHeader(t *testing.T) {
 	}
 }
 
-func TestV1_ApplySetCookiesHeader(t *testing.T) {
+func TestSetCookie_ApplySetCookiesHeader(t *testing.T) {
 	if got := ApplySetCookiesHeader("", []string{"a=1; Path=/"}); got != "a=1" {
 		t.Errorf("empty merge = %q", got)
 	}
@@ -192,7 +184,7 @@ func TestV1_ApplySetCookiesHeader(t *testing.T) {
 	}
 }
 
-func TestV1_ExpireCookie(t *testing.T) {
+func TestSetCookie_ExpireCookie(t *testing.T) {
 	c := ExpireCookie("test", Attributes{Path: "/custom", HttpOnly: true})
 	if c.Name != "test" || c.Value != "" {
 		t.Fatalf("expiry identity = %+v", c)
@@ -205,13 +197,13 @@ func TestV1_ExpireCookie(t *testing.T) {
 	}
 }
 
-func TestV1_ScrubSetCookieEntries(t *testing.T) {
+func TestSetCookie_ScrubSetCookieEntries(t *testing.T) {
 	entries := []string{"keep=1; Path=/", "target=valid; Path=/", "target.0=chunk; Path=/"}
 	got := ScrubSetCookieEntries(entries, "target")
 	if len(got) != 1 || got[0] != "keep=1; Path=/" {
 		t.Fatalf("scrubbed = %v", got)
 	}
-	// Expiring after the scrub leaves exactly one clearing entry.
+	// Expiring after scrub leaves one clearing entry.
 	expired := ExpireCookie("target", Attributes{Path: "/"})
 	got = append(got, expired.Name+"=; Path="+expired.Path)
 	joined := strings.Join(got, ", ")
@@ -220,7 +212,7 @@ func TestV1_ScrubSetCookieEntries(t *testing.T) {
 	}
 }
 
-func TestV1_SemicolonOnlySeparators(t *testing.T) {
+func TestSetCookie_SemicolonOnlySeparators(t *testing.T) {
 	parsed := ParseRequestCookies("preference=dark;better-auth.session_token=token-123")
 	v, ok := GetSessionCookie(parsed, "", "")
 	if !ok || v != "token-123" {
@@ -234,7 +226,7 @@ func TestV1_SemicolonOnlySeparators(t *testing.T) {
 	}
 }
 
-func TestV1_NonCanonicalChunkNamesIgnored(t *testing.T) {
+func TestSetCookie_NonCanonicalChunkNamesIgnored(t *testing.T) {
 	for _, name := range []string{
 		"better-auth.session_data.0junk",
 		"better-auth.session_data.nested.0",
@@ -247,9 +239,8 @@ func TestV1_NonCanonicalChunkNamesIgnored(t *testing.T) {
 	}
 }
 
-func TestV1_CookieOptionsFromConfig(t *testing.T) {
-	// Mirrors "should return correct cookie options based on configuration":
-	// secure + custom prefix + cross-subdomain domain.
+func TestSetCookie_CookieOptionsFromConfig(t *testing.T) {
+	// Mirrors upstream cookie-options config case.
 	name := CookieName("test-prefix", "session_token", true, "")
 	if !strings.Contains(name, "test-prefix.session_token") || !strings.HasPrefix(name, SecureCookiePrefix) {
 		t.Fatalf("name = %q", name)

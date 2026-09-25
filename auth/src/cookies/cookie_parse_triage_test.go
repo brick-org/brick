@@ -1,12 +1,6 @@
 package cookies
 
-// Triage ports for vendor/better-auth
-// packages/better-auth/src/cookies/cookies.test.ts residual cases owned by
-// this package: exact-vector parseCookies cases (separators, padding,
-// name/value validation, CR/LF, first-=) plus the chunked-compact-cache READ
-// round-trip. Chunked multi-cookie WRITES stay excluded per SCOPE.md (read
-// path only); route-integration (sign-in/sign-up issuance), JWKS/jwt-plugin,
-// social/account-sync, and sensitive-middleware legs belong to other lanes.
+// Triage ports: cookies.test.ts residual parseCookies cases + chunked-compact-cache READ round-trip.
 
 import (
 	"strings"
@@ -14,9 +8,8 @@ import (
 	"time"
 )
 
-// Upstream: "parseCookies tolerates mixed `;`, `; `, and `;\t` separators"
-// ("a=1; b=2;c=3;\td=4" yields all four pairs).
-func TestTriageV1_ParseCookiesMixedSeparators(t *testing.T) {
+// Upstream: "parseCookies tolerates mixed `;`, `; `, and `;\t` separators".
+func TestCookieTriage_ParseCookiesMixedSeparators(t *testing.T) {
 	got := ParseRequestCookies("a=1; b=2;c=3;\td=4")
 	for k, want := range map[string]string{"a": "1", "b": "2", "c": "3", "d": "4"} {
 		if got[k] != want {
@@ -28,9 +21,8 @@ func TestTriageV1_ParseCookiesMixedSeparators(t *testing.T) {
 	}
 }
 
-// Upstream: "should securely parse the signed cookies with padding"
-// (trailing base64 "=" padding survives: split on first "=" only).
-func TestTriageV1_ParseCookiesPaddedSignedValues(t *testing.T) {
+// Upstream: "should securely parse the signed cookies with padding".
+func TestCookieTriage_ParseCookiesPaddedSignedValues(t *testing.T) {
 	got := ParseRequestCookies("better-auth.session_token=session-token.signature=; better-auth.session_data=session-data.signature=")
 	if got["better-auth.session_token"] != "session-token.signature=" {
 		t.Errorf("session_token = %q, want padding preserved", got["better-auth.session_token"])
@@ -40,9 +32,8 @@ func TestTriageV1_ParseCookiesPaddedSignedValues(t *testing.T) {
 	}
 }
 
-// Upstream: "rejects names containing characters outside RFC 7230 token"
-// ("bad name", "bad,name", "bad:name" dropped; "ok" kept).
-func TestTriageV1_ParseCookiesRejectBadNames(t *testing.T) {
+// Upstream: "rejects names containing characters outside RFC 7230 token".
+func TestCookieTriage_ParseCookiesRejectBadNames(t *testing.T) {
 	got := ParseRequestCookies("bad name=v1; ok=v2; bad,name=v3; bad:name=v4")
 	if got["ok"] != "v2" {
 		t.Errorf("ok = %q, want %q", got["ok"], "v2")
@@ -54,9 +45,8 @@ func TestTriageV1_ParseCookiesRejectBadNames(t *testing.T) {
 	}
 }
 
-// Upstream: "rejects values containing control chars, double-quote, or
-// backslash" ('b=has\rcr', 'c=has"quote', 'd=has\slash' dropped; "a" kept).
-func TestTriageV1_ParseCookiesRejectBadValues(t *testing.T) {
+// Upstream: "rejects values containing control chars, double-quote, or backslash".
+func TestCookieTriage_ParseCookiesRejectBadValues(t *testing.T) {
 	got := ParseRequestCookies("a=ok; b=has\rcr; c=has\"quote; d=has\\slash")
 	if got["a"] != "ok" {
 		t.Errorf("a = %q, want %q", got["a"], "ok")
@@ -68,10 +58,8 @@ func TestTriageV1_ParseCookiesRejectBadValues(t *testing.T) {
 	}
 }
 
-// Upstream: "rejects entries with CR/LF in raw key or value (no trim
-// escape)" (CR in value, CR in key, LF in value dropped; "d" kept —
-// trimOWS strips space/tab only, so CTLs reach validation and fail).
-func TestTriageV1_ParseCookiesRejectCRLFEntries(t *testing.T) {
+// Upstream: "rejects entries with CR/LF in raw key or value".
+func TestCookieTriage_ParseCookiesRejectCRLFEntries(t *testing.T) {
 	got := ParseRequestCookies("a=ok\r; b\r=1; c=v\nv; d=ok")
 	for _, bad := range []string{"a", "b", "c"} {
 		if _, found := got[bad]; found {
@@ -84,17 +72,15 @@ func TestTriageV1_ParseCookiesRejectCRLFEntries(t *testing.T) {
 }
 
 // Upstream: "splits on first `=` only, preserving subsequent `=` in value".
-func TestTriageV1_ParseCookiesSplitsOnFirstEquals(t *testing.T) {
+func TestCookieTriage_ParseCookiesSplitsOnFirstEquals(t *testing.T) {
 	got := ParseRequestCookies("a=b=c=d")
 	if got["a"] != "b=c=d" {
 		t.Errorf("a = %q, want %q", got["a"], "b=c=d")
 	}
 }
 
-// Upstream: "should reconstruct chunked cookies correctly" (READ leg only:
-// a large compact cache split across chunk cookies reassembles and verifies
-// with the large field intact; chunked WRITES stay v1-excluded).
-func TestTriageV1_ChunkedCompactCacheReadRoundTrip(t *testing.T) {
+// Upstream: "should reconstruct chunked cookies correctly" (READ leg only).
+func TestCookieTriage_ChunkedCompactCacheReadRoundTrip(t *testing.T) {
 	const secret = "better-auth.secret"
 	large := strings.Repeat("y", 6000)
 	payload := v1CachePayload(time.Now().Add(time.Hour))

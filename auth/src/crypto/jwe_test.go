@@ -9,11 +9,7 @@ import (
 )
 
 func TestDeriveEncryptionSecretVectors(t *testing.T) {
-	// Cross-language known answers for HKDF-SHA256(secret, salt=salt,
-	// info="BetterAuth.js Generated Encryption Key", L=64), independently
-	// computed with a from-scratch RFC 5869 implementation (Python stdlib
-	// hmac/hashlib — no shared code with Go x/crypto or noble). Any
-	// implementation with the upstream parameters must reproduce them.
+	// HKDF-SHA256 vectors (RFC 5869 via Python stdlib, L=64, upstream params).
 	for _, tc := range []struct{ secret, salt, wantHex string }{
 		{
 			"secret-a-at-least-32-chars-long!!", "better-auth-session",
@@ -39,7 +35,7 @@ func TestDeriveEncryptionSecretVectors(t *testing.T) {
 			t.Errorf("derive(%q, %q) = %s, want %s", tc.secret, tc.salt, got, tc.wantHex)
 		}
 	}
-	// Salts isolate session vs account keys; derivation is deterministic.
+	// Salts isolate keys; deterministic.
 	a, _ := DeriveEncryptionSecret("s", SessionCookieEncryptionSalt)
 	b, _ := DeriveEncryptionSecret("s", AccountCookieEncryptionSalt)
 	c, _ := DeriveEncryptionSecret("s", SessionCookieEncryptionSalt)
@@ -68,14 +64,13 @@ func TestOctThumbprintVector(t *testing.T) {
 	if got != want {
 		t.Fatalf("thumbprint = %q, want %q", got, want)
 	}
-	// The thumbprint commits to the RFC 7638 canonical form
-	// '{"k":"<base64url(key)>","kty":"oct"}' (lexicographic member order).
+	// RFC 7638 canonical '{"k":"...","kty":"oct"}'.
 	canonical := `{"k":"` + base64.RawURLEncoding.EncodeToString(key) + `","kty":"oct"}`
 	sum := sha256.Sum256([]byte(canonical))
 	if base64.RawURLEncoding.EncodeToString(sum[:]) != got {
 		t.Fatal("thumbprint does not match the RFC 7638 canonical encoding")
 	}
-	// Deterministic, 43 chars (32 raw bytes), and key-sensitive.
+	// Deterministic, 43 chars, key-sensitive.
 	again, _ := OctThumbprint(key)
 	flipped := append(append([]byte{}, key...), 0)
 	flipped[0] ^= 1

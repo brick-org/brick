@@ -39,7 +39,7 @@ func TestPasswordHashRandomSalt(t *testing.T) {
 }
 
 func TestPasswordNFKCCompatibility(t *testing.T) {
-	// U+212B ANGSTROM SIGN and U+00C5 LATIN CAPITAL A WITH RING normalize alike.
+	// U+212B and U+00C5 normalize alike (NFKC).
 	hash, err := HashPassword("pass\u212Bword")
 	if err != nil {
 		t.Fatal(err)
@@ -50,7 +50,7 @@ func TestPasswordNFKCCompatibility(t *testing.T) {
 }
 
 func TestPasswordVerifiesBetterAuthScryptVector(t *testing.T) {
-	// Generated with Better Auth v1.7.5 parameters and the fixed 16-byte salt.
+	// Better Auth v1.7.5 scrypt vector (fixed 16-byte salt).
 	hash := "000102030405060708090a0b0c0d0e0f:a19e0608dfb1eddd747ebea06aa44ba8e5ce829ab792340ee8c6a4665d850f912e26dae00afd3f9f51fd1320dfa27c9fe1288a527494da28d7e2ec37a9c4fbde"
 	if !VerifyPassword(hash, "better-auth-dummy-password") {
 		t.Fatal("Better Auth-compatible scrypt vector did not verify")

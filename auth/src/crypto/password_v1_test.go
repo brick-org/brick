@@ -1,12 +1,6 @@
 package crypto
 
-// v1 ports of the uncovered cases in
-// vendor/better-auth/packages/better-auth/src/crypto/password.test.ts:
-// long, case-sensitive, Unicode, empty, and very-long passwords, plus
-// wrong-password rejection against a pre-existing hash. The hash parameters
-// (scrypt N=16384 r=16 p=1 dkLen=64, hex salt, NFKC) are identical to the
-// legacy @noble/hashes implementation, so hashes minted here are byte-shape
-// identical to hashes stored by existing databases.
+// v1 ports of password.test.ts (scrypt N=16384 r=16 p=1 dkLen=64, hex salt, NFKC).
 
 import (
 	"strings"
@@ -57,8 +51,7 @@ func TestV1_PasswordUnicode(t *testing.T) {
 }
 
 func TestV1_PasswordEmptyAndVeryLong(t *testing.T) {
-	// Legacy stored hashes for edge inputs verify (same scrypt params as
-	// the old @noble/hashes implementation).
+	// Same scrypt params as @noble/hashes.
 	for _, password := range []string{"", strings.Repeat("x", 10000)} {
 		hash, err := HashPassword(password)
 		if err != nil {

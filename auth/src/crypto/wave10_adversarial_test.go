@@ -1,26 +1,6 @@
 package crypto
 
-// AUTH-V10-02 — adversarial and cross-language conformance (tests only).
-//
-// This file owns the crypto package's Wave 10 adversarial coverage: password
-// parser size caps, JOSE compact JWT/JWE decoder fuzzing, key rotation during
-// verification, and XChaCha envelope size limits.
-//
-// Upstream references (pinned Better Auth v1.7.5 at 5468e6bf):
-//   - packages/better-auth/src/crypto/password.ts + password.test.ts
-//     (scrypt `hex(salt):hex(key)` wire format, NFKC normalization)
-//   - packages/better-auth/src/crypto/jwt.ts (signJWT/verifyJWT via jose:
-//     algorithm pinning, kid selection, exp/nbf/iss/aud validation)
-//   - packages/better-auth/src/crypto/secret-rotation.test.ts (envelope
-//     format, symmetricEncrypt/symmetricDecrypt rotation matrix, JWE
-//     multi-secret kid selection)
-//   - packages/better-auth/src/crypto/index.ts (symmetricEncrypt,
-//     symmetricDecrypt, formatEnvelope, parseEnvelope)
-//
-// Work limits pinned for this file: fuzz inputs are capped (passwords ≤1KiB,
-// hashes ≤4KiB, tokens ≤64KiB); larger inputs are skipped so a fuzzer can
-// never turn the intentionally expensive scrypt verification into a DoS
-// against the test host. No production code is changed here.
+// AUTH-V10-02 adversarial conformance (tests only; upstream v1.7.5 @5468e6bf; fuzz caps: passwords ≤1KiB, hashes ≤4KiB, tokens ≤64KiB).
 
 import (
 	"strings"
@@ -31,16 +11,11 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// Wave 10 password work limits: the scrypt cost (N=16384, r=16) is
-// intentional upstream parity — verification of a well-formed hash always
-// pays it. The fuzzer below only exercises the parser (malformed hashes fail
-// before scrypt); passwords longer than this cap are skipped there.
+// Scrypt cost (N=16384, r=16) is upstream parity; fuzzer exercises parser only.
 const wave10MaxFuzzPasswordLen = 1024
 const wave10MaxFuzzHashLen = 4096
 
-// Password verification must fail closed on every malformed shape, at any
-// size, without panicking: wrong part counts, non-hex halves, short salt/key
-// material, bcrypt-prefix garbage, and megabyte-scale hostile inputs.
+// Fail closed on every malformed shape, any size, no panic.
 func TestWave10_PasswordSizeCaps(t *testing.T) {
 	hash, err := HashPassword("correct horse")
 	if err != nil {
@@ -73,14 +48,12 @@ func TestWave10_PasswordSizeCaps(t *testing.T) {
 			t.Errorf("%s: megabyte password must not verify against an unrelated hash", name)
 		}
 	}
-	// A 16KiB password against a valid hash must terminate (fail closed,
-	// never panic); the scrypt cost dominates, so this runs exactly once.
+	// 16KiB password must terminate (fail closed, once; scrypt dominates).
 	if VerifyPassword(hash, strings.Repeat("p", 1<<14)) {
 		t.Error("16KiB password must not verify against an unrelated hash")
 	}
 
-	// Bcrypt migration bridge: a real bcrypt hash still verifies (bounded
-	// legacy read), while bcrypt-shaped garbage does not.
+	// Bcrypt bridge: real bcrypt verifies; bcrypt-shaped garbage does not.
 	bcryptHash, err := bcrypt.GenerateFromPassword([]byte("legacy-pass"), bcrypt.MinCost)
 	if err != nil {
 		t.Fatalf("bcrypt hash: %v", err)
@@ -93,10 +66,7 @@ func TestWave10_PasswordSizeCaps(t *testing.T) {
 	}
 }
 
-// Key rotation during verification: tokens signed before a rotation keep
-// verifying while the old kid is retained, fail closed once it is dropped,
-// and concurrent sign/verify traffic across the rotation never races and
-// never accepts a foreign kid.
+// Rotation: retained kids verify, dropped fail closed, race-clean, no foreign-kid accept.
 func TestWave10_KeyRotationDuringVerifyRace(t *testing.T) {
 	pub1, priv1, _, err := GenerateKeyPair("EdDSA")
 	if err != nil {
@@ -125,15 +95,14 @@ func TestWave10_KeyRotationDuringVerifyRace(t *testing.T) {
 		go func(g int) {
 			defer wg.Done()
 			for i := 0; i < 25; i++ {
-				// Old token verifies under both orderings of the retained set.
+				// Old token verifies under both retained orderings.
 				for _, set := range bothSets {
 					if _, err := VerifyJWT(preRotation, set, VerifyOptions{}); err != nil {
 						errs <- "pre-rotation token rejected during rotation"
 						return
 					}
 				}
-				// New token verifies with the new key; the old-only set
-				// must reject it (exact kid match, no fallback).
+				// New token verifies; old-only set rejects (exact kid, no fallback).
 				fresh, err := SignJWT(priv2, "EdDSA", "k2", map[string]any{"sub": "u", "exp": time.Now().Unix() + 60})
 				if err != nil {
 					errs <- "sign during rotation failed"
@@ -147,7 +116,7 @@ func TestWave10_KeyRotationDuringVerifyRace(t *testing.T) {
 					errs <- "new-kid token verified against retired set"
 					return
 				}
-				// A foreign key with a colliding kid never verifies.
+				// Foreign key with colliding kid never verifies.
 				if _, err := VerifyJWT(preRotation, []PublicKey{{Kid: "k1", Alg: "EdDSA", PublicJWKJSON: pub2}}, VerifyOptions{}); err == nil {
 					errs <- "cross-key kid collision verified"
 					return
@@ -162,8 +131,7 @@ func TestWave10_KeyRotationDuringVerifyRace(t *testing.T) {
 	}
 }
 
-// Oversized XChaCha inputs fail at hex decode (never at AEAD) and concurrent
-// encrypt/decrypt traffic across a SecretConfig rotation is race-clean.
+// Oversized XChaCha fails at hex decode; rotation race-clean.
 func TestWave10_XChaChaSizeAndRotationRace(t *testing.T) {
 	cfg := SecretConfig{Keys: map[int]string{1: "s1", 2: "s2"}, CurrentVersion: 2}
 	for _, big := range []string{strings.Repeat("z", 1<<20), strings.Repeat("0", 1<<20), "$ba$1$" + strings.Repeat("z", 1<<20)} {
@@ -199,9 +167,7 @@ func TestWave10_XChaChaSizeAndRotationRace(t *testing.T) {
 	wg.Wait()
 }
 
-// FuzzWave10_VerifyPasswordParser fuzzes the hash/password parser with pinned
-// work limits: oversized inputs skip (scrypt verification is intentionally
-// expensive; the parser must reject malformed shapes before paying it).
+// Fuzzes password parser with work caps (oversize skips; parser rejects before scrypt).
 func FuzzWave10_VerifyPasswordParser(f *testing.F) {
 	seedHash, err := HashPassword("seed-password")
 	if err != nil {
@@ -218,12 +184,11 @@ func FuzzWave10_VerifyPasswordParser(f *testing.F) {
 			t.Skip("over wave10 work cap")
 		}
 		got := VerifyPassword(hash, password)
-		// Determinism on the pure verifier.
+		// Determinism check.
 		if again := VerifyPassword(hash, password); again != got {
 			t.Fatalf("nondeterministic verify of %q", hash)
 		}
-		// Parser invariants: anything that is not exactly
-		// hex(16B-salt):hex(64B-key) or a real bcrypt hash fails closed.
+		// Parser: only hex(16B-salt):hex(64B-key) or real bcrypt passes.
 		parts := strings.Split(hash, ":")
 		if len(parts) != 2 && !strings.HasPrefix(hash, "$2a$") && !strings.HasPrefix(hash, "$2b$") && !strings.HasPrefix(hash, "$2y$") {
 			if got {
@@ -233,9 +198,7 @@ func FuzzWave10_VerifyPasswordParser(f *testing.F) {
 	})
 }
 
-// FuzzWave10_CompactJWTStructure fuzzes the compact JWT decoder: inputs are
-// capped at 64KiB, verification never panics, and every accepted token is a
-// well-formed 3-part value that still verifies deterministically.
+// Fuzzes compact JWT decoder (64KiB cap; accepted are 3-part deterministic).
 func FuzzWave10_CompactJWTStructure(f *testing.F) {
 	pub, priv, _, err := GenerateKeyPair("EdDSA")
 	if err != nil {
@@ -272,9 +235,7 @@ func FuzzWave10_CompactJWTStructure(f *testing.F) {
 	})
 }
 
-// FuzzWave10_SymmetricDecryptCaps fuzzes the XChaCha decrypt path: capped
-// inputs never panic, oversized-hex handling stays at decode time, and
-// successful decryptions are deterministic.
+// Fuzzes XChaCha decrypt (capped; oversize-hex at decode; deterministic).
 func FuzzWave10_SymmetricDecryptCaps(f *testing.F) {
 	cfg := SecretConfig{Keys: map[int]string{1: "w10-s1", 2: "w10-s2"}, CurrentVersion: 2}
 	env, err := SymmetricEncrypt(cfg, "seed")

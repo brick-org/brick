@@ -1,21 +1,6 @@
 package cookies
 
-// Wave 4 conformance: remaining upstream cookie cases, fuzz targets, race
-// tests, and malformed-input limits.
-//
-// Upstream references (pinned v1.7.5):
-//   - packages/better-auth/src/cookies/cookies.test.ts ("Cookie Chunking"
-//     chunk-size gate, cleanup-on-delete, no-chunk-under-limit, too-large
-//     skip) and cookie-utils.ts (parseCookies, parseCookieChunkIndex,
-//     getChunkedCookie, setRequestCookie, parseSetCookieHeader).
-//
-// Port-blocked gaps (reported, not implemented — non-test files are
-// out of scope for this agent):
-//   - setRequestCookie: now implemented as SetRequestCookieHeader
-//     (see setcookie_v1_test.go); the note below is historical.
-//   - parseSetCookieHeader + toCookieOptions: now implemented as
-//     ParseSetCookieHeader + SetCookieAttributes.ToAttributes
-//     (see setcookie_v1_test.go); the note below is historical.
+// Wave 4 conformance: remaining upstream cookie cases, fuzz, race, malformed limits (v1.7.5).
 
 import (
 	"crypto/hmac"
@@ -28,11 +13,10 @@ import (
 	"time"
 )
 
-// --- Ported upstream parseCookies cases ---
+// Ported upstream cases.
 
-// Upstream parseCookies splits on the FIRST "=" so values may contain "=";
-// later duplicates overwrite earlier ones; empty values are kept.
-func TestWave4_ParseRequestCookiesEdgeCases(t *testing.T) {
+// Upstream parseCookies: first "=" splits, last duplicate wins, empty kept.
+func TestCookieConform_ParseRequestCookiesEdgeCases(t *testing.T) {
 	got := ParseRequestCookies("a=b=c; a=second; empty=; spaced = v")
 	if got["a"] != "second" {
 		t.Errorf("duplicate names: last wins, got %q", got["a"])
@@ -43,7 +27,7 @@ func TestWave4_ParseRequestCookiesEdgeCases(t *testing.T) {
 	if got["spaced"] != "v" {
 		t.Errorf("OWS around name must trim, got %q", got["spaced"])
 	}
-	// Horizontal-tab OWS (RFC 7230 §3.2.3) trims; CR/LF must not.
+	// Tab OWS trims; CR/LF must not.
 	got = ParseRequestCookies("\ta\t=\tb\t")
 	if got["a"] != "b" {
 		t.Errorf("tab OWS must trim, got %v", got)
@@ -52,9 +36,7 @@ func TestWave4_ParseRequestCookiesEdgeCases(t *testing.T) {
 	if _, bad := got["a"]; bad {
 		t.Errorf("CTL bytes must drop the pair, got %v", got)
 	}
-	// Pairs split on the FIRST "=" so values may contain "="; quoting is
-	// stripped after the split. ";" always terminates a pair (upstream
-	// splits naively too), even inside quotes.
+	// ";" terminates pairs even inside quotes.
 	got = ParseRequestCookies(`q="a=b"; s="x;y"; r="x"`)
 	if got["q"] != "a=b" || got["r"] != "x" {
 		t.Errorf("first-= split behavior changed: %v", got)
@@ -62,18 +44,15 @@ func TestWave4_ParseRequestCookiesEdgeCases(t *testing.T) {
 	if _, bad := got["s"]; bad {
 		t.Errorf("semicolon must terminate the pair even in quotes: %v", got)
 	}
-	// Comma and space are legal value octets upstream.
+	// Comma/space are legal value octets.
 	got = ParseRequestCookies("c=a, b c")
 	if got["c"] != "a, b c" {
 		t.Errorf("comma/space values must survive, got %q", got["c"])
 	}
 }
 
-// --- Ported upstream chunk-index cases ---
-
-// Upstream parseCookieChunkIndex accepts only canonical non-negative
-// integers: no leading zeros, signs, whitespace, or trailing junk.
-func TestWave4_ParseChunkIndexCanonical(t *testing.T) {
+// Upstream parseCookieChunkIndex: canonical non-negative integers only.
+func TestCookieConform_ParseChunkIndexCanonical(t *testing.T) {
 	for _, name := range []string{"sess.0", "sess.7", "sess.99"} {
 		if _, ok := ParseChunkIndex("sess", name); !ok {
 			t.Errorf("%q must parse", name)
@@ -89,9 +68,8 @@ func TestWave4_ParseChunkIndexCanonical(t *testing.T) {
 	}
 }
 
-// Upstream getChunkedCookie: exact-name match wins over chunks; chunk
-// entries sort numerically (so .10 follows .9, not .1).
-func TestWave4_JoinChunkedCookiesPrecedence(t *testing.T) {
+// Upstream getChunkedCookie: exact-name wins; chunks sort numerically.
+func TestCookieConform_JoinChunkedCookiesPrecedence(t *testing.T) {
 	if v, ok := JoinChunkedCookies(map[string]string{
 		"sess": "exact", "sess.0": "chunk",
 	}, "sess"); !ok || v != "exact" {
@@ -110,9 +88,8 @@ func TestWave4_JoinChunkedCookiesPrecedence(t *testing.T) {
 	}
 }
 
-// Upstream chunk-size gate: values that fit stay single; the too-large
-// branch errors so callers skip the cache and fall back to the database.
-func TestWave4_ChunkSizeGateAndCap(t *testing.T) {
+// Upstream chunk-size gate: fit stays single; too-large errors (DB fallback).
+func TestCookieConform_ChunkSizeGateAndCap(t *testing.T) {
 	single, err := ChunkCookieValue("sess", "small", 100)
 	if err != nil || len(single) != 1 || single["sess"] != "small" {
 		t.Fatalf("small value must stay single: %v %v", single, err)
@@ -124,18 +101,15 @@ func TestWave4_ChunkSizeGateAndCap(t *testing.T) {
 	if _, err := ChunkCookieValue("sess", "x", 0); err == nil {
 		t.Fatal("non-positive budget must error")
 	}
-	// (MaxCookieChunks+1) chunks of 1 byte each cannot fit.
 	tooBig := strings.Repeat("x", MaxCookieChunks+1)
 	if _, err := ChunkCookieValue("sess", tooBig, 1); err == nil {
 		t.Fatal("value exceeding MaxCookieChunks must error (skip cache)")
 	}
-	// Exactly MaxCookieChunks chunks fits.
 	fits := strings.Repeat("y", MaxCookieChunks)
 	chunks, err := ChunkCookieValue("sess", fits, 1)
 	if err != nil || len(chunks) != MaxCookieChunks {
 		t.Fatalf("exactly MaxCookieChunks must fit: %v %v", len(chunks), err)
 	}
-	// Wire sizing: every serialized chunk line fits MaxCookieSize.
 	name := "better-auth.session_data"
 	attrs := DefaultAttributes(true, "")
 	budget := MaxValueSizeFor(name, attrs)
@@ -158,9 +132,8 @@ func TestWave4_ChunkSizeGateAndCap(t *testing.T) {
 	}
 }
 
-// Upstream deleteSessionCookie clean(): expiring must cover the bare name
-// and every chunk so stale chunks never survive a shrink or logout.
-func TestWave4_ExpiredChunksCoverShrink(t *testing.T) {
+// Upstream deleteSessionCookie clean(): expiry covers bare name + chunks.
+func TestCookieConform_ExpiredChunksCoverShrink(t *testing.T) {
 	attrs := DefaultAttributes(true, "")
 	stored := map[string]string{
 		"sess": "old-single", "sess.0": "c0", "sess.1": "c1", "sess.2": "c2", "other": "x",
@@ -183,7 +156,7 @@ func TestWave4_ExpiredChunksCoverShrink(t *testing.T) {
 	}
 }
 
-// --- Ported JWT/JWE malformed matrix ---
+// Ported JWT/JWE malformed matrix.
 
 func wave4SessionFixtures() (secret string, session, user map[string]any) {
 	return "wave4-test-secret",
@@ -191,8 +164,8 @@ func wave4SessionFixtures() (secret string, session, user map[string]any) {
 		map[string]any{"id": "u1", "email": "a@b.com", "name": "Test"}
 }
 
-// Upstream: invalid/foreign JWT cache values fail closed (null).
-func TestWave4_SessionCacheJWTMalformed(t *testing.T) {
+// Upstream: invalid/foreign JWT cache values fail closed.
+func TestCookieConform_SessionCacheJWTMalformed(t *testing.T) {
 	secret, session, user := wave4SessionFixtures()
 	valid, err := CreateSessionCacheJWT(secret, session, user, "1", time.Minute)
 	if err != nil {
@@ -231,7 +204,7 @@ func TestWave4_SessionCacheJWTMalformed(t *testing.T) {
 			t.Errorf("%s: malformed JWT cache must fail closed", name)
 		}
 	}
-	// Rotation: retained secrets verify; unknown ones do not.
+	// Rotation: retained verify; unknown do not.
 	if _, _, err := VerifySessionCacheJWT([]string{"old", secret}, valid); err != nil {
 		t.Errorf("retained secret must verify: %v", err)
 	}
@@ -240,9 +213,8 @@ func TestWave4_SessionCacheJWTMalformed(t *testing.T) {
 	}
 }
 
-// Upstream: invalid JWE cache values fail closed; unknown kids fail closed
-// with no fallback; A256GCM legacy payloads are out of scope here.
-func TestWave4_SessionCacheJWEMalformed(t *testing.T) {
+// Upstream: invalid JWE values fail closed; unknown kids fail closed, no fallback.
+func TestCookieConform_SessionCacheJWEMalformed(t *testing.T) {
 	secret, session, user := wave4SessionFixtures()
 	valid, err := CreateSessionCacheJWE(secret, session, user, "1", time.Minute)
 	if err != nil {
@@ -293,8 +265,7 @@ func mustIssueJWE(t *testing.T, secret string, session, user map[string]any) str
 	return token
 }
 
-// forgedHeaderToken re-signs the session payload under a caller-chosen JWS
-// header to exercise the alg-pinning branch of VerifySessionCacheJWT.
+// Re-signs payload under caller-chosen JWS header (alg-pinning branch).
 func forgedHeaderToken(t *testing.T, secret string, session, user map[string]any, headerJSON string) string {
 	t.Helper()
 	claims := jwtCacheClaims{
@@ -335,8 +306,7 @@ func nullSessionToken(t *testing.T, secret string, user map[string]any) string {
 	return mustIssueJWT(t, secret, nil, user)
 }
 
-// swapKid rewrites the JWE protected header kid to an unknown value while
-// keeping the segments otherwise intact (exercises kid-selected fail-closed).
+// Rewrites JWE kid to unknown (kid-selected fail-closed).
 func swapKid(t *testing.T, token string) string {
 	t.Helper()
 	parts := strings.Split(token, ".")
@@ -376,19 +346,10 @@ func tamperSegment(t *testing.T, token string, idx int) string {
 	return strings.Join(parts, ".")
 }
 
-// --- Cross-language golden vectors ---
-//
-// TS-shaped fixtures as static data (no network):
-//   - RFC 4231 HMAC-SHA-256 test case 2 pins the exact Sign/Verify wire
-//     algorithm ("value.hmac", base64url-nopad) shared with upstream, so the
-//     vectors below must verify under ANY conforming implementation.
-//   - The chunked-cookie naming fixture pins the upstream chunkCookie wire
-//     shape ("<name>.<i>") used by getChunkedCookie reassembly.
+// Cross-language golden vectors (static fixtures, no network).
 
-func TestWave4_SignGoldenVectors(t *testing.T) {
-	// RFC 4231 case 2: key "Jefe", data "what do ya want for nothing?".
-	// The expected base64url-nopad HMAC-SHA-256 pins the exact wire
-	// algorithm ("value.hmac") shared with upstream cookie signing.
+func TestCookieConform_SignGoldenVectors(t *testing.T) {
+	// RFC 4231 case 2 pins "value.hmac" base64url-nopad wire.
 	signed, err := Sign("Jefe", "what do ya want for nothing?")
 	if err != nil {
 		t.Fatalf("sign: %v", err)
@@ -420,10 +381,8 @@ func TestWave4_SignGoldenVectors(t *testing.T) {
 	}
 }
 
-func TestWave4_ChunkNamingGoldenVector(t *testing.T) {
-	// Static TS-shaped wire fixture: upstream chunkCookie emits
-	// "<cookieName>.<index>" entries that getChunkedCookie concatenates in
-	// index order. This pins the Go side of that contract with fixed data.
+func TestCookieConform_ChunkNamingGoldenVector(t *testing.T) {
+	// Upstream "<name>.<i>" wire shape.
 	fixture := map[string]string{
 		"better-auth.session_data.1": "SECOND",
 		"better-auth.session_data.0": "FIRST",
@@ -438,9 +397,9 @@ func TestWave4_ChunkNamingGoldenVector(t *testing.T) {
 	}
 }
 
-// --- Malformed-input limits ---
+// Malformed-input limits.
 
-func TestWave4_CookieMalformedInputLimits(t *testing.T) {
+func TestCookieConform_CookieMalformedInputLimits(t *testing.T) {
 	huge := strings.Repeat("k=v; ", 1<<16) + "tail=1"
 	if got := ParseRequestCookies(huge); got["tail"] != "1" {
 		t.Error("64k-pair header must still parse the tail")
@@ -448,7 +407,7 @@ func TestWave4_CookieMalformedInputLimits(t *testing.T) {
 	if got := ParseRequestCookies(strings.Repeat("x", 1<<20)); len(got) != 0 {
 		t.Error("1MB valueless header must parse empty")
 	}
-	// Oversized JWT/JWE cache values must fail closed promptly.
+	// Oversized cache values fail closed.
 	hugeToken := strings.Repeat("A", 1<<20)
 	if _, _, err := VerifySessionCacheJWT([]string{"s"}, hugeToken); err == nil {
 		t.Error("1MB JWT cache value must fail closed")
@@ -456,7 +415,7 @@ func TestWave4_CookieMalformedInputLimits(t *testing.T) {
 	if _, _, err := VerifySessionCacheJWE([]string{"s"}, strings.Repeat("B", 1<<20)); err == nil {
 		t.Error("1MB JWE cache value must fail closed")
 	}
-	// Chunk reassembly over adversarial counts stays bounded.
+	// Over-cap chunk maps still join.
 	m := map[string]string{}
 	for i := 0; i < MaxCookieChunks+50; i++ {
 		m["s."+itoa(i)] = "v"
@@ -480,9 +439,9 @@ func itoa(i int) string {
 	return string(b[p:])
 }
 
-// --- Race tests ---
+// Race tests.
 
-func TestWave4_CookiesConcurrentUse(t *testing.T) {
+func TestCookieConform_CookiesConcurrentUse(t *testing.T) {
 	secret, session, user := wave4SessionFixtures()
 	jwt, err := CreateSessionCacheJWT(secret, session, user, "1", time.Minute)
 	if err != nil {
@@ -512,7 +471,7 @@ func TestWave4_CookiesConcurrentUse(t *testing.T) {
 	wg.Wait()
 }
 
-// --- Fuzz targets ---
+// Fuzz targets.
 
 func FuzzParseRequestCookies(f *testing.F) {
 	for _, s := range []string{
@@ -541,7 +500,7 @@ func FuzzParseRequestCookies(f *testing.F) {
 			}
 			_ = v
 		}
-		// Determinism on the pure parser.
+		// Determinism check.
 		again := ParseRequestCookies(header)
 		if len(again) != len(got) {
 			t.Fatalf("nondeterministic parse of %q", header)
@@ -567,7 +526,6 @@ func FuzzChunkRoundTrip(f *testing.F) {
 		}
 		chunks, err := ChunkCookieValue(name, value, budget)
 		if err != nil {
-			// Only the over-cap branch may error.
 			wantChunks := (len(value) + budget - 1) / budget
 			if len(value) == 0 {
 				wantChunks = 1
@@ -604,11 +562,7 @@ func FuzzVerifySessionCacheJWT(f *testing.F) {
 		if data.Session == nil || data.User == nil {
 			t.Fatal("verified payload must carry session/user")
 		}
-		// Signature binding (time-stable unforgeability): every accepted
-		// token is HMAC-bound, so flipping one bit of the payload or
-		// signature segment must break verification. (A byte-equality
-		// check against the run-local token would be unsound: iat/exp
-		// embed time, so older genuinely-issued seeds differ byte-wise.)
+		// HMAC-bound: flipping payload/signature bits must break verification (time-stable check).
 		parts := strings.Split(token, ".")
 		if len(parts) != 3 {
 			t.Fatalf("verified non-3-part token: %q", token)

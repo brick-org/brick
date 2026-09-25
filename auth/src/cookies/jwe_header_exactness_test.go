@@ -1,10 +1,6 @@
 package cookies
 
-// F3 gap 11: CreateSessionCacheJWE must emit a protected header of exactly
-// {alg,enc,kid} (upstream cookies/index.ts:209-214 calls symmetricEncodeJWT
-// directly with NO extra headers @ 5468e6bf). Decrypt stays tolerant of
-// legacy typ/cty-bearing tokens; cross-stack decrypt (crypto<->cookies) must
-// still pass.
+// F3 gap 11: CreateSessionCacheJWE emits exactly {alg,enc,kid} (upstream index.ts:209-214 @5468e6bf).
 
 import (
 	"encoding/base64"
@@ -54,7 +50,7 @@ func f3ProtectedHeader(t *testing.T, token string) map[string]any {
 	return header
 }
 
-// Header must be exactly {alg,enc,kid} — no typ/cty.
+// Header exactly {alg,enc,kid}.
 func TestJWEHeader_JWEHeaderExactlyThreeKeys(t *testing.T) {
 	session, user := f3SessionUser()
 	token, err := CreateSessionCacheJWE(f3Secret, session, user, "1", 5*time.Minute)

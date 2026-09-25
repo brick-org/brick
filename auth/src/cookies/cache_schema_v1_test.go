@@ -1,27 +1,7 @@
 package cookies
 
-// G1 schema-validation ports (pinned upstream Better Auth v1.7.5 @ 5468e6bf).
-//
-// Upstream case: `decodeCookieCache` verifies the signature and THEN
-// zod-validates the payload (`parseCookieCachePayload`,
-// vendor/.../src/cookies/cache.ts:20-39 over `cookieCachePayloadSchema`,
-// wired in vendor/.../src/cookies/index.ts:328-353 for the compact branch
-// and the jwt/jwe branches). A correctly-signed but schema-invalid payload
-// returns null with a configured-logger warn
-// ("should use the configured logger for an invalid signed compact cookie"
-// plus the JWT/JWE analogs).
-//
-// Go gap: VerifyCompactCookieCache checked envelope/HMAC/window/expiry
-// only, and VerifySessionCacheJWT/VerifySessionCacheJWE checked session/user
-// non-nil only, so a correctly-signed schema-invalid cache (e.g.
-// user.emailVerified: null, which zod rejects but Go's typed unmarshal
-// silently coerces to false) was ACCEPTED as a hit.
-//
-// These tests pin the fixed contract: correctly-signed schema-invalid
-// payloads fail with the ErrCachePayloadSchema sentinel (identity checked
-// with errors.Is), valid payloads still verify on all strategies, and
-// tampered-signature failures keep their signature-step error (never the
-// schema sentinel).
+// G1 schema-validation (upstream v1.7.5 @5468e6bf cookies/cache.ts:20-39 + index.ts:328-353).
+// Correctly-signed schema-invalid payloads fail with ErrCachePayloadSchema; signature failures never do.
 
 import (
 	"errors"
@@ -64,10 +44,7 @@ func schemaV1Pair(mutUser func(map[string]any)) map[string]any {
 	}
 }
 
-// The deleted probe, resurrected: a correctly-signed compact cache carrying
-// user.emailVerified: null (JSON null) must NOT verify. Upstream
-// parseCookieCachePayload rejects it (z.boolean() rejects null); Go must
-// return the schema sentinel, not a hit.
+// Upstream parseCookieCachePayload rejects emailVerified:null; must return schema sentinel.
 func TestSchemaV1_CompactRejectsNullEmailVerified(t *testing.T) {
 	pair := schemaV1Pair(func(user map[string]any) {
 		user["emailVerified"] = nil
@@ -173,8 +150,7 @@ func TestSchemaV1_ValidPayloadsVerify(t *testing.T) {
 	}
 }
 
-// Tampered-signature cases still fail at the signature step, never with the
-// schema sentinel: the error identity must differ.
+// Tampered-signature failures must not return the schema sentinel.
 func TestSchemaV1_TamperedSignatureIsNotSchemaError(t *testing.T) {
 	const jweSecret = "schema-v1-jwe-secret-at-least-32-chars!"
 	compact, err := CreateCompactCookieCache("schema-secret", schemaV1Pair(nil), 5*time.Minute)

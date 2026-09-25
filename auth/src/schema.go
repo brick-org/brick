@@ -14,18 +14,9 @@ import (
 	"github.com/brick-org/brick/auth/src/types"
 )
 
-// This file mirrors vendor/better-auth/packages/core/src/db/get-tables.ts
-// (Better Auth v1.7.5, commit 5468e6bf).
-//
-// Row-key contract: rows exchanged with callers use logical camelCase keys
-// with type revival per contract. Logical camelCase input maps to physical
-// columns via per-model Fields maps, FieldAttribute field names, and
-// AdapterConfig overrides; custom names reverse to logical on reads
-// (transformOutput key part).
-
-// TableIndex mirrors better-auth's DBTableIndex (logical field names).
-// It aliases the canonical types.TableIndex so plugin-declared
-// TableSchema.Indexes and these helpers share one representation.
+// This file mirrors get-tables.ts (Better Auth v1.7.5).
+// Row-key contract: rows use logical camelCase keys; custom names reverse
+// to logical on reads.
 type TableIndex = types.TableIndex
 
 // ResolvedDBTableIndex mirrors better-auth's ResolvedDBTableIndex
@@ -39,19 +30,8 @@ type ResolvedDBTableIndex struct {
 	Unique bool
 }
 
-// CloneSchema deep-copies a plugin schema map: table entries, field maps,
-// index slices (including each index's Fields slice), and per-field
-// References pointers, so callers (MergeSchemas, GetAuthTables) never mutate
-// their inputs.
-//
-// Sharing contract (Go-only helper; upstream get-tables.ts rebuilds tables
-// with object spreads per call, so aliasing never arises there): function
-// hooks (Transform, Validator, OnUpdate) and DefaultValue stay shared, not
-// cloned. Go func values cannot be deep-copied meaningfully — a copy would
-// still close over the same state — and DefaultValue is an opaque any that
-// may itself hold a func (e.g. a default-value factory), which likewise can
-// only be aliased. Callers must therefore treat a cloned field's hooks and
-// any func-valued DefaultValue as shared references.
+// CloneSchema deep-copies a plugin schema map so callers never mutate inputs.
+// Hooks and func-valued DefaultValue stay shared.
 func CloneSchema(schema PluginSchema) PluginSchema {
 	if len(schema) == 0 {
 		return nil
@@ -94,21 +74,9 @@ func CloneSchema(schema PluginSchema) PluginSchema {
 	return cloned
 }
 
-// MergeSchemas merges plugin table declarations field-by-field: fields spread
-// over each other, table-level indexes merge (deduped), a declared ModelName
-// wins, and DisableMigrations/Order follow the latest declaration.
-//
-// Presence-safe migration merging: DisableMigrations (*bool, nil=absent)
-// follows upstream `disableMigration ?? previous` last-wins (explicit false
-// wins); the legacy DisableMigration bool OR-accumulates for backwards
-// compatibility (true sticks) and is synced from DisableMigrations when
-// present. New code must use DisableMigrations.
-//
-// DELTAS vs the upstream pluginSchema reduce in get-tables.ts: upstream sets
-// `modelName: value.modelName || key`, i.e. a plugin entry without a
-// modelName RESETS the accumulated name back to the schema key, while here a
-// declared ModelName only wins when non-empty (empty never clears).
-// Upstream's reduce tracks no Order; the Order rule here is Go-only.
+// MergeSchemas merges plugin table declarations field-by-field.
+// Presence-safe: DisableMigrations last-wins; legacy DisableMigration OR-accumulates.
+// New code must use DisableMigrations.
 func MergeSchemas(base PluginSchema, additions ...PluginSchema) PluginSchema {
 	merged := CloneSchema(base)
 	if merged == nil {
@@ -145,15 +113,8 @@ func MergeSchemas(base PluginSchema, additions ...PluginSchema) PluginSchema {
 	return merged
 }
 
-// SchemasForProviders merges schemas from arbitrary plugin-schema providers
-// (any PluginSchemaProvider, including full Plugins which already satisfy it
-// via Schema()). It unblocks out-of-module plugins that only supply schemas
-// for generation without implementing the full Plugin interface (endpoints/
-// hooks/etc.): pass their providers here instead of relying on the
-// generate-schema CLI's built-in admin/org IDs. Upstream has no such helper
-// (schemas come from full plugin objects); this is Go-only infrastructure.
-//
-// Upstream TypeScript name: none (Go-only).
+// SchemasForProviders merges schemas from plugin-schema providers.
+// Go-only helper.
 func SchemasForProviders(providers []PluginSchemaProvider) PluginSchema {
 	schemas := make([]PluginSchema, 0, len(providers))
 	for _, p := range providers {
@@ -166,15 +127,7 @@ func SchemasForProviders(providers []PluginSchemaProvider) PluginSchema {
 }
 
 // MergeTableIndexes merges table-level index collections, deduplicating by
-// (name, fields, unique), mirroring upstream mergeTableIndexes in
-// get-tables.ts, which keys on JSON.stringify([name ?? null, fields,
-// unique ?? false]). The JSON encoding keeps the dedup key collision-free: a
-// single field "a,b" and two fields ["a","b"] stringify differently, unlike a
-// naive strings.Join(fields, ",") key.
-//
-// DELTA vs upstream: an empty Name encodes as null (treated as "no explicit
-// name", like upstream undefined), so an explicit empty-string name does not
-// form a separate dedup bucket.
+// (name, fields, unique).
 func MergeTableIndexes(collections ...[]TableIndex) []TableIndex {
 	var out []TableIndex
 	seen := map[string]struct{}{}
@@ -204,25 +157,13 @@ func MergeTableIndexes(collections ...[]TableIndex) []TableIndex {
 	return out
 }
 
-// DateNowDefault mirrors upstream's `defaultValue: () => new Date()` factory
-// carried on core timestamp columns in get-tables.ts. It is stored as the
-// func-valued FieldAttribute.DefaultValue (shared by CloneSchema design, like
-// hook funcs) and evaluated by ParseInputData-style input handling and by
-// migration DDL (CURRENT_TIMESTAMP on dialects with a native default).
-//
-// Upstream TypeScript name: the anonymous `() => new Date()` factories.
+// DateNowDefault is the `() => new Date()` factory for core timestamp columns.
 func DateNowDefault() any { return time.Now().UTC() }
 
-// DateNowMillisDefault mirrors upstream's rate-limit
-// `defaultValue: () => Date.now()` factory (milliseconds since epoch).
-//
-// Upstream TypeScript name: the anonymous `() => Date.now()` factory.
+// DateNowMillisDefault is the `() => Date.now()` factory for rate-limit rows.
 func DateNowMillisDefault() any { return time.Now().UnixMilli() }
 
-// HasFuncDefault reports whether attr carries a func-valued DefaultValue
-// (a factory like DateNowDefault rather than a static scalar). Generator DDL
-// tags must skip func defaults (they have no static tag rendering);
-// HasTimestampColumnDefault/HasStaticColumnDefault classify them instead.
+// HasFuncDefault reports whether attr carries a func-valued DefaultValue.
 func HasFuncDefault(attr FieldAttribute) bool {
 	if attr.DefaultValue == nil {
 		return false
@@ -230,19 +171,12 @@ func HasFuncDefault(attr FieldAttribute) bool {
 	return reflect.TypeOf(attr.DefaultValue).Kind() == reflect.Func
 }
 
-// HasTimestampColumnDefault mirrors the get-migration.ts
-// hasTimestampColumnDefault predicate minus the dialect gate: a date field
-// with a func default (upstream `() => new Date()`) maps to a native
-// CURRENT_TIMESTAMP column default on postgres/mysql/mssql and to no column
-// default on sqlite. Callers gate on dialect.
+// HasTimestampColumnDefault reports a date field with a func default.
 func HasTimestampColumnDefault(attr FieldAttribute) bool {
 	return attr.Type == FieldTypeDate && HasFuncDefault(attr)
 }
 
-// HasStaticColumnDefault mirrors the get-migration.ts hasStaticColumnDefault
-// predicate: a static (non-func) string/number/boolean default that can be
-// rendered inline. Nullable unique columns are excluded: NULL is their only
-// unique-safe backfill, so a default there must not be treated as safe.
+// HasStaticColumnDefault reports a static string/number/boolean default.
 func HasStaticColumnDefault(attr FieldAttribute) bool {
 	if attr.Unique && attr.Required != nil && !*attr.Required {
 		return false
@@ -260,19 +194,7 @@ func HasStaticColumnDefault(attr FieldAttribute) bool {
 // boolPtrGo is a Go-only helper boxing a bool for *bool option fields.
 func boolPtrGo(v bool) *bool { return &v }
 
-// CoreSchema returns the canonical core tables (user, session, account,
-// verification) with logical field names, following the core field blocks in
-// get-tables.ts.
-//
-// DELTAS vs upstream: only types and index/sortable/returned/input flags are
-// stored here. Required-ness rides on the nil-means-default-true *bool
-// convention (see FieldAttribute); the upstream defaultValue factories
-// (() => new Date()) ARE carried as func-valued DefaultValue entries
-// (DateNowDefault, shared by CloneSchema design) and updatedAt columns carry
-// OnUpdate; per-field fieldName defaults are not represented in these
-// blocks — option field renames are applied later by applyModelFieldNames.
-// GetAuthTables merges plugin fields and indexes over these tables (core keys
-// take fields/indexes only; see mergePluginTable).
+// CoreSchema returns the canonical core tables with logical field names.
 func CoreSchema() PluginSchema {
 	return PluginSchema{
 		"user": {
@@ -336,14 +258,7 @@ func CoreSchema() PluginSchema {
 	}
 }
 
-// RateLimitSchema returns the rate-limit storage table with default logical
-// names, following the rateLimitTable block in get-tables.ts.
-//
-// DELTA vs upstream: required flags and per-field fieldName defaults are not
-// stored here (nil Required already means required); the lastRequest
-// defaultValue factory (() => Date.now()) IS carried via
-// DateNowMillisDefault; option renames are applied by
-// RateLimitSchemaForOptions.
+// RateLimitSchema returns the rate-limit storage table.
 func RateLimitSchema() PluginSchema {
 	return PluginSchema{
 		"rateLimit": {
@@ -356,9 +271,7 @@ func RateLimitSchema() PluginSchema {
 	}
 }
 
-// RateLimitSchemaForOptions is a Go-only helper returning the rate-limit
-// storage table with the configured model name and column mapping applied
-// (options.rateLimit.modelName / options.rateLimit.fields).
+// RateLimitSchemaForOptions returns the rate-limit table with configured names.
 func RateLimitSchemaForOptions(opts Options) PluginSchema {
 	table := TableSchema{Fields: map[string]FieldAttribute{}}
 	if opts.RateLimit.ModelName != "" {
@@ -373,12 +286,7 @@ func RateLimitSchemaForOptions(opts Options) PluginSchema {
 	return PluginSchema{"rateLimit": table}
 }
 
-// CoreTableIndexes is a Go-only helper returning table-level index metadata
-// for the core tables. Upstream has no such table: it expresses these as
-// field-level `index: true` flags. Entries are repeated here in
-// logical-field form for consumers that only read table-level metadata.
-// ResolveSchemaIndexes derives the same entries from the field flags, so
-// merging both is deduplicated.
+// CoreTableIndexes returns table-level index metadata for core tables.
 func CoreTableIndexes() map[string][]TableIndex {
 	return map[string][]TableIndex{
 		"session": {
@@ -393,42 +301,27 @@ func CoreTableIndexes() map[string][]TableIndex {
 	}
 }
 
-// ShouldIncludeSessionTable is a Go-only helper for the get-tables.ts session
-// inclusion rule:
-//
-//	...(!options.secondaryStorage || options.session?.storeSessionInDatabase ? sessionTable : {})
+// ShouldIncludeSessionTable reports the session inclusion rule.
 func ShouldIncludeSessionTable(hasSecondaryStorage, storeSessionInDatabase bool) bool {
 	return !hasSecondaryStorage || storeSessionInDatabase
 }
 
-// ShouldIncludeVerificationTable is a Go-only helper for the get-tables.ts
-// verification rule:
-//
-//	...(!options.secondaryStorage || options.verification?.storeInDatabase ? verificationTable : {})
+// ShouldIncludeVerificationTable reports the verification inclusion rule.
 func ShouldIncludeVerificationTable(hasSecondaryStorage, storeVerificationInDatabase bool) bool {
 	return !hasSecondaryStorage || storeVerificationInDatabase
 }
 
-// ShouldAddRateLimitTable is a Go-only helper for the get-tables.ts rate-limit
-// rule:
-//
-//	const shouldAddRateLimitTable = options.rateLimit?.storage === "database"
+// ShouldAddRateLimitTable reports the rate-limit table rule.
 func ShouldAddRateLimitTable(rateLimitStorage string) bool {
 	return rateLimitStorage == "database" || rateLimitStorage == string(types.RateLimitStorageDatabase)
 }
 
-// HasSecondaryStorage is a Go-only helper reporting whether the resolved
-// options configure an external secondary storage backend
-// (options.secondaryStorage).
+// HasSecondaryStorage reports whether secondary storage is configured.
 func HasSecondaryStorage(opts Options) bool {
 	return opts.SecondaryStorage != nil
 }
 
-// applyModelFieldNames overlays a DBModelOptions block's modelName and
-// per-field renames onto one core table. It does NOT apply additionalFields:
-// upstream buildAuthTables spreads `...options.<model>?.additionalFields`
-// AFTER plugin fields, so option fields must merge last (see GetAuthTables).
-// Go-only helper (upstream inlines these mappings per table).
+// applyModelFieldNames overlays modelName and per-field renames onto one table.
 func applyModelFieldNames(table TableSchema, model types.DBModelOptions) TableSchema {
 	out := TableSchema{
 		ModelName:        table.ModelName,
@@ -453,11 +346,7 @@ func applyModelFieldNames(table TableSchema, model types.DBModelOptions) TableSc
 	return out
 }
 
-// applyOptionAdditionalFields merges each core model's
-// options.<model>.additionalFields over its table, winning over same-named
-// plugin fields — the trailing `...options.<model>?.additionalFields`
-// spreads in upstream buildAuthTables. Go-only helper (upstream inlines
-// these spreads per table).
+// applyOptionAdditionalFields merges option additionalFields over tables.
 func applyOptionAdditionalFields(tables PluginSchema, opts Options) PluginSchema {
 	additional := map[string]map[string]FieldAttribute{
 		"user":         opts.User.Model.AdditionalFields,
@@ -484,10 +373,7 @@ func applyOptionAdditionalFields(tables PluginSchema, opts Options) PluginSchema
 	return tables
 }
 
-// baseCoreTables builds the core tables with the configured per-model
-// renames applied, but WITHOUT option additionalFields, which merge only
-// after plugin schemas (see GetAuthTables). Go-only helper; upstream inlines
-// these defaults per table inside buildAuthTables.
+// baseCoreTables builds the core tables with renames applied.
 func baseCoreTables(opts Options) PluginSchema {
 	core := CoreSchema()
 	return PluginSchema{
@@ -498,9 +384,7 @@ func baseCoreTables(opts Options) PluginSchema {
 	}
 }
 
-// isCoreTableKey reports whether key is one of the four core tables that
-// upstream buildAuthTables rebuilds with fixed order and option-derived
-// model names. Go-only helper.
+// isCoreTableKey reports whether key is a core table.
 func isCoreTableKey(key string) bool {
 	switch key {
 	case "user", "session", "account", "verification":
@@ -509,13 +393,7 @@ func isCoreTableKey(key string) bool {
 	return false
 }
 
-// mergePluginTable merges one plugin table declaration over tables,
-// mirroring the per-entry step of the upstream pluginSchema reduce followed
-// by the core-table rebuild in buildAuthTables: for the four core keys only
-// Fields and Indexes merge in, while a plugin's ModelName, Order, and
-// DisableMigration on core tables are ignored (upstream rebuilds core tables
-// with fixed order/option model names and drops plugin disableMigrations
-// there). Non-core keys merge fully via MergeSchemas.
+// mergePluginTable merges one plugin table over tables.
 func mergePluginTable(tables PluginSchema, model string, table TableSchema) PluginSchema {
 	if !isCoreTableKey(model) {
 		return MergeSchemas(tables, PluginSchema{model: table})
@@ -535,12 +413,7 @@ func mergePluginTable(tables PluginSchema, model string, table TableSchema) Plug
 	return tables
 }
 
-// buildAuthTables assembles core tables (with option renames), plugin field
-// extensions, and option additionalFields in upstream buildAuthTables order
-// (core→plugin→options) so options.additionalFields win over same-named
-// plugin fields. Secondary-storage filtering and the rate-limit table are
-// applied by the GetAuthTables variants, not here. Go-only helper; upstream
-// inlines this in buildAuthTables.
+// buildAuthTables assembles core, plugin, and option fields in order.
 func buildAuthTables(opts Options) PluginSchema {
 	tables := baseCoreTables(opts)
 	for _, plugin := range opts.Plugins {
@@ -551,16 +424,7 @@ func buildAuthTables(opts Options) PluginSchema {
 	return applyOptionAdditionalFields(tables, opts)
 }
 
-// GetAuthTables follows upstream getAuthTables/buildAuthTables: core tables
-// with configured model/field names and additional fields, plus plugin field
-// extensions, minus secondary-stored tables, plus the rate-limit table when
-// database storage is selected. Merge precedence is core→plugin→options, so
-// options.additionalFields win over same-named plugin fields.
-//
-// DELTA vs upstream: plugin DisableMigration/ModelName/Order on core tables
-// are ignored here (upstream drops them in the core rebuild), and
-// presence-sensitive last-wins disableMigration on plugin tables is
-// OR-accumulated by MergeSchemas (see its comment).
+// GetAuthTables follows upstream getAuthTables/buildAuthTables.
 func GetAuthTables(opts Options) PluginSchema {
 	tables := buildAuthTables(opts)
 	if HasSecondaryStorage(opts) {
@@ -577,11 +441,7 @@ func GetAuthTables(opts Options) PluginSchema {
 	return tables
 }
 
-// GetAuthTablesWithSecondaryStorage applies the upstream secondary-storage
-// table inclusion rules explicitly, for callers (like the schema generator)
-// that resolve storage outside Options. hasSecondaryStorage stands in for
-// `options.secondaryStorage`; the store flags stand in for the per-model
-// database overrides.
+// GetAuthTablesWithSecondaryStorage applies secondary-storage inclusion rules.
 func GetAuthTablesWithSecondaryStorage(opts Options, hasSecondaryStorage, storeSessionInDatabase, storeVerificationInDatabase bool) PluginSchema {
 	tables := buildAuthTables(opts)
 	if hasSecondaryStorage {
@@ -595,9 +455,7 @@ func GetAuthTablesWithSecondaryStorage(opts Options, hasSecondaryStorage, storeS
 	return tables
 }
 
-// GetAuthTablesWithRateLimit returns GetAuthTables plus the rate-limit
-// storage table when storage == "database", mirroring
-// `...(shouldAddRateLimitTable ? rateLimitTable : {})`.
+// GetAuthTablesWithRateLimit returns GetAuthTables plus the rate-limit table.
 func GetAuthTablesWithRateLimit(opts Options, rateLimitStorage string) PluginSchema {
 	tables := GetAuthTables(opts)
 	if ShouldAddRateLimitTable(rateLimitStorage) {
@@ -608,32 +466,14 @@ func GetAuthTablesWithRateLimit(opts Options, rateLimitStorage string) PluginSch
 	return tables
 }
 
-// GetAuthTablesWithResolvedIndexes follows upstream
-// getAuthTablesWithResolvedIndexes: it returns the resolved tables plus
-// physical index metadata keyed by physical table name.
-//
-// DELTA vs upstream: no schema-wide index-name uniqueness validation is
-// performed, and the result is a (tables, per-table map) tuple rather than
-// {tables, indexesByTable}. Physical names derive from TableSchema.ModelName,
-// per-field FieldName entries, and cfg (AdapterConfig); logical field names
-// with no mapping fall back to camelToSnake.
+// GetAuthTablesWithResolvedIndexes returns tables plus physical index metadata.
 func GetAuthTablesWithResolvedIndexes(opts Options, cfg AdapterConfig) (PluginSchema, map[string][]ResolvedDBTableIndex) {
 	tables := GetAuthTables(opts)
 	indexes := ResolveSchemaIndexes(tables, cfg)
 	return tables, indexes
 }
 
-// ResolveSchemaIndexes resolves logical index metadata for every table in
-// schema to physical columns: declared TableSchema.Indexes plus single-column
-// entries derived from field Index/Unique flags, plus the Go-only
-// CoreTableIndexes entries for core models; overlaps dedupe by resolved
-// definition.
-//
-// DELTA vs upstream resolveDatabaseSchemaIndexes/resolveDatabaseTableIndexes:
-// no validation is performed here (unknown/duplicate/unsupported fields,
-// same-name-different-definition conflicts, and multi-table aliasing never
-// error), and tables with DisableMigrationsEffective are skipped (presence-
-// safe last-wins via DisableMigrations, legacy OR via DisableMigration).
+// ResolveSchemaIndexes resolves logical index metadata to physical columns.
 func ResolveSchemaIndexes(schema PluginSchema, cfg AdapterConfig) map[string][]ResolvedDBTableIndex {
 	out := map[string][]ResolvedDBTableIndex{}
 	for model, table := range schema {
@@ -691,25 +531,14 @@ func ResolveSchema(opts Options) PluginSchema {
 	return MergeSchemas(nil, schemas...)
 }
 
-// FullSchema returns the complete resolved schema for options: core tables
-// with configured names and additional fields, plus plugin extensions,
-// minus secondary-stored tables, plus the rate-limit table when database
-// storage is selected. It is GetAuthTables named for the route-migration
-// split: new route field processing must read the full schema here, while
-// the legacy plugin-only ResolveSchema allow-list stays frozen for its
-// existing consumers until each is migrated (see the ResolveSchema comment;
-// the migration must union, not intersect, so previously accepted fields
-// keep passing).
-//
-// Upstream TypeScript name: getAuthTables (buildAuthTables in
-// get-tables.ts); this alias exists only to name the split explicitly.
+// FullSchema returns the complete resolved schema for options.
+// New route processing must read the full schema here; the legacy
+// plugin-only ResolveSchema stays frozen. The migration must union, not intersect.
 func FullSchema(opts Options) PluginSchema {
 	return GetAuthTables(opts)
 }
 
-// FullSchemaFields returns the merged field map for one logical model from
-// the full schema (core + plugin + option additionalFields). It returns nil
-// when the model is absent (e.g. session under secondary storage).
+// FullSchemaFields returns the merged field map for one logical model.
 func FullSchemaFields(opts Options, model string) map[string]FieldAttribute {
 	if table, ok := FullSchema(opts)[model]; ok {
 		return table.Fields
@@ -717,19 +546,10 @@ func FullSchemaFields(opts Options, model string) map[string]FieldAttribute {
 	return nil
 }
 
-// pluginSchemaRegistry maps CLI/plugin IDs to factories for
-// schema-only providers, so the generate-schema CLI can load arbitrary
-// plugin schemas without importing full plugin implementations. Upstream has
-// no such registry (schemas come from full plugin objects passed to the
-// config); this is Go-only infrastructure next to SchemasForProviders.
+// pluginSchemaRegistry maps CLI/plugin IDs to factories.
 var pluginSchemaRegistry = map[string]func() PluginSchemaProvider{}
 
-// RegisterPluginSchema registers a named PluginSchemaProvider factory for
-// CLI schema generation (see PluginSchemasForIDs). Built-in generator IDs
-// ("admin", "org") keep resolving through the CLI's own constructors;
-// registering those names has no effect on the CLI. It is safe for
-// concurrent use with UnregisterPluginSchema/PluginSchemasForIDs only in
-// tests; production registrations happen at init time.
+// RegisterPluginSchema registers a named provider factory for CLI generation.
 func RegisterPluginSchema(id string, factory func() PluginSchemaProvider) {
 	if id == "" || factory == nil {
 		return
@@ -737,14 +557,12 @@ func RegisterPluginSchema(id string, factory func() PluginSchemaProvider) {
 	pluginSchemaRegistry[id] = factory
 }
 
-// UnregisterPluginSchema removes a registered provider factory. It exists
-// for test isolation; production code never calls it.
+// UnregisterPluginSchema removes a registered provider factory.
 func UnregisterPluginSchema(id string) {
 	delete(pluginSchemaRegistry, id)
 }
 
-// RegisteredPluginSchemaIDs returns the sorted IDs in the plugin schema
-// registry. Go-only helper for CLI error messages.
+// RegisteredPluginSchemaIDs returns the sorted registry IDs.
 func RegisteredPluginSchemaIDs() []string {
 	ids := make([]string, 0, len(pluginSchemaRegistry))
 	for id := range pluginSchemaRegistry {
@@ -754,10 +572,7 @@ func RegisteredPluginSchemaIDs() []string {
 	return ids
 }
 
-// PluginSchemasForIDs merges the schemas of the named registered providers
-// (see RegisterPluginSchema). Unknown IDs are an error listing the known
-// IDs, mirroring the CLI's unsupported-plugin failure. Go-only helper;
-// upstream resolves schemas from full plugin objects.
+// PluginSchemasForIDs merges the schemas of the named providers.
 func PluginSchemasForIDs(ids []string) (PluginSchema, error) {
 	providers := make([]PluginSchemaProvider, 0, len(ids))
 	for _, id := range ids {
@@ -770,14 +585,7 @@ func PluginSchemasForIDs(ids []string) (PluginSchema, error) {
 	return SchemasForProviders(providers), nil
 }
 
-// ValidateIndexName checks an explicit index name like upstream
-// getDatabaseIndexName: it must contain at least one visible character,
-// start with a letter or underscore, hold only letters/numbers/underscores,
-// and fit in 63 UTF-8 bytes. Generated names (empty Name) skip this check
-// and are derived by GetDatabaseIndexName instead.
-//
-// Upstream TypeScript name: the explicit-name branch of getDatabaseIndexName
-// (database-index.ts), which throws BetterAuthError on violations.
+// ValidateIndexName checks an explicit index name.
 func ValidateIndexName(name string) error {
 	if strings.TrimSpace(name) == "" {
 		return fmt.Errorf("auth: database index names must contain at least one visible character")
@@ -794,15 +602,10 @@ func ValidateIndexName(name string) error {
 	return nil
 }
 
-// maxDatabaseIndexFields caps a table-level index at 16 fields so generated
-// DDL works across supported databases (upstream
-// MAX_DATABASE_INDEX_FIELDS in database-index.ts).
+// maxDatabaseIndexFields caps a table-level index at 16 fields.
 const maxDatabaseIndexFields = 16
 
-// portableIndexKey lowercases an identifier for schema-wide uniqueness
-// checks (upstream getPortableDatabaseIdentifierKey). SQLite and PostgreSQL
-// do not scope index names to a table, so collisions are detected
-// case-insensitively across the whole schema.
+// portableIndexKey lowercases an identifier for uniqueness checks.
 func portableIndexKey(name string) string {
 	return strings.ToLower(name)
 }
@@ -1953,36 +1756,11 @@ func DiffSchemas(current, desired PluginSchema, cfg AdapterConfig, populated map
 	return diff, nil
 }
 
-// ---------------------------------------------------------------------------
 // AUTH-S6-01: unified schema + identity admission pipeline.
-//
-// One resolved schema (FullSchema/GetAuthTables) drives adapter mapping,
-// route input/output, validators, transforms, aliases, required/input/
-// returned flags, hooks, migrations, and plugin fields. The legacy
-// plugin-only ResolveSchema allow-list stays frozen for its existing
-// consumers (see its comment); new code must use FullSchema/GetSchema and
-// the Input/Output field helpers below. Wave 7 route adoption consumes the
-// exported helpers here and in api/routes/schema_fields.go; no route
-// handlers are edited in this task.
-//
-// Upstream TypeScript names are noted per symbol; Go-only helpers are
-// marked as such.
+// New code must use FullSchema/GetSchema and the Input/Output helpers below.
 // ---------------------------------------------------------------------------
 
-// GetSchema mirrors upstream getSchema (db/get-schema.ts): it returns the
-// resolved schema keyed by physical modelName with fields keyed by physical
-// column (field.fieldName || logical key), references.model rewritten to the
-// target table's modelName, order carried, disableMigrations set, and
-// resolved index metadata attached.
-//
-// DELTAS vs upstream: physical names here honor TableSchema.ModelName,
-// per-field FieldName, and cfg (AdapterConfig) via PhysicalTableName/
-// PhysicalColumnName; upstream uses only schema-declared modelName/fieldName.
-// Tables sharing one modelName merge field-by-field (later wins) like
-// upstream; indexes attach by physical table name. Unset Order stays 0
-// (upstream uses Infinity); callers must not rely on it for ordering.
-// Deterministic: logical keys are scanned in sorted order.
-//
+// GetSchema mirrors upstream getSchema: physical modelName/column view.
 // Upstream TypeScript name: getSchema.
 func GetSchema(opts Options) PluginSchema {
 	tables, _ := GetAuthTablesWithResolvedIndexes(opts, AdapterConfig{})
@@ -2052,8 +1830,7 @@ func GetSchema(opts Options) PluginSchema {
 	return schema
 }
 
-// resolvedIndexesToTableIndexes converts resolved physical index metadata
-// back to logical TableIndex entries for GetSchema attachment. Go-only.
+// resolvedIndexesToTableIndexes converts resolved index metadata back to TableIndex.
 func resolvedIndexesToTableIndexes(resolved []ResolvedDBTableIndex) []TableIndex {
 	out := make([]TableIndex, 0, len(resolved))
 	for _, r := range resolved {
@@ -2062,21 +1839,7 @@ func resolvedIndexesToTableIndexes(resolved []ResolvedDBTableIndex) []TableIndex
 	return out
 }
 
-// InputFields returns the resolved input field map for one logical model,
-// mirroring upstream getFields(options, model, "input") (db/schema.ts): the
-// option additionalFields for user/session/account/verification unioned with
-// plugin-declared fields, option winning on conflict. Core table defaults
-// are excluded by construction: callers parse additional data only, and
-// ParseInputData-style required/default enforcement applies to the returned
-// map.
-//
-// DELTAS vs upstream: verification additionalFields are included (upstream
-// getFields covers user/session/account only); on plugin/option conflict the
-// option wins (upstream getFields lets plugin win, while buildAuthTables
-// lets the option win — this helper follows the single-schema option-wins
-// rule so input and FullSchema never disagree).
-//
-// Upstream TypeScript name: getFields (input mode).
+// InputFields returns the resolved input field map for one logical model.
 func InputFields(opts Options, model string) map[string]FieldAttribute {
 	out := map[string]FieldAttribute{}
 	for _, plugin := range opts.Plugins {
@@ -2106,12 +1869,7 @@ func InputFields(opts Options, model string) map[string]FieldAttribute {
 	return out
 }
 
-// OutputFields returns the resolved output field map for one logical model:
-// the FullSchema (core + plugin + option additionalFields) field map.
-// FilterOutputFields-style output stripping (returned:false) applies to the
-// returned map.
-//
-// Upstream TypeScript name: getFields (output mode).
+// OutputFields returns the resolved output field map for one logical model.
 func OutputFields(opts Options, model string) map[string]FieldAttribute {
 	if table, ok := FullSchema(opts)[model]; ok {
 		return table.Fields
@@ -2145,13 +1903,7 @@ func AccountOutputFields(opts Options) map[string]FieldAttribute {
 	return OutputFields(opts, "account")
 }
 
-// BuildSyntheticUserOutput mirrors upstream buildSyntheticUserOutput
-// (db/schema.ts): it builds an enumeration-safe synthetic user from the user
-// output schema — returned:false fields skipped, provided values kept,
-// func/static defaults applied, optional (Required == explicit false) fields
-// set to null, and the id carried explicitly (it is not part of the schema).
-//
-// Upstream TypeScript name: buildSyntheticUserOutput.
+// BuildSyntheticUserOutput builds an enumeration-safe synthetic user.
 func BuildSyntheticUserOutput(opts Options, data map[string]any) map[string]any {
 	schema := OutputFields(opts, "user")
 	result := map[string]any{}
@@ -2193,34 +1945,19 @@ func callDefaultValue(v any) any {
 	return v
 }
 
-// ---------------------------------------------------------------------------
-// ValidateUserInfo admission seam (init-options.ts:970).
-//
-// Upstream gate: options.user.validateUserInfo runs just before create-user,
-// link-account, and (for OAuth/SSO) sign-in across every method. Return nil
-// to allow; return { error, errorDescription? } to reject. Programmatic
-// flows surface a 403 APIError; browser (OAuth callback) flows redirect to
-// the error URL with ?error=<code>&error_description=<msg>. A throwing hook
-// fails closed as validation_failed; a missing/invalid source fails closed
-// as validation_source_missing. Non-provider returning sign-ins are not
-// re-validated upstream; use admin ban controls or databaseHooks for those.
-//
-// The Go types.ValidateUserInfoSource is flat (ProviderID/Profile) while
-// upstream nests oauth:{providerId,profile} / sso:{providerId,profile}; the
-// constructors below map the nested shape onto the flat fields by method.
-// Route handlers must call AssertValidUserInfo at each seam (Wave 7); the
-// redirect helper maps a rejection to the browser transport.
+// ValidateUserInfo admission seam.
+// Upstream gate runs before create-user, link-account, and OAuth/SSO sign-in.
+// A throwing hook fails closed as validation_failed; a missing/invalid source fails closed
+// as validation_source_missing.
+// Route handlers must call AssertValidUserInfo at each seam.
 // ---------------------------------------------------------------------------
 
-// ValidateUserInfoSourceBuilder builds a flat ValidateUserInfoSource from
-// the upstream nested provisioning shape. Go-only helper.
+// ValidateUserInfoSourceBuilder builds a flat ValidateUserInfoSource.
 type ValidateUserInfoSourceBuilder struct {
 	src types.ValidateUserInfoSource
 }
 
-// OAuthProvisioningSource starts a provisioning source for method "oauth"
-// with the provider id and raw profile. Call WithAction to set the
-// lifecycle action. Go-only helper.
+// OAuthProvisioningSource starts a provisioning source for method "oauth".
 func OAuthProvisioningSource(providerID string, profile map[string]any) ValidateUserInfoSourceBuilder {
 	return ValidateUserInfoSourceBuilder{src: types.ValidateUserInfoSource{
 		Method:     types.ValidateUserInfoMethodOAuth,
@@ -2229,8 +1966,7 @@ func OAuthProvisioningSource(providerID string, profile map[string]any) Validate
 	}}
 }
 
-// SSOProvisioningSource starts a provisioning source for an SSO method
-// ("sso-oidc" or "sso-saml"). Go-only helper.
+// SSOProvisioningSource starts a provisioning source for an SSO method.
 func SSOProvisioningSource(method types.ValidateUserInfoMethod, providerID string, profile map[string]any) ValidateUserInfoSourceBuilder {
 	return ValidateUserInfoSourceBuilder{src: types.ValidateUserInfoSource{
 		Method:     method,
@@ -2239,8 +1975,7 @@ func SSOProvisioningSource(method types.ValidateUserInfoMethod, providerID strin
 	}}
 }
 
-// MethodProvisioningSource starts a provisioning source for a non-provider
-// method (email-password, admin, anonymous, ...). Go-only helper.
+// MethodProvisioningSource starts a provisioning source for a non-provider method.
 func MethodProvisioningSource(method types.ValidateUserInfoMethod) ValidateUserInfoSourceBuilder {
 	return ValidateUserInfoSourceBuilder{src: types.ValidateUserInfoSource{Method: method}}
 }
@@ -2251,12 +1986,7 @@ func (b ValidateUserInfoSourceBuilder) WithAction(action types.ValidateUserInfoA
 	return b.src
 }
 
-// AssertValidUserInfoSource mirrors upstream assertValidUserInfoSource
-// (utils/validate-user-info.ts): the method is required; the oauth method
-// requires a provider id; sso-oidc/sso-saml require a provider id. Failures
-// are 403 HttpErrors with code validation_source_missing.
-//
-// Upstream TypeScript name: assertValidUserInfoSource.
+// AssertValidUserInfoSource checks the method and provider id.
 func AssertValidUserInfoSource(src types.ValidateUserInfoSource) error {
 	if src.Method == "" {
 		return types.HttpError{Code: "validation_source_missing", Message: "User validation source is required", Status: 403}
@@ -2270,19 +2000,9 @@ func AssertValidUserInfoSource(src types.ValidateUserInfoSource) error {
 	return nil
 }
 
-// AssertValidUserInfo mirrors upstream assertValidUserInfo
-// (utils/validate-user-info.ts): it invokes the application's
-// user.validateUserInfo gate and returns a 403 HttpError when the gate
-// rejects. A nil hook allows everything. A throwing hook fails closed as
-// validation_failed. A gate result with Error set maps to that code with
-// ErrorDescription (or Error) as the message.
-//
-// The ctx is the request context for logging parity (unused — Go has no
-// request-scoped logger here); hook authors receive epCtx. Callers map the
-// returned error to their transport: programmatic flows surface the 403,
-// browser flows redirect via ValidateUserInfoRedirectURL.
-//
-// Upstream TypeScript name: assertValidUserInfo.
+// AssertValidUserInfo invokes the user.validateUserInfo gate.
+// A nil hook allows everything. A throwing hook fails closed as
+// validation_failed.
 func AssertValidUserInfo(_ context.Context, hook types.ValidateUserInfoFunc, epCtx types.EndpointContext, user map[string]any, src types.ValidateUserInfoSource) error {
 	if hook == nil {
 		return nil
@@ -2304,13 +2024,7 @@ func AssertValidUserInfo(_ context.Context, hook types.ValidateUserInfoFunc, epC
 	return nil
 }
 
-// ValidateUserInfoRedirectURL builds the browser-flow redirect for a gate
-// rejection: baseURL with ?error=<code>&error_description=<msg>, appending
-// with & when the base already carries a query string and URL-encoding
-// values. It mirrors upstream redirectOnError
-// (oauth2/errors.ts) / appendQueryParams for the validateUserInfo codes.
-//
-// Upstream TypeScript name: redirectOnError (validateUserInfo application).
+// ValidateUserInfoRedirectURL builds the browser-flow redirect for a gate rejection.
 func ValidateUserInfoRedirectURL(baseURL, code, description string) string {
 	params := url.Values{}
 	params.Set("error", code)

@@ -8,70 +8,22 @@ import (
 	"github.com/brick-org/brick/auth/src/types"
 )
 
-// HookedAdapter wraps a DBAdapter and fires lifecycle hooks
-// (BeforeCreate/AfterCreate, etc.) around each operation.
-// Hooks are collected from all plugins during auth.BetterAuth.
-//
-// This mirrors vendor/better-auth/packages/better-auth/src/db/with-hooks.ts
-// to the extent the Go hook surface allows. Intentional deviations from
-// upstream are documented here (not on the shared BeforeHookFunc/AfterHookFunc
-// types, which live outside this file):
-//
-// Hook contracts (Go):
-//   - Before hooks abort error-only or silently: return (nil, err) to abort
-//     with an error without touching the database; return
-//     (nil, ErrHookAbort) to abort silently with null and no write (no error
-//     surfaced), mirroring upstream's literal `false` return. Use errors.Is
-//     to detect the sentinel (it may be wrapped).
-//   - A non-nil map returned from a before hook is MERGED over the pending
-//     payload (mutated keys win, omitted keys survive), mirroring upstream's
-//     ({...actualData, ...result.data}).
-//   - After hooks defer past successful Transaction commit (collected during
-//     tx, flushed on success, skipped on rollback), mirroring upstream's
-//     queueAfterTransactionHook. Outside transactions they run synchronously
-//     and their failures PROPAGATE: the call fails without rolling back the
-//     committed write, mirroring upstream's immediate-execution rejection
-//     (core/src/context/transaction.ts:170 "does not retry an immediately
-//     executed hook when it fails"). Failures are additionally reported to
-//     the adapter logger when one is configured (log-and-report); when no
-//     HookLogger is configured (the default), the error still propagates —
-//     pass a logger via NewHookedAdapterWithLogger (wired automatically from
-//     Options.Logger by BetterAuth) to hear them alongside the returned
-//     error. Decision D05 (AUTH-S6-01): aligned to throw.
-//   - Post-commit (Transaction flush) after-hook errors PROPAGATE: the
-//     Transaction call fails without rolling back committed work, mirroring
-//     upstream's post-commit rethrow. Install an OnAfterCommitHookError
-//     handler (HookedAdapterOptions) to report each failure and keep the
-//     call succeeding; a reporting handler never suppresses later hooks,
-//     while an unhandled failure stops the flush at the first error — both
-//     mirroring runWithTransaction.
+// HookedAdapter wraps a DBAdapter and fires lifecycle hooks around each operation.
+// This mirrors with-hooks.ts.
+// Hook contracts: before hooks abort via (nil, err) or silently via
+// (nil, ErrHookAbort); non-nil maps merge over the payload; after hooks
+// defer past Transaction commit and failures PROPAGATE (Decision D05: aligned to throw).
+// Post-commit flush failures PROPAGATE unless OnAfterCommitHookError reports them.
 //
 // Delete/DeleteMany pre-reads:
-//   - Delete fetches the row first so hooks receive the actual record. When no
-//     row matches, before hooks, overrides, the inner Delete, and after hooks
-//     are all skipped. A pre-read failure fails closed: the error is returned
-//     without running hooks, overrides, or the write (upstream swallows the
-//     error and skips the write, returning null).
-//   - DeleteMany fetches all matching rows first. An empty match fires zero
-//     hooks while the inner DeleteMany (or its override) still runs. A
-//     pre-read failure is reported to the logger when one is configured and
-//     deletion still proceeds with zero hooks (upstream also proceeds after
-//     a failed pre-read); with no logger the failure is discarded quietly,
-//     as with after-hook errors.
+//   - Delete fetches the row first. A pre-read failure fails closed: the error
+//     is returned without running hooks, overrides, or the write.
+//   - DeleteMany fetches rows first; a pre-read failure proceeds with zero hooks.
+// UpdateMany reuses the Update before/after hooks; AfterBulk carries the count.
 //
-// UpdateMany reuses the Update before/after hooks, mirroring
-// updateManyWithHooks. The shared row-typed after hook still fires with nil
-// for backwards compatibility; the AfterBulk hook carries the bulk result
-// count (upstream passes it to the shared update.after hook, which the
-// row-typed AfterHookFunc cannot carry).
-//
-// Adapter overrides (PluginAdapterOverrides, collected from plugins via
-// types.CollectAdapterOverrides plus explicit HookedAdapterOptions.Overrides
-// with explicit entries winning) replace the inner write for the hooked
-// operations, mirroring the custom*Fn parameters of with-hooks.ts: hooks
-// still wrap the override (before runs on the merged payload, after runs on
-// the override result). Supported keys: "create", "update", "updateMany",
-// "delete", "deleteMany". Override argument/return conventions (fail closed
+// Adapter overrides replace the inner write for hooked operations.
+// Supported keys: "create", "update", "updateMany",
+// "delete", "deleteMany". Override conventions (fail closed
 // on shape mismatch, inner skipped):
 //   - create:     fn(ctx, model string, data map[string]any, sel []string)
 //     returns (map[string]any, error); nil result means null.
@@ -82,33 +34,10 @@ import (
 //   - delete:     fn(ctx, model string, where []Where) returns (any, error);
 //     the value is ignored.
 //   - deleteMany: fn(ctx, model string, where []Where) returns (int, error).
-//
-// Reads (FindOne/FindMany/Count), ConsumeOne, and IncrementOne have no
-// override surface: upstream defines custom fns only for the hooked writes,
-// and ConsumeOne keeps its atomic race gate on the inner adapter.
-//
-// Field validators/transforms (FieldAttribute.Validator/Transform) execute
-// when HookedAdapterOptions.FieldSchemas provides per-model attributes:
-// Validator.Input then Transform.Input run on the pending write payload
-// before before-hooks (a rejection aborts the operation with no write);
-// Transform.Output runs on rows returned from Create/Update/FindOne/
-// FindMany/IncrementOne/ConsumeOne. Validator.Output is never executed,
-// mirroring upstream (parseInputData validates inputs only; outputs are
-// filtered, never validated). With no schemas for a model the adapter
-// leaves values untouched.
-//
-// ConsumeOne fires the Delete before/after hooks around the atomic consume,
-// mirroring consumeOneWithHooks: the first concurrent caller wins,
-// subsequent racers resolve to (nil, nil) without firing after hooks.
-// A silent abort (ErrHookAbort) skips the consume with (nil, nil).
-// IncrementOne has no hooks and delegates directly.
-//
-// Hook sources mirror the upstream context labels: "plugin:<id>" for plugin
-// hooks (see vendor/.../src/context/helpers.ts) and "user" for user-supplied
-// databaseHooks.
-//
-// Transaction propagates hooks into the tx adapter; after hooks defer to
-// post-commit (see above).
+// Field validators/transforms execute when FieldSchemas provides attributes.
+// ConsumeOne fires Delete hooks around the atomic consume.
+// Hook sources: "plugin:<id>" and "user".
+// Transaction propagates hooks; after hooks defer to post-commit.
 type HookedAdapter struct {
 	inner            Adapter
 	hooks            mergedHooks
@@ -132,21 +61,10 @@ type pendingAfter struct {
 	count    int
 }
 
-// AfterCommitHookErrorHandler reports a post-commit (Transaction flush)
-// after-hook failure after the surrounding work has committed.
-//
-// It mirrors upstream runWithTransaction's onAfterCommitHookError option
-// (core/src/context/transaction.ts): reporting cannot roll back committed
-// work or suppress later hooks, and the Transaction call succeeds. Without
-// a handler the first flush failure fails the call instead. The reported
-// error wraps the operation, model, and hook source; use errors.Is/As to
-// reach the hook's cause.
+// AfterCommitHookErrorHandler reports a post-commit after-hook failure.
 type AfterCommitHookErrorHandler func(err error)
 
 // HookedAdapterOptions tunes HookedAdapter beyond hooks and logging.
-//
-// Zero value preserves historical behavior except for the upstream-faithful
-// fixes that always apply (before-hook merge, post-commit propagation).
 type HookedAdapterOptions struct {
 	// Logger additionally reports synchronous after-hook failures and
 	// DeleteMany pre-read failures. Nil (the default) skips the report;
@@ -168,10 +86,7 @@ type HookedAdapterOptions struct {
 	Overrides types.PluginAdapterOverrides
 }
 
-// HookLogger receives After-hook failures for observability. It is
-// deliberately tiny so BetterAuth can wire opts.Logger without changing
-// default output: when nil (the default) failures are still propagated to
-// the caller, just without the log report.
+// HookLogger receives After-hook failures for observability.
 type HookLogger interface {
 	Error(msg string, args ...any)
 }
@@ -192,26 +107,18 @@ type modelHookEntry struct {
 }
 
 // NewHookedAdapter wraps inner with plugin hooks followed by user hooks.
-// Plugin adapter overrides are collected automatically (explicit options
-// win; see NewHookedAdapterWithOptions).
 func NewHookedAdapter(inner Adapter, plugins []Plugin, userHooks DBHooks) Adapter {
 	return NewHookedAdapterWithOptions(inner, plugins, userHooks, HookedAdapterOptions{})
 }
 
 // NewHookedAdapterWithLogger wraps inner like NewHookedAdapter and
-// additionally reports After-hook errors to logger (failures propagate to
-// the caller regardless; a nil logger only skips the report). Upstream TS
-// name: getWithHooks.
+// additionally reports After-hook errors to logger.
 func NewHookedAdapterWithLogger(inner Adapter, plugins []Plugin, userHooks DBHooks, logger HookLogger) Adapter {
 	return NewHookedAdapterWithOptions(inner, plugins, userHooks, HookedAdapterOptions{Logger: logger})
 }
 
-// NewHookedAdapterWithOptions wraps inner like NewHookedAdapter with full
-// tuning: after-commit error handling, field validator/transform schemas,
-// and explicit adapter overrides. Plugin hooks run before user hooks;
-// plugin-collected adapter overrides apply unless an explicit Overrides
-// entry wins for the same operation. When no hooks, schemas, or overrides
-// apply, inner is returned unwrapped. Upstream TS name: getWithHooks.
+// NewHookedAdapterWithOptions wraps inner like NewHookedAdapter with full tuning.
+// Upstream TS name: getWithHooks.
 func NewHookedAdapterWithOptions(inner Adapter, plugins []Plugin, userHooks DBHooks, opts HookedAdapterOptions) Adapter {
 	mh := mergedHooks{models: make(map[string][]modelHookEntry)}
 	for _, p := range plugins {
@@ -257,10 +164,7 @@ func isHookAbort(err error) bool {
 	return errors.Is(err, types.ErrHookAbort)
 }
 
-// mergeHookData overlays mutated over base (mutated keys win, omitted keys
-// survive), mirroring upstream's {...actualData, ...result.data}. The result
-// is always a fresh map; neither input is mutated. A nil mutated map keeps
-// the base unchanged.
+// mergeHookData overlays mutated over base.
 func mergeHookData(base, mutated map[string]any) map[string]any {
 	if len(mutated) == 0 {
 		return base
@@ -275,11 +179,7 @@ func mergeHookData(base, mutated map[string]any) map[string]any {
 	return out
 }
 
-// applyFieldInput runs Validator.Input then Transform.Input over the pending
-// write payload for model (validator wins per field, mirroring
-// parseInputData's validator-first branches). A rejection aborts the
-// operation with no write. The result is a fresh map; the input is never
-// mutated. Models without schemas pass through untouched.
+// applyFieldInput runs Validator.Input then Transform.Input over the pending payload.
 func (h *HookedAdapter) applyFieldInput(model string, data map[string]any) (map[string]any, error) {
 	schema := h.fields[model]
 	if len(schema) == 0 {
@@ -311,9 +211,7 @@ func (h *HookedAdapter) applyFieldInput(model string, data map[string]any) (map[
 	return out, nil
 }
 
-// applyFieldOutput runs Transform.Output over a returned row for model.
-// Failures abort the read. Nil rows pass through; models without output
-// transforms return the row untouched (no copy).
+// applyFieldOutput runs Transform.Output over a returned row.
 func (h *HookedAdapter) applyFieldOutput(model string, row map[string]any) (map[string]any, error) {
 	if row == nil {
 		return nil, nil
@@ -444,12 +342,7 @@ func (h *HookedAdapter) runDeleteManyOverride(ctx context.Context, model string,
 	return count, true, nil
 }
 
-// flushPending runs deferred after-hooks post-commit. A set
-// OnAfterCommitHookError handler observes every failure and the flush
-// succeeds; otherwise the first failure is logged (when a logger is
-// configured) and returned, skipping the remaining hooks — mirroring
-// upstream runWithTransaction, where reporting cannot roll back committed
-// work and an unhandled failure throws.
+// flushPending runs deferred after-hooks post-commit.
 func (h *HookedAdapter) flushPending(pending []pendingAfter) error {
 	for _, p := range pending {
 		var err error
@@ -487,10 +380,7 @@ func (h *HookedAdapter) logPreReadErr(op, model string, err error) {
 }
 
 // runAfterOrDefer runs an after hook immediately outside transactions, or
-// queues it for post-commit flush inside transactions. Outside transactions
-// a failure is logged (when a logger is configured) and PROPAGATED: the
-// call fails without rolling back the committed write, mirroring upstream's
-// immediate-execution rejection. Decision D05 (AUTH-S6-01): aligned to throw.
+// queues it for post-commit flush inside transactions. Decision D05: aligned to throw.
 func (h *HookedAdapter) runAfterOrDefer(ctx context.Context, op, model, source string, hook AfterHookFunc, data map[string]any) error {
 	if hook == nil {
 		return nil
@@ -511,7 +401,6 @@ func (h *HookedAdapter) runAfterOrDefer(ctx context.Context, op, model, source s
 
 // runAfterBulkOrDefer runs a bulk after hook immediately outside
 // transactions, or queues it for post-commit flush inside transactions.
-// Failures propagate like runAfterOrDefer (D05: aligned to throw).
 func (h *HookedAdapter) runAfterBulkOrDefer(ctx context.Context, op, model, source string, hook types.AfterBulkHookFunc, count int) error {
 	if hook == nil {
 		return nil
@@ -644,14 +533,7 @@ func (h *HookedAdapter) Update(ctx context.Context, model string, where []Where,
 	return result, nil
 }
 
-// UpdateMany fires the Update before/after hooks around the bulk write,
-// mirroring upstream updateManyWithHooks (which reuses the update hooks).
-// Before-hook results merge over the update payload; abort with an error,
-// or abort silently with ErrHookAbort (0, nil). The shared row-typed after
-// hook still fires with nil for backwards compatibility while AfterBulk
-// carries the bulk result count. After-hook errors propagate outside
-// transactions (D05: aligned to throw) and post-commit inside them
-// (see flushPending).
+// UpdateMany fires the Update before/after hooks around the bulk write.
 func (h *HookedAdapter) UpdateMany(ctx context.Context, model string, where []Where, data map[string]any) (int, error) {
 	effective, err := h.runUpdateBefore(ctx, model, data)
 	if err != nil {
@@ -690,9 +572,7 @@ func (h *HookedAdapter) Delete(ctx context.Context, model string, where []Where)
 		return fmt.Errorf("auth: delete pre-read %s: %w", model, err)
 	}
 	if row == nil {
-		// Nothing matches: skip before hooks, overrides, the write, and
-		// after hooks, mirroring upstream (which gates all three on the
-		// fetched entity).
+		// Nothing matches: skip hooks and the write.
 		return nil
 	}
 	for _, entry := range h.hooks.models[model] {
@@ -725,13 +605,7 @@ func (h *HookedAdapter) Delete(ctx context.Context, model string, where []Where)
 
 func (h *HookedAdapter) DeleteMany(ctx context.Context, model string, where []Where) (int, error) {
 	// Fetch all matching rows before deletion so hooks receive the actual records.
-	// An empty match fires zero hooks while the inner DeleteMany still runs,
-	// mirroring upstream. A pre-read failure is reported to the logger when one
-	// is configured and deletion still proceeds with zero hooks, mirroring
-	// upstream (which proceeds with deletion after a failed pre-read).
 	var rows []map[string]any
-	// Negative limit requests an explicitly unbounded pre-read: hooks must
-	// observe every matching row, not just the default page.
 	if rs, err := h.inner.FindMany(ctx, model, where, -1, 0, nil, nil); err != nil {
 		h.logPreReadErr("deletemany", model, err)
 	} else {
@@ -773,15 +647,7 @@ func (h *HookedAdapter) DeleteMany(ctx context.Context, model string, where []Wh
 	return count, nil
 }
 
-// EndPreservedSessions ends (instead of deleting) the rows matched by
-// where, mirroring upstream endPreservedSessions
-// (internal-adapter.ts:91-106): the session-delete hooks still run (so
-// OAuth token revocation and back-channel logout fire on session end) while
-// the physical write is replaced by endUpdate applied through UpdateMany.
-// Matching callers restrict where to still-live rows. Adapter overrides for
-// DeleteMany still win when present; otherwise the inner adapter performs
-// the end update with no hooks of its own (routes must not observe update
-// hooks for an end-of-life transition).
+// EndPreservedSessions ends (instead of deleting) the rows matched by where.
 func (h *HookedAdapter) EndPreservedSessions(ctx context.Context, model string, where []Where, endUpdate map[string]any) (int, error) {
 	var rows []map[string]any
 	if rs, err := h.inner.FindMany(ctx, model, where, -1, 0, nil, nil); err != nil {
@@ -826,10 +692,7 @@ func (h *HookedAdapter) EndPreservedSessions(ctx context.Context, model string, 
 	return count, nil
 }
 
-// ConsumeOne fires the Delete before/after hooks around the atomic consume,
-// mirroring consumeOneWithHooks. The first concurrent caller wins;
-// subsequent racers resolve to (nil, nil) without firing after hooks.
-// A silent abort (ErrHookAbort) skips the consume with (nil, nil).
+// ConsumeOne fires the Delete before/after hooks around the atomic consume.
 func (h *HookedAdapter) ConsumeOne(ctx context.Context, model string, where []Where) (map[string]any, error) {
 	entries := h.hooks.models[model]
 	hasBefore := false
@@ -841,8 +704,7 @@ func (h *HookedAdapter) ConsumeOne(ctx context.Context, model string, where []Wh
 	}
 	var snapshot map[string]any
 	if hasBefore {
-		// Best-effort snapshot for before hooks; failures proceed without
-		// hooks (upstream swallows pre-read errors here).
+		// Best-effort snapshot for before hooks.
 		if row, err := h.inner.FindOne(ctx, model, where, nil); err == nil {
 			snapshot = row
 		}
@@ -881,8 +743,7 @@ func (h *HookedAdapter) ConsumeOne(ctx context.Context, model string, where []Wh
 	return consumed, nil
 }
 
-// IncrementOne has no hooks and delegates directly. Field output
-// transforms still apply to the returned row when schemas are provided.
+// IncrementOne has no hooks and delegates directly.
 func (h *HookedAdapter) IncrementOne(ctx context.Context, model string, where []Where, increment map[string]int, set map[string]any) (map[string]any, error) {
 	row, err := h.inner.IncrementOne(ctx, model, where, increment, set)
 	if err != nil {
@@ -891,9 +752,7 @@ func (h *HookedAdapter) IncrementOne(ctx context.Context, model string, where []
 	return h.applyFieldOutput(model, row)
 }
 
-// FindOne/FindMany have no hooks. Field output transforms apply to
-// returned rows when schemas are provided.
-
+// FindOne/FindMany have no hooks.
 func (h *HookedAdapter) FindOne(ctx context.Context, model string, where []Where, sel []string) (map[string]any, error) {
 	row, err := h.inner.FindOne(ctx, model, where, sel)
 	if err != nil {
@@ -926,10 +785,7 @@ func (h *HookedAdapter) Count(ctx context.Context, model string, where []Where) 
 }
 
 // Transaction propagates hooks into the tx adapter and defers after hooks
-// past successful commit (collected during tx, flushed on success, skipped
-// on rollback), mirroring upstream's queueAfterTransactionHook. Flush
-// failures propagate (see flushPending): the call fails without rolling
-// back committed work unless an after-commit handler is installed.
+// past successful commit.
 func (h *HookedAdapter) Transaction(ctx context.Context, fn func(tx Adapter) error) error {
 	// Share the pending queue through nesting so inner-tx afters also defer
 	// to the outermost commit.
@@ -952,14 +808,12 @@ func (h *HookedAdapter) Transaction(ctx context.Context, fn func(tx Adapter) err
 	return h.flushPending(pending)
 }
 
-// wraps reports whether any wrapper behavior applies (hooks, overrides, or
-// field schemas). When false the inner adapter is returned unwrapped.
+// wraps reports whether any wrapper behavior applies.
 func (h *HookedAdapter) wraps() bool {
 	return len(h.hooks.models) > 0 || len(h.overrides) > 0 || len(h.fields) > 0
 }
 
-// txAdapter builds the transaction-scoped wrapper sharing the parent's
-// hooks, logger, handler, schemas, and overrides with the pending queue.
+// txAdapter builds the transaction-scoped wrapper.
 func (h *HookedAdapter) txAdapter(tx Adapter, pending *[]pendingAfter) Adapter {
 	return &HookedAdapter{
 		inner:            tx,

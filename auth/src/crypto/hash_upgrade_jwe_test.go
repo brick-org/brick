@@ -1,10 +1,6 @@
 package crypto
 
-// F11 coverage for PARITY_V2.md P11-GAP-1 (bcrypt->scrypt rehash helper) and
-// P11-GAP-2 (JWE multi-secret legs from upstream
-// secret-rotation.test.ts:187-293, byte-identical jwt.ts vectors), plus pins
-// for the two fail-closed-STRICTER deviations (buffer.go constantTimeEqual,
-// symmetric.go ParseEnvelope) which are intentionally kept.
+// F11: bcrypt->scrypt rehash + JWE multi-secret legs (secret-rotation.test.ts:187-293); stricter deviations kept.
 
 import (
 	"strings"
@@ -19,7 +15,7 @@ const (
 	f11Salt    = "test-salt"
 )
 
-// --- P11-GAP-1: bcrypt->scrypt rehash helper ---
+// bcrypt->scrypt rehash helper.
 
 func TestHashUpgrade__BcryptToScrypt(t *testing.T) {
 	hash, err := bcrypt.GenerateFromPassword([]byte("legacy-password"), 4)
@@ -76,7 +72,7 @@ func TestHashUpgrade__MalformedNoUpgrade(t *testing.T) {
 	}
 }
 
-// --- P11-GAP-2: JWE multi-secret legs (upstream secret-rotation.test.ts:187-293) ---
+// JWE multi-secret legs (secret-rotation.test.ts:187-293).
 
 func TestJWE__SingleSecretString(t *testing.T) {
 	token, err := SymmetricEncodeJWT(map[string]any{"foo": "bar"}, f11SecretA, f11Salt, 3600)
@@ -124,9 +120,7 @@ func TestJWE__RotatedContainingOldKey(t *testing.T) {
 }
 
 func TestJWE__KidLessFallbackTriesAllSecrets(t *testing.T) {
-	// Upstream leg secret-rotation.test.ts:248-272: token encoded with the
-	// plain string secretA, decoded with a rotated config where secretA is
-	// NOT the current secret (kid selects the retained key).
+	// Upstream secret-rotation.test.ts:248-272 (kid selects retained key).
 	token, err := SymmetricEncodeJWT(map[string]any{"foo": "bar"}, f11SecretA, f11Salt, 3600)
 	if err != nil {
 		t.Fatal(err)
@@ -146,8 +140,7 @@ func TestJWE__KidLessFallbackTriesAllSecrets(t *testing.T) {
 }
 
 func TestJWE__LegacyStringConfig(t *testing.T) {
-	// Upstream leg secret-rotation.test.ts:274-293: legacy string-encoded JWT
-	// verified via SecretConfig legacySecret.
+	// Upstream secret-rotation.test.ts:274-293 (legacySecret verifies).
 	token, err := SymmetricEncodeJWT(map[string]any{"foo": "bar"}, f11SecretA, f11Salt, 3600)
 	if err != nil {
 		t.Fatal(err)
@@ -167,8 +160,7 @@ func TestJWE__LegacyStringConfig(t *testing.T) {
 }
 
 func TestJWE__MismatchedKidNoFallback(t *testing.T) {
-	// Upstream leg secret-rotation.test.ts:295-319: kid present but no
-	// candidate matches -> null (Go: error), with no fallback to other keys.
+	// Upstream secret-rotation.test.ts:295-319 (no fallback, Go: error).
 	cfgA := SecretConfig{Keys: map[int]string{1: f11SecretA}, CurrentVersion: 1}
 	token, err := SymmetricEncodeJWT(map[string]any{"foo": "bar"}, cfgA, f11Salt, 3600)
 	if err != nil {
@@ -180,7 +172,7 @@ func TestJWE__MismatchedKidNoFallback(t *testing.T) {
 	}
 }
 
-// --- Deviation pins (fail-closed STRICTER, kept; must not weaken) ---
+// Deviation pins (fail-closed stricter, kept).
 
 func TestConstantTimeEqual_LengthMismatchFails(t *testing.T) {
 	if !ConstantTimeEqual([]byte("abc"), []byte("abc")) {
@@ -195,8 +187,7 @@ func TestConstantTimeEqual_LengthMismatchFails(t *testing.T) {
 }
 
 func TestParseEnvelope_StrictRejectsPrefix(t *testing.T) {
-	// Upstream parseEnvelope uses parseInt("1abc",10)==1 and would ACCEPT
-	// "$ba$1abc$..."; Go strconv.Atoi rejects it (fail-closed stricter).
+	// Upstream parseInt accepts "1abc"; Go Atoi rejects (stricter).
 	if _, _, ok := ParseEnvelope("$ba$1abc$deadbeef"); ok {
 		t.Error("prefix version must be rejected (stricter than upstream parseInt)")
 	}

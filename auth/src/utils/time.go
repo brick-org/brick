@@ -1,24 +1,9 @@
-// Package utils time-string parser — TimeString ms()/sec() parity (PARITY_V3.md gap 15).
-//
-// Upstream: vendor/better-auth/packages/better-auth/src/utils/time.ts @ 5468e6bf.
-// Constants (ms): SEC 1000, MIN 60000, HOUR 3600000, DAY 86400000,
-// WEEK 604800000, MONTH 2592000000 (30d), YEAR 31557600000 (365.25d).
-// Grammar: [+|-][space]number[space]unit[space suffix], where unit is
-// y/yr/yrs/year(s), mo/month(s), w/week(s), d/day(s), h/hr/hrs/hour(s),
-// m/min/mins/minute(s), s/sec/secs/second(s) (any case, single optional
-// spaces), suffix is "ago" (negates) or "from now" (positive). A prefix and
-// a suffix together are invalid. Ms returns milliseconds, Sec returns
-// Math.round(ms/1000).
+// Package utils time-string parser.
+// Upstream: time.ts ms()/sec().
+// Grammar: [+|-][space]number[space]unit[space suffix]; Ms returns
+// milliseconds, Sec returns Math.round(ms/1000).
 //
 // Excluded / by-design (do NOT implement here):
-//   - keccak toChecksumAddress (utils/hashing.ts, ERC-55 via @noble/hashes):
-//     no v1 email/password+session caller; excluded.
-//   - safeCloneRequest (utils/request.ts, Request.clone with bodyless
-//     fallback): Go has no Request.clone; the faithful equivalent is the
-//     best-effort rebuild in api/requestFromContext and
-//     api/routes callbackRequest/mergeVerifyPostStoredRequest (method+URL+
-//     headers only, body referenced not cloned). By design, no counterpart
-//     in this package.
 package utils
 
 import (
@@ -78,10 +63,7 @@ func parseTimeString(value string) (float64, error) {
 }
 
 // Ms parses a TimeString and returns milliseconds, mirroring upstream ms().
-//
-// Fractional results are truncated toward zero when converting to int64
-// (upstream returns a float; integer inputs — the v1 cookie/session use —
-// are exact).
+// Fractional results are truncated toward zero.
 func Ms(value string) (int64, error) {
 	ms, err := parseTimeString(value)
 	if err != nil {

@@ -7,9 +7,7 @@ import (
 )
 
 func TestSignFixedVectors(t *testing.T) {
-	// Cross-language known answers: HMAC-SHA256, base64url without padding.
-	// The second pair is the textbook HMAC-SHA256 test vector
-	// (key "key", fox sentence), so any conforming implementation agrees.
+	// HMAC-SHA256 base64url-nopad vectors (second is textbook key "key" vector).
 	for _, tc := range []struct{ secret, value, want string }{
 		{"secret", "value", "value.UOA-vmW-mLuL8RuiyJLVTAeayisNOwFidpxtdXolQ08"},
 		{"key", "The quick brown fox jumps over the lazy dog", "The quick brown fox jumps over the lazy dog.97yD9DBThCSxMpjmqm-xQ-9NWaFJRhdZl0edvC0aPNg"},
@@ -49,8 +47,7 @@ func TestGetSessionCookie(t *testing.T) {
 		{"custom prefix and name", map[string]string{"myprefix.my_token": "t"}, "myprefix", "my_token", "t", true},
 		{"custom prefix secure", map[string]string{"__Secure-myprefix.my_token": "t"}, "myprefix", "my_token", "t", true},
 		{
-			// Upstream nullish semantics: an empty __Secure- value does NOT
-			// fall back to the non-secure leftover for the same separator.
+			// Empty __Secure- value does NOT fall back to non-secure leftover.
 			"empty secure does not fall back to leftover",
 			map[string]string{
 				"better-auth.session_token":          "stale",
@@ -58,7 +55,7 @@ func TestGetSessionCookie(t *testing.T) {
 			}, "", "", "", false,
 		},
 		{
-			// ...but the dash variant is still tried (upstream || chain).
+			// Dash variant is still tried.
 			"empty secure dot falls through to dash",
 			map[string]string{
 				"__Secure-better-auth.session_token": "",
@@ -79,27 +76,27 @@ func TestGetSessionCookie(t *testing.T) {
 }
 
 func TestParseRequestCookies(t *testing.T) {
-	// Upstream cookie-utils vector: quoted values unquoted, bare kept.
+	// Upstream cookie-utils vector: quoted unquoted, bare kept.
 	got := ParseRequestCookies(`a="hello"; b=plain; c="with space"`)
 	if got["a"] != "hello" || got["b"] != "plain" || got["c"] != "with space" {
 		t.Fatalf("quoted parse = %v", got)
 	}
-	// Percent-decoding with malformed escapes passed through.
+	// Percent-decoding; malformed escapes pass through.
 	got = ParseRequestCookies("token=hello%20world%3Dfoo; Path=/")
 	if got["token"] != "hello world=foo" {
 		t.Fatalf("decoded = %v", got["token"])
 	}
-	// Missing "=" pairs and empty names are dropped.
+	// Missing "=" pairs and empty names dropped.
 	got = ParseRequestCookies("valid=1; ; =orphan; locale=en")
 	if len(got) != 2 || got["valid"] != "1" || got["locale"] != "en" {
 		t.Fatalf("malformed parse = %v", got)
 	}
-	// Tolerates ";" without the RFC-mandated trailing space.
+	// Tolerates ";" without trailing space.
 	got = ParseRequestCookies("a=1;b=2")
 	if got["a"] != "1" || got["b"] != "2" {
 		t.Fatalf("compact parse = %v", got)
 	}
-	// Names outside the RFC 7230 token set are dropped.
+	// Names outside RFC 7230 token set dropped.
 	got = ParseRequestCookies("a b=1; ok=2")
 	if _, bad := got["a b"]; bad || got["ok"] != "2" {
 		t.Fatalf("token validation = %v", got)
@@ -161,7 +158,7 @@ func TestCompactEmbeddedExpiryEdgeCases(t *testing.T) {
 		}
 		return map[string]any{"session": inner, "user": map[string]any{"id": "u1"}}
 	}
-	// Falsy epoch-zero expiries compare as absent (upstream !expiresAt bail).
+	// Falsy epoch-zero expiries compare as absent (upstream !expiresAt).
 	for name, zero := range map[string]any{
 		"numeric zero": float64(0),
 		"int zero":     int(0),
@@ -171,12 +168,11 @@ func TestCompactEmbeddedExpiryEdgeCases(t *testing.T) {
 			t.Errorf("%s treated as expired: %v", name, err)
 		}
 	}
-	// A zero time.Time serializes to "0001-01-01T00:00:00Z", which upstream
-	// also treats as expired (truthy string -> finite ancient Date).
+	// Zero time.Time serializes ancient and counts as expired upstream.
 	if _, _, err := VerifyCompactCookieCache([]string{"secret"}, mkValue(t, base(time.Time{}))); err == nil {
 		t.Error("zero time.Time accepted")
 	}
-	// time.Time expiries are honored both ways.
+	// time.Time expiries honored both ways.
 	if _, _, err := VerifyCompactCookieCache([]string{"secret"}, mkValue(t, base(time.Now().Add(time.Hour)))); err != nil {
 		t.Errorf("future time.Time rejected: %v", err)
 	}

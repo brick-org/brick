@@ -1,13 +1,6 @@
 // Package context carries the auth context construction helpers,
 // mirroring the upstream src/context/ boundary.
-//
-// File boundary: auth/src/context/secret-utils.go mirrors upstream
-// src/context/secret-utils.ts (parseSecretsEnv, validateSecretsArray,
-// buildSecretConfig, plus the secret-resolution precedence owned by
-// create-context.ts). Moved from the former auth root secrets.go per
-// SOURCE_LAYOUT_MOVE_LIST.md (src/secrets.go -> src/context/secret-utils.go);
-// the auth root keeps a thin delegating shim so the public auth API and the
-// unexported resolveSecrets call site are unchanged.
+// Upstream: src/context/secret-utils.ts.
 package context
 
 import (
@@ -21,10 +14,7 @@ import (
 )
 
 // ParseSecretsEnv parses BETTER_AUTH_SECRETS ("<version>:<secret>,...") into
-// versioned secrets. Mirrors parseSecretsEnv in
-// vendor/.../src/context/secret-utils.ts. Returns nil when env is exactly
-// empty (upstream falsy); any other input — including whitespace-only, which
-// upstream throws on — must be a well-formed entry list.
+// versioned secrets. Returns nil when env is exactly empty.
 // Upstream TypeScript name: parseSecretsEnv.
 //
 // DEVIATION (strictness, loud): the version token is parsed strictly
@@ -58,9 +48,7 @@ func ParseSecretsEnv(envValue string) ([]types.Secret, error) {
 }
 
 // ValidateSecretsArray validates a versioned secrets list: non-empty,
-// unique non-negative integer versions, non-empty values. Warns when the
-// current (first) secret is <32 chars. Mirrors validateSecretsArray.
-// Upstream TypeScript name: validateSecretsArray.
+// unique non-negative integer versions, non-empty values.
 func ValidateSecretsArray(secrets []types.Secret, warnf func(string, ...any)) error {
 	if len(secrets) == 0 {
 		return fmt.Errorf("auth: `secrets` array must contain at least one entry.")
@@ -88,9 +76,7 @@ func ValidateSecretsArray(secrets []types.Secret, warnf func(string, ...any)) er
 }
 
 // BuildSecretConfig builds the versioned secret config honoring numeric
-// Version: Keys maps version->value, CurrentVersion is the first entry's
-// version, LegacySecret is the non-versioned secret when present.
-// Mirrors buildSecretConfig. Upstream TypeScript name: buildSecretConfig.
+// Version.
 func BuildSecretConfig(secrets []types.Secret, legacySecret string) types.SecretConfig {
 	keys := make(map[int]string, len(secrets))
 	for _, s := range secrets {
@@ -108,11 +94,7 @@ func BuildSecretConfig(secrets []types.Secret, legacySecret string) types.Secret
 }
 
 // secretWarnf returns a warnf that logs via Options.Logger when configured,
-// or nil (quiet) by default. Short-secret warnings stay quiet unless the
-// caller opts into logging, preserving the historical quiet default.
-// Warnings are "warn" level and honor the configured minimum level
-// (types.ShouldPublishLog, default "warn" — mirroring upstream createLogger
-// filtering, where logger.warn is suppressed at level "error").
+// or nil (quiet) by default.
 func secretWarnf(opts types.Options) func(string, ...any) {
 	if opts.Logger.Disabled || opts.Logger.Log == nil {
 		return nil
@@ -130,10 +112,7 @@ func secretWarnf(opts types.Options) func(string, ...any) {
 	}
 }
 
-// estimateEntropy approximates a secret's entropy in bits, mirroring
-// estimateEntropy in vendor/.../src/context/create-context.ts:46-50 and
-// secret-utils.ts:10-14: log2(uniqueChars^length). It detects low-entropy
-// secrets that meet the length floor but carry little randomness.
+// estimateEntropy approximates a secret's entropy in bits.
 func estimateEntropy(secret string) float64 {
 	runes := []rune(secret)
 	if len(runes) == 0 {
@@ -150,8 +129,7 @@ func estimateEntropy(secret string) float64 {
 }
 
 // warnLowEntropy warns when a secret's estimated entropy falls below
-// upstream's 120-bit floor (secret-utils.ts:84-89, create-context.ts:87-92).
-// A nil warnf stays quiet.
+// upstream's 120-bit floor. A nil warnf stays quiet.
 func warnLowEntropy(secret string, warnf func(string, ...any)) {
 	if warnf == nil || secret == "" {
 		return

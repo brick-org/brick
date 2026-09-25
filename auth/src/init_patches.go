@@ -22,13 +22,7 @@ func splitPatchOptions(patch Options) (DBHooks, []string, func(*http.Request) []
 }
 
 // defuOptions merges patch into base defu-style: existing (base) values win,
-// patch fills only missing (zero) values. Slices concatenate (base first),
-// maps add missing keys (values present on both sides merge deeply when they
-// are structs of the same type), structs recurse. It mirrors defu(options,
-// restOpts) in vendor/.../src/context/helpers.ts for the non-sourced
-// remainder (defu v6.1.4: base wins unless null/undefined, arrays
-// base-first, plain objects recurse).
-//
+// patch fills only missing (zero) values.
 // Upstream TypeScript name: defu (option merge).
 //
 // DEVIATION (structural, loud): defu skips only null/undefined base values,
@@ -57,10 +51,6 @@ func defuReflect(base, patch reflect.Value) {
 			continue
 		}
 		if isZeroValue(bf) {
-			// Fill from a copy: upstream defu builds fresh objects/arrays
-			// and never aliases the patch (defaults) into the result, so a
-			// later patch merging into this field must not mutate an
-			// earlier plugin's patch object.
 			switch pf.Kind() {
 			case reflect.Slice:
 				if pf.IsNil() {
@@ -95,8 +85,6 @@ func defuReflect(base, patch reflect.Value) {
 		case reflect.Struct:
 			defuReflect(bf, pf)
 		case reflect.Slice:
-			// Defu concatenates arrays: base first, then patch.
-			// Avoid aliasing by creating a new slice.
 			combined := reflect.MakeSlice(bf.Type(), 0, bf.Len()+pf.Len())
 			combined = reflect.AppendSlice(combined, bf)
 			combined = reflect.AppendSlice(combined, pf)
@@ -116,11 +104,6 @@ func defuReflect(base, patch reflect.Value) {
 					bf.SetMapIndex(k, pv)
 					continue
 				}
-				// Both sides hold the key: upstream defu recurses into
-				// plain-object values with base winning deeply. Mirror that
-				// for addressable struct copies of the same type (e.g.
-				// map[string]RateLimitRule entries); all other value kinds
-				// keep the base outright.
 				if bv.Type() == pv.Type() && bv.Kind() == reflect.Struct {
 					baseCopy := reflect.New(bv.Type()).Elem()
 					baseCopy.Set(bv)
@@ -131,17 +114,11 @@ func defuReflect(base, patch reflect.Value) {
 				}
 			}
 		case reflect.Pointer:
-			// Pointers to structs of the same type merge deeply (upstream
-			// defu recurses into nested option objects): fields present in
-			// both merge with base winning, patch-only fields fill in. All
-			// other pointer kinds keep the base outright.
 			if bf.Type() == pf.Type() && bf.Type().Elem().Kind() == reflect.Struct &&
 				!bf.IsNil() && !pf.IsNil() {
 				defuReflect(bf.Elem(), pf.Elem())
 			}
-			// Base non-nil wins; no deep merge for other pointers.
 		default:
-			// Scalars, funcs, interfaces: base wins, keep base.
 		}
 	}
 }
@@ -152,10 +129,8 @@ func isZeroValue(v reflect.Value) bool {
 	return v.IsZero()
 }
 
-// overwriteOptions merges patch into base patch-wins (Object.assign
-// semantics): non-zero patch fields overwrite base. Structs recurse with
-// patch-wins; slices/maps/interfaces replace. Used for context Options
-// patches (upstream Object.assign(context, result.context)).
+// overwriteOptions merges patch into base patch-wins: non-zero patch fields
+// overwrite base.
 func overwriteOptions(base *Options, patch Options) {
 	overwriteReflect(reflect.ValueOf(base).Elem(), reflect.ValueOf(patch))
 }
@@ -187,9 +162,8 @@ func isOptionsZero(o Options) bool {
 	return isZeroValue(reflect.ValueOf(o))
 }
 
-// combineTrustedOriginsFuncs chains dynamic origin resolvers: each is called
-// in order and results concatenated (empty entries dropped by callers via
-// IsTrustedOrigin filtering). Nil entries are skipped.
+// combineTrustedOriginsFuncs chains dynamic origin resolvers.
+// Nil entries are skipped.
 func combineTrustedOriginsFuncs(funcs []func(*http.Request) []string) func(*http.Request) []string {
 	valid := make([]func(*http.Request) []string, 0, len(funcs))
 	for _, fn := range funcs {
@@ -212,8 +186,7 @@ func combineTrustedOriginsFuncs(funcs []func(*http.Request) []string) func(*http
 	}
 }
 
-// filterNonEmpty drops empty strings, mirroring upstream's
-// `.filter(v => typeof v === "string" && v !== "")` on trusted origins.
+// filterNonEmpty drops empty strings.
 func filterNonEmpty(in []string) []string {
 	out := in[:0]
 	for _, s := range in {

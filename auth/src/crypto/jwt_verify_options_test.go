@@ -21,7 +21,7 @@ func signTestToken(t *testing.T, claims map[string]any) (string, []PublicKey) {
 
 func TestVerifyJWTLeewayBoundaries(t *testing.T) {
 	now := time.Now().Unix()
-	// exp 10s in the past: strict rejects, 15s leeway accepts.
+	// exp -10s: strict rejects, 15s leeway accepts.
 	token, keys := signTestToken(t, map[string]any{"sub": "u", "exp": now - 10})
 	if _, err := VerifyJWT(token, keys, VerifyOptions{}); err == nil || !strings.Contains(err.Error(), "expired") {
 		t.Fatalf("strict expired error = %v", err)
@@ -29,12 +29,12 @@ func TestVerifyJWTLeewayBoundaries(t *testing.T) {
 	if _, err := VerifyJWT(token, keys, VerifyOptions{LeewaySeconds: SessionCookieJWTClockToleranceSeconds}); err != nil {
 		t.Fatalf("leeway should accept recently expired token: %v", err)
 	}
-	// exp 60s in the past: even the 15s tolerance rejects.
+	// exp -60s: leeway still rejects.
 	token, keys = signTestToken(t, map[string]any{"sub": "u", "exp": now - 60})
 	if _, err := VerifyJWT(token, keys, VerifyOptions{LeewaySeconds: SessionCookieJWTClockToleranceSeconds}); err == nil {
 		t.Fatal("long-expired token accepted under leeway")
 	}
-	// nbf 10s in the future: strict rejects, 15s leeway accepts.
+	// nbf +10s: strict rejects, 15s leeway accepts.
 	token, keys = signTestToken(t, map[string]any{"sub": "u", "nbf": now + 10, "exp": now + 3600})
 	if _, err := VerifyJWT(token, keys, VerifyOptions{}); err == nil || !strings.Contains(err.Error(), "not yet valid") {
 		t.Fatalf("strict nbf error = %v", err)
@@ -42,7 +42,7 @@ func TestVerifyJWTLeewayBoundaries(t *testing.T) {
 	if _, err := VerifyJWT(token, keys, VerifyOptions{LeewaySeconds: SessionCookieJWTClockToleranceSeconds}); err != nil {
 		t.Fatalf("leeway should accept imminent nbf token: %v", err)
 	}
-	// Negative leeway behaves as zero.
+	// Negative leeway acts as zero.
 	if _, err := VerifyJWT(token, keys, VerifyOptions{LeewaySeconds: -30}); err == nil {
 		t.Fatal("negative leeway must behave as strict")
 	}
@@ -83,7 +83,7 @@ func TestSelectKeyRotation(t *testing.T) {
 	if _, err := SelectKey(keys, "retired"); err == nil || !strings.Contains(err.Error(), `kid "retired"`) {
 		t.Fatalf("unknown kid error = %v", err)
 	}
-	// Tokens signed before rotation verify against the retained set.
+	// Pre-rotation tokens verify against retained set.
 	pub, priv, _, err := GenerateKeyPair("EdDSA")
 	if err != nil {
 		t.Fatal(err)
@@ -99,7 +99,7 @@ func TestSelectKeyRotation(t *testing.T) {
 }
 
 func TestSessionCookieJWTConstants(t *testing.T) {
-	// Pinned to vendor/better-auth/packages/better-auth/src/cookies/jwt.ts.
+	// Pinned to upstream cookies/jwt.ts.
 	if SessionCookieJWTType != "better-auth.session-cache+jwt" {
 		t.Errorf("typ = %q", SessionCookieJWTType)
 	}

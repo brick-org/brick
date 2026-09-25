@@ -1,16 +1,6 @@
 package auth
 
 // Instrumentation in this runtime (AUTH-F6-03).
-//
-// Pinned upstream: createWithSpan/withSpan in
-// vendor/better-auth/packages/core/src/instrumentation (tracer.ts, noop.ts,
-// pure.index.ts).
-//
-// Upstream selects the span runner per instance: withSpan (real OpenTelemetry
-// tracer, recording exceptions on the span — except 3xx APIError redirects,
-// which close as OK) unless experimental.instrumentation.enabled === false,
-// in which case noopWithSpan executes the function directly.
-//
 // EXCLUSION (explicit, platform): the Go runtime vendors no OpenTelemetry
 // SDK — the dynamic import in upstream api.ts has no Go equivalent — so both
 // paths execute inline. Preserved exactly: name/attribute plumbing in the

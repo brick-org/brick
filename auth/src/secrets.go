@@ -5,13 +5,7 @@ import (
 	"github.com/brick-org/brick/auth/src/types"
 )
 
-// Thin shim over auth/src/context/secret-utils.go (upstream
-// src/context/secret-utils.ts boundary). The implementations moved to the
-// context package per SOURCE_LAYOUT_MOVE_LIST.md; these aliases and wrappers
-// preserve the auth-root API (including the unexported resolveSecrets call
-// site in index.go) without behavior change.
-
-// DefaultSecret re-exports the upstream fallback secret value.
+// Thin shim over auth/src/context/secret-utils.go.
 const DefaultSecret = types.DefaultSecret
 
 // SecretConfig re-exports the versioned secret config.
@@ -32,14 +26,12 @@ func ParseSecretsEnv(envValue string) ([]Secret, error) {
 
 // ValidateSecretsArray validates a versioned secrets list. Delegates to
 // context.ValidateSecretsArray.
-// Upstream TypeScript name: validateSecretsArray.
 func ValidateSecretsArray(secrets []Secret, warnf func(string, ...any)) error {
 	return authcontext.ValidateSecretsArray(secrets, warnf)
 }
 
 // BuildSecretConfig builds the versioned secret config. Delegates to
 // context.BuildSecretConfig.
-// Upstream TypeScript name: buildSecretConfig.
 func BuildSecretConfig(secrets []Secret, legacySecret string) SecretConfig {
 	return authcontext.BuildSecretConfig(secrets, legacySecret)
 }
