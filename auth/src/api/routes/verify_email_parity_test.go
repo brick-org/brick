@@ -22,8 +22,10 @@ func TestProcessVerifyEmail_HMACMarksVerifiedAndReturnsUser(t *testing.T) {
 	if errCode != "" {
 		t.Fatalf("expected success, got %s (%d)", errCode, status)
 	}
-	if user == nil || user.Email != "verify-me@example.com" || !user.EmailVerified {
-		t.Fatalf("expected verified user object, got %#v", user)
+	// Upstream fresh plain verify answers {status:true,user:null}
+	// (email-verification.ts:540-543; realigned by F2).
+	if user != nil {
+		t.Fatalf("fresh verify must return null user, got %#v", user)
 	}
 	row, _ := db.FindOne(context.Background(), "user", []types.Where{{Field: "email", Value: "verify-me@example.com"}}, nil)
 	if verified, _ := row["emailVerified"].(bool); !verified {
@@ -129,8 +131,10 @@ func TestProcessVerifyEmail_AutoSignInMintsSession(t *testing.T) {
 	if errCode != "" {
 		t.Fatalf("expected success, got %s", errCode)
 	}
-	if user == nil {
-		t.Fatal("expected user object")
+	// Upstream fresh plain verify answers {status:true,user:null}; the
+	// session cookies + row still prove auto sign-in (realigned by F2).
+	if user != nil {
+		t.Fatalf("fresh verify must return null user, got %#v", user)
 	}
 	if len(cookies) == 0 {
 		t.Fatal("expected session cookies for auto sign-in")

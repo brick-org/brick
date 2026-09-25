@@ -152,7 +152,13 @@ func TestB3_FreshVerifyStillReturnsUser(t *testing.T) {
 	if errCode != "" {
 		t.Fatalf("expected success, got %s", errCode)
 	}
-	if user == nil || user.Email != "b3-fresh@example.com" || !user.EmailVerified {
-		t.Fatalf("fresh verify must still return verified user, got %#v", user)
+	// Upstream fresh plain verify answers {status:true,user:null}
+	// (email-verification.ts:540-543; realigned by F2 for 100% parity).
+	if user != nil {
+		t.Fatalf("fresh verify must return null user, got %#v", user)
+	}
+	row, _ := db.FindOne(context.Background(), "user", []types.Where{{Field: "email", Value: "b3-fresh@example.com"}}, nil)
+	if verified, _ := row["emailVerified"].(bool); !verified {
+		t.Fatal("user row must still be marked verified")
 	}
 }

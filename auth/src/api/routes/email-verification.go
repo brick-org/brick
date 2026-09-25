@@ -512,10 +512,11 @@ func processStatelessUpdateTo(ctx context.Context, opts types.Options, payload *
 		return nil, nil, "", http.StatusOK
 	case "change-email-verification":
 		// User clicked verification -> update email, mark verified
-		// (email-verification.ts:371-414). Reuse the live matching session
-		// when present (same present/live/email-matches rule as the plain
-		// leg); mint only on mismatch. The cookie carries the updated
-		// identity.
+		// (email-verification.ts:371-414). Reuse the pre-update activeSession
+		// token when present (matched against the OLD email before the
+		// update, with the cookie email swapped to the new identity);
+		// mint only when absent/mismatched.
+		preToken, preSession, hasPre := capturePreUpdateVerificationSession(ctx, opts, payload.Email)
 		updatedRow, err := opts.DB.Update(ctx, "user", []types.Where{
 			{Field: "email", Value: strings.ToLower(payload.Email)},
 		}, map[string]any{
@@ -528,11 +529,10 @@ func processStatelessUpdateTo(ctx context.Context, opts types.Options, payload *
 		}
 		updated := rowToUser(updatedRow, opts)
 		// Secondary-storage fan-out (upstream refreshUserSessions, queued by
-		// updateUserByEmail): existing sessions serve the new identity.
-		// A failing mirror fails loudly with the surrounding update
-		// convention (never swallowed).
+		// updateUserByEmail via queueAfterTransactionHook): post-commit
+		// log-only, never fails the route.
 		if err := refreshSecondaryUserSessions(opts, updated); err != nil {
-			return nil, nil, "failed to update user", http.StatusInternalServerError
+			Logf(opts, "error", "failed to refresh secondary sessions: %v", err)
 		}
 		if err := runAfterEmailVerificationHook(requestContextForCallbacks(ctx), opts, &updated); err != nil {
 			// A hook-thrown APIError keeps its own status (upstream hooks
@@ -543,8 +543,10 @@ func processStatelessUpdateTo(ctx context.Context, opts types.Options, payload *
 			}
 			return nil, nil, "failed to handle email verification", http.StatusInternalServerError
 		}
-		if reused, ok := tryReuseVerificationSession(ctx, opts, headers, updated, now); ok {
-			return &updated, reused, "", http.StatusOK
+		if hasPre {
+			if reused, rerr := newSessionCookies(opts, headers, preToken, preSession, updated, opts.Session, now); rerr == nil {
+				return &updated, reused, "", http.StatusOK
+			}
 		}
 		sessionCookies, sessionErr := createVerificationSession(ctx, opts, headers, updated, now)
 		if sessionErr != nil {
@@ -553,9 +555,11 @@ func processStatelessUpdateTo(ctx context.Context, opts types.Options, payload *
 		return &updated, sessionCookies, "", http.StatusOK
 	default:
 		// Legacy flow: update email immediately as unverified, send a fresh
-		// verification to the new address, reuse the live matching session
-		// when present (upstream email-verification.ts:421-478 reuses
-		// activeSession); mint only on mismatch.
+		// verification to the new address, reuse the pre-update activeSession
+		// token when present (upstream email-verification.ts:421-478 reuses
+		// activeSession matched against the OLD email, cookie email swapped);
+		// mint only on mismatch.
+		preToken, preSession, hasPre := capturePreUpdateVerificationSession(ctx, opts, payload.Email)
 		updatedRow, err := opts.DB.Update(ctx, "user", []types.Where{
 			{Field: "email", Value: strings.ToLower(payload.Email)},
 		}, map[string]any{
@@ -568,11 +572,10 @@ func processStatelessUpdateTo(ctx context.Context, opts types.Options, payload *
 		}
 		updated := rowToUser(updatedRow, opts)
 		// Secondary-storage fan-out (upstream refreshUserSessions, queued by
-		// updateUserByEmail): existing sessions serve the new identity.
-		// A failing mirror fails loudly with the surrounding update
-		// convention (never swallowed).
+		// updateUserByEmail via queueAfterTransactionHook): post-commit
+		// log-only, never fails the route.
 		if err := refreshSecondaryUserSessions(opts, updated); err != nil {
-			return nil, nil, "failed to update user", http.StatusInternalServerError
+			Logf(opts, "error", "failed to refresh secondary sessions: %v", err)
 		}
 		nextToken, tokenErr := crypto.CreateEmailVerificationToken(opts.CurrentSecret(), payload.UpdateTo, "", emailVerificationExpirySeconds(opts), nil)
 		if tokenErr != nil {
@@ -585,8 +588,10 @@ func processStatelessUpdateTo(ctx context.Context, opts types.Options, payload *
 				Token: nextToken,
 			})
 		}
-		if reused, ok := tryReuseVerificationSession(ctx, opts, headers, updated, now); ok {
-			return &updated, reused, "", http.StatusOK
+		if hasPre {
+			if reused, rerr := newSessionCookies(opts, headers, preToken, preSession, updated, opts.Session, now); rerr == nil {
+				return &updated, reused, "", http.StatusOK
+			}
 		}
 		sessionCookies, sessionErr := createVerificationSession(ctx, opts, headers, updated, now)
 		if sessionErr != nil {
@@ -693,11 +698,10 @@ func processChangeEmailVerification(ctx context.Context, opts types.Options, tok
 		}
 		updated := rowToUser(updatedRow, opts)
 		// Secondary-storage fan-out (upstream refreshUserSessions, queued by
-		// the email update): existing sessions serve the verified identity.
-		// A failing mirror fails loudly with the surrounding update
-		// convention (never swallowed).
+		// the email update via queueAfterTransactionHook): post-commit
+		// log-only, never fails the route.
 		if err := refreshSecondaryUserSessions(opts, updated); err != nil {
-			return nil, nil, "failed to update user", http.StatusInternalServerError
+			Logf(opts, "error", "failed to refresh secondary sessions: %v", err)
 		}
 		if err := runAfterEmailVerificationHook(ctx, opts, &updated); err != nil {
 			// A hook-thrown APIError keeps its own status (upstream hooks
@@ -757,11 +761,10 @@ func verifyEmailForAddress(ctx context.Context, opts types.Options, email string
 	}
 	updated := rowToUser(updatedRow, opts)
 	// Secondary-storage fan-out (upstream refreshUserSessions, queued by
-	// updateUserByEmail): every live session serves emailVerified=true.
-	// A failing mirror fails loudly with the surrounding update convention
-	// (never swallowed).
+	// updateUserByEmail via queueAfterTransactionHook): post-commit log-only,
+	// never fails the route.
 	if err := refreshSecondaryUserSessions(opts, updated); err != nil {
-		return nil, nil, "failed to update user", http.StatusInternalServerError
+		Logf(opts, "error", "failed to refresh secondary sessions: %v", err)
 	}
 	if err := runAfterEmailVerificationHook(ctx, opts, &updated); err != nil {
 		// A hook-thrown APIError keeps its own status (upstream hooks are
@@ -784,7 +787,10 @@ func verifyEmailForAddress(ctx context.Context, opts types.Options, email string
 			cookies = sessionCookies
 		}
 	}
-	return &updated, cookies, "", http.StatusOK
+	// Upstream fresh plain verify answers {status:true,user:null}
+	// (email-verification.ts:540-543): no user object even on first verify.
+	// Already-verified null above stays; updateTo legs still return the user.
+	return nil, cookies, "", http.StatusOK
 }
 
 // tryReuseVerificationSession reuses the current session for
@@ -820,6 +826,40 @@ func tryReuseVerificationSession(ctx context.Context, opts types.Options, header
 		return nil, false
 	}
 	return reused, true
+}
+
+// capturePreUpdateVerificationSession snapshots the live session matching
+// oldEmail before the email update (upstream activeSession in
+// email-verification.ts:372-387,422-437). The INVALID_USER gate already
+// ensures a present session matches oldEmail; this helper re-resolves it for
+// cookie reuse so the post-update reload (which would see the new email,
+// especially with a lagging/log-only secondary fan-out) is not used for the
+// match decision. It returns the token and session row to reuse with the
+// swapped (updated) user identity.
+func capturePreUpdateVerificationSession(ctx context.Context, opts types.Options, oldEmail string) (string, types.Session, bool) {
+	req := StoredRequestFromStd(ctx)
+	if req == nil {
+		req = callbackRequest(ctx)
+	}
+	if req == nil {
+		return "", types.Session{}, false
+	}
+	token := sessionTokenFromRequest(req.Header.Get("Cookie"), req.Header.Get("Authorization"), opts)
+	if token == "" {
+		return "", types.Session{}, false
+	}
+	sessionRow, userRow, _, err := loadSessionAndUser(ctx, opts, token)
+	if err != nil || sessionRow == nil || userRow == nil {
+		return "", types.Session{}, false
+	}
+	if !strings.EqualFold(rowToUser(userRow, opts).Email, oldEmail) {
+		return "", types.Session{}, false
+	}
+	session := rowToSession(sessionRow, opts)
+	if session.Token == "" {
+		session.Token = token
+	}
+	return session.Token, session, true
 }
 
 // createVerificationSession mints a session for a freshly verified user,

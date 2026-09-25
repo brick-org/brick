@@ -653,8 +653,10 @@ func TestTriageV1_VerifyEmailAutoSignInMintsSession(t *testing.T) {
 	if verify.Code != 200 || !strings.Contains(verify.Body.String(), `"status":true`) {
 		t.Fatalf("verify = %d, want 200 status:true: %s", verify.Code, verify.Body.String())
 	}
-	if !strings.Contains(verify.Body.String(), `"emailVerified":true`) {
-		t.Fatalf("user must be marked verified, got %s", verify.Body.String())
+	// Upstream fresh plain verify answers {status:true,user:null}
+	// (realigned by F2); verification proven via user:null + minted session.
+	if !strings.Contains(verify.Body.String(), `"user":null`) {
+		t.Fatalf("fresh verify must return user:null, got %s", verify.Body.String())
 	}
 	cookie := sessionCookieOf(t, verify)
 	sess := api.Get("/api/auth/get-session", "Cookie: "+cookie)
