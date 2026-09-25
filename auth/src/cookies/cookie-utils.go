@@ -190,6 +190,52 @@ func (a Attributes) WithOverrides(o Attributes) Attributes {
 	return out
 }
 
+// Serialize renders a wire-accurate Set-Cookie line, mirroring better-call
+// serializeCookie where it differs from net/http: Max-Age is emitted even
+// when 0 provided MaxAgeSet (upstream expireCookie emits Max-Age=0;
+// net/http omits Max-Age for MaxAge==0 and only emits Max-Age=0 for
+// MaxAge<0). Attribute order matches net/http (Path, Domain, Expires,
+// Max-Age, HttpOnly, Secure, SameSite, Partitioned) so sizing via
+// MaxValueSizeFor stays in sync. Invalid Expires (zero+Set, mirroring JS
+// Invalid Date) is omitted; routes already emit MaxAge:-1+epoch for expiry,
+// so route wire behavior is unchanged — this fixes the helper path only.
+func (a Attributes) Serialize(name, value string) string {
+	var sb strings.Builder
+	sb.WriteString(name)
+	sb.WriteByte('=')
+	sb.WriteString(value)
+	if a.Path != "" {
+		sb.WriteString("; Path=")
+		sb.WriteString(a.Path)
+	}
+	if a.Domain != "" {
+		sb.WriteString("; Domain=")
+		sb.WriteString(a.Domain)
+	}
+	if a.ExpiresSet && !a.Expires.IsZero() {
+		sb.WriteString("; Expires=")
+		sb.WriteString(a.Expires.UTC().Format("Mon, 02 Jan 2006 15:04:05 GMT"))
+	}
+	if a.MaxAgeSet {
+		sb.WriteString("; Max-Age=")
+		sb.WriteString(strconv.Itoa(a.MaxAge))
+	}
+	if a.HttpOnly {
+		sb.WriteString("; HttpOnly")
+	}
+	if a.Secure {
+		sb.WriteString("; Secure")
+	}
+	if s := SameSiteString(a.SameSite); s != "" {
+		sb.WriteString("; SameSite=")
+		sb.WriteString(s)
+	}
+	if a.Partitioned {
+		sb.WriteString("; Partitioned")
+	}
+	return sb.String()
+}
+
 // ToHTTPCookie converts Attributes to a *http.Cookie for name=value.
 func (a Attributes) ToHTTPCookie(name, value string) *http.Cookie {
 	c := &http.Cookie{
@@ -397,7 +443,9 @@ func tryDecodeCookieValue(value string) string {
 
 // SetCookieAttributes is one parsed Set-Cookie line, mirroring upstream
 // CookieAttributes: the decoded value plus the recognized attributes.
-// Unrecognized attributes are dropped (toCookieOptions ignores them too).
+// Unknown attributes are preserved in Extra (lowercased names; flag-style
+// attributes map to "true"), mirroring upstream keeping them in the parse
+// map. ToAttributes drops them, matching upstream toCookieOptions.
 type SetCookieAttributes struct {
 	Value       string
 	MaxAge      int
@@ -410,6 +458,7 @@ type SetCookieAttributes struct {
 	HttpOnly    bool
 	Partitioned bool
 	SameSite    http.SameSite
+	Extra       map[string]string
 }
 
 // SetCookieEntry pairs a cookie name with its parsed attributes, preserving
@@ -498,9 +547,18 @@ func parseSetCookieList(setCookie string) []SetCookieEntry {
 					}
 				}
 			case "expires":
+				// Upstream: attrValue ? new Date(attrValue.trim()) : undefined.
+				// A present-but-unparsable Expires (e.g. "0") yields an
+				// Invalid Date (defined, not undefined). Go has no Invalid
+				// Date; mirror with ExpiresSet=true + zero Time. Absent
+				// (attrValue=="") stays unset. Callers must treat
+				// zero+Set as invalid, never as epoch.
 				if attrValue != "" {
-					if t, ok := parseSetCookieDate(strings.TrimSpace(attrValue)); ok {
+					trimmed := strings.TrimSpace(attrValue)
+					if t, ok := parseSetCookieDate(trimmed); ok {
 						attr.Expires, attr.ExpiresSet = t, true
+					} else {
+						attr.Expires, attr.ExpiresSet = time.Time{}, true
 					}
 				}
 			case "domain":
@@ -522,7 +580,21 @@ func parseSetCookieList(setCookie string) []SetCookieEntry {
 			case "partitioned":
 				attr.Partitioned = true
 			default:
-				// Any other attribute is ignored (toCookieOptions drops it).
+				// Preserve unknown attributes in the parse map (upstream keeps
+				// them; toCookieOptions drops them). Keys are lowercased;
+				// flag-style attributes (no value) map to "true".
+				key := strings.ToLower(strings.TrimSpace(attrName))
+				if key == "" {
+					continue
+				}
+				val := strings.TrimSpace(attrValue)
+				if attrValue == "" {
+					val = "true"
+				}
+				if attr.Extra == nil {
+					attr.Extra = map[string]string{}
+				}
+				attr.Extra[key] = val
 			}
 		}
 		out = append(out, SetCookieEntry{Name: name, Attr: attr})
@@ -711,10 +783,12 @@ func ApplySetCookiesHeader(header string, setCookies []string) string {
 }
 
 // ExpireCookie builds the expiry cookie for name (empty value, MaxAge=0,
-// attributes preserved), mirroring upstream expireCookie's setCookie call.
-// Wire rendering of MaxAge=0 follows net/http (absent attribute; MaxAge<0
-// renders "Max-Age=0"); callers that need the explicit wire attribute map
-// through their serializer.
+// attributes preserved), mirroring upstream expireCookie's setCookie call
+// (maxAge:0). The struct keeps MaxAge==0 for backward compatibility;
+// net/http omits Max-Age for 0 (only MaxAge<0 renders Max-Age=0), so callers
+// needing the explicit upstream wire attribute must render via
+// Attributes.Serialize, which emits Max-Age=0 when MaxAgeSet. Route expiry
+// already uses MaxAge:-1+epoch and is unchanged.
 func ExpireCookie(name string, attrs Attributes) *http.Cookie {
 	expired := attrs
 	expired.MaxAge = 0

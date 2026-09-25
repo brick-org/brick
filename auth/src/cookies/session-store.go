@@ -62,6 +62,39 @@ func ChunkCookieValue(name, value string, maxValueSize int) (map[string]string, 
 	return out, nil
 }
 
+// BuildChunkedCookies issues a session-data value as one or more Set-Cookie
+// entries, mirroring upstream chunkCookie (session-store.ts:84-131) wired
+// through the session store chunk() path. The value budget comes from
+// MaxValueSizeFor (worst-case "<name>.99" sizing, so every emitted line
+// fits MaxCookieSize); values fitting the budget emit a single cookie under
+// the bare name, larger values split into indexed "<name>.<i>" chunks in
+// order. An error is returned when the value cannot fit within
+// MaxCookieChunks chunks (or the name+attributes alone overflow) — the
+// caller must skip the cache and fall back to the database, matching the
+// upstream warn-and-skip branch. Reads reassemble via JoinChunkedCookies.
+func BuildChunkedCookies(name, value string, attrs Attributes) ([]*http.Cookie, error) {
+	budget := MaxValueSizeFor(name, attrs)
+	parts, err := ChunkCookieValue(name, value, budget)
+	if err != nil {
+		return nil, err
+	}
+	if len(parts) == 1 {
+		if v, ok := parts[name]; ok {
+			return []*http.Cookie{attrs.ToHTTPCookie(name, v)}, nil
+		}
+	}
+	out := make([]*http.Cookie, 0, len(parts))
+	for i := 0; i < len(parts); i++ {
+		key := name + "." + strconv.Itoa(i)
+		v, ok := parts[key]
+		if !ok {
+			return nil, fmt.Errorf("cookies: chunk map missing %q", key)
+		}
+		out = append(out, attrs.ToHTTPCookie(key, v))
+	}
+	return out, nil
+}
+
 // MaxValueSizeFor estimates the largest value that keeps the serialized
 // Set-Cookie for name within MaxCookieSize, mirroring upstream
 // getMaxCookieValueSize. The overhead is measured with the real http.Cookie
