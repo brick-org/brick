@@ -14,7 +14,7 @@ intentional) / EXCLUDED (out of scope per `SCOPE.md`) / FEATURE-GAP
 `## Later-work backlog`).
 
 Authoritative counts live in `parity_ledger.json` (ledger `AUTH-R5-01`):
-13 upstream test files, 495 cases, 188 covered entries, pending 0.
+13 upstream test files, 495 cases, 205 covered entries, pending 0.
 Runtime: pending expectation: the v1 closure converted every pending marker
 to an explicit exclusion; `pending.count` in the ledger is 0 and the drift
 gate (`src/parity_ledger_test.go`, `TestParityLedger_*`) enforces it.
@@ -31,24 +31,25 @@ Core route catalog (23, basePath-relative — all registered, see P09):
 
 ## Parity ledger (AUTH-R5-01)
 
-`parity_ledger.json` is authoritative for counts. Summary at v2 creation:
+`parity_ledger.json` is authoritative for counts. Summary after the
+11-fixer batch (205 covered):
 
 | Upstream test file                         | Cases | Covered |
 | ------------------------------------------ | ----- | ------- |
 | `api/routes/account.test.ts`               | 53    | 2       |
-| `api/routes/cookie-cache-fallback.test.ts` | 11    | 2       |
-| `api/routes/email-verification.test.ts`    | 29    | 16      |
-| `api/routes/error.test.ts`                 | 3     | 2       |
-| `api/routes/password.test.ts`              | 21    | 19      |
-| `api/routes/session-api.test.ts`           | 85    | 30      |
-| `api/routes/sign-in.test.ts`               | 30    | 6       |
+| `api/routes/cookie-cache-fallback.test.ts` | 11    | 3       |
+| `api/routes/email-verification.test.ts`    | 29    | 18      |
+| `api/routes/error.test.ts`                 | 3     | 3       |
+| `api/routes/password.test.ts`              | 21    | 21      |
+| `api/routes/session-api.test.ts`           | 85    | 31      |
+| `api/routes/sign-in.test.ts`               | 30    | 9       |
 | `api/routes/sign-out.test.ts`              | 10    | 2       |
-| `api/routes/sign-up.test.ts`               | 40    | 18      |
-| `api/routes/update-user.test.ts`           | 35    | 22      |
-| `cookies/cookies.test.ts`                  | 118   | 42      |
+| `api/routes/sign-up.test.ts`               | 40    | 20      |
+| `api/routes/update-user.test.ts`           | 35    | 24      |
+| `cookies/cookies.test.ts`                  | 118   | 44      |
 | `crypto/password.test.ts`                  | 14    | 13      |
-| `crypto/secret-rotation.test.ts`           | 46    | 14      |
-| Total (13 files)                           | 495   | 188     |
+| `crypto/secret-rotation.test.ts`           | 46    | 15      |
+| Total (13 files)                           | 495   | 205     |
 
 Disposition everywhere is `partial`: list-accounts/social-link/token/
 stateless legs, CSRF/origin/form-data legs, JWKS/JWE/plugin-authority legs
@@ -524,46 +525,50 @@ FEATURE-GAP list:
 
 ## Later-work backlog
 
-Consolidated actionable FEATURE-GAPs (in-scope, missing). Pinned deviations
-(null-shape fail-closed, 422-vs-400, IP/UA direct resolution, chunked-read-only,
-JWKS/plugin/social exclusions) are NOT backlog — see `SCOPE.md`.
+Status after the 11-fixer batch (2026-09-25, one commit per fixer — F1–F11
+in git log): most v2 gaps are closed and pinned by new `f*_test.go` suites;
+`parity_ledger.json` covered entries went 188 → 205. What remains is below.
+Pinned deviations (null-shape fail-closed, 422-vs-400, IP/UA direct
+resolution, strict parsing) are NOT backlog — see `SCOPE.md` — except the
+owner-directed origin realignment noted here.
 
-Auth correctness (do first):
-- P08-G1: `ChangePassword(revokeOtherSessions:true)` never emits `Set-Cookie` for the replacement session — cookie-only clients keep the dead token.
-- P08-G2: delete-user paths never purge `SecondaryStorage` (`active-sessions-*` index + per-token entries).
-- P07-GAP-1: change-email resend links omit `QueryEscape` on `token`/`callbackURL`.
-- P07-GAP-2: already-verified without `callbackURL` returns the user instead of upstream `user:null`.
-- P07-GAP-3: `autoSignInAfterVerification` never reuses the matching current session.
-- P05-GAP-1: retired `session_data` cleanup lost on auth-failure paths (no `Set-Cookie` on 401/400).
-- P02-GAP-1: sign-in has no `400 INVALID_EMAIL` format leg (falls through to 401).
-- P02-GAP-2: sign-in with `callbackURL` never sets the `Location` header.
-- P01-GAP-1: no `application/x-www-form-urlencoded` decoder on sign-up (and by extension the shared auth body path).
+Closed in batch (with pinning tests):
+- P01-GAP-1 form-urlencoded sign-up; sendOnSignUp explicit-false via
+  `SendOnSignUp *bool` (F1 + F9).
+- P02-GAP-1/2/3 invalid-email 400, Location header, sendOnSignIn resend pin (F2).
+- P03-GAP-1 error-page snapshot parity (F3).
+- P04-GAP-1 / P12-GAP-2 explicit `updateAge: 0` via `UpdateAge *int` (F4 + F9).
+- P05-GAP-1 retired-cleanup on auth failure (F4); P05-GAP-2 chunked
+  `Set-Cookie` issuance now wired (F8).
+- P06 password reset code alignment + revoke Set-Cookie (F5);
+  P08-G1/G2 ChangePassword Set-Cookie + delete-user secondary purge (F5/F7).
+- P07-GAP-1 resend escaping, P07-GAP-3 session reuse (F6);
+  P07-GAP-4 / P12-GAP-1 sendOnSignUp tri-state (F9).
+- P09-GAP-1..6 origin/referer, fetch-metadata gate, skip arrays,
+  mutating-method set, atomic limits, wildcards (F10); P05-GAP-3 decision
+  table added, wiring pending (F10).
+- P10-GAP-1 ledger note corrected (validation was already wired).
+- P11-GAP-1 rehash helper added (sign-in wiring pending); P11-GAP-2 JWE
+  vectors (F11).
 
-Types-unfrozen work (post-v1, `types/` frozen):
-- P12-GAP-1 / P07-GAP-4: `SendOnSignUp *bool` tri-state.
-- P12-GAP-2 / P04-GAP-1: `UpdateAge *int` tri-state (explicit `updateAge: 0` always-refresh).
+Held (owner sign-off required — each held by an existing-test pin or a
+security posture call):
+- Null-shape 200-null (fail-closed 401/400 kept), unknown-only update
+  passthrough, already-verified `user:null` shape (P07-GAP-2),
+  VersionFunc-500 (P05-GAP-4), concurrent same-token HTTP race pins
+  (P06-GAP-1, non-deterministic on mem adapter), production-bounce
+  nil-vs-zero (needs types pointer), mergeErrorParams duplicate-key semantics.
+- Origin realignment (owner-directed, F10): cookie-less untrusted-Origin now
+  403 per upstream validateFormCsrf; `TestOriginMiddleware_NoCookie*` split
+  into blocked (origin-bearing) vs allowed (server-to-server).
 
-Infra hardening:
-- P09-GAP-1: wire `OriginOrReferer` (`Referer` fallback + `Origin: null` inference).
-- P09-GAP-2: Fetch-Metadata first-login gate (`CROSS_SITE_NAVIGATION_LOGIN_BLOCKED`).
-- P09-GAP-3: `skipOriginCheck` path-array / `skipCSRFCheck` granularity.
-- P09-GAP-4: widen mutating-method set to "not GET/OPTIONS/HEAD".
-- P09-GAP-5: atomic rate-limit consume on the default backend (burst overshoot).
-- P09-GAP-6: `wildcardMatch` semantics for custom rate-limit rules (`**` patterns).
-- P05-GAP-4: `VersionFunc` rejection should 500 like upstream (currently fails closed to DB).
-- P05-GAP-3: stateful `refreshCache` warn-disable.
-- P11-GAP-1: `bcrypt→scrypt` rehash on successful login (legacy hashes verify forever).
+Wiring follow-ups (helpers exist, call sites pending):
+- RefreshCache warn+disable into `BetterAuth` construction / session read path.
+- `UpgradeHashIfNeeded` into sign-in post-verify persist.
 
-Parity snapshots / coverage pins (no behavior change):
-- P03-GAP-1: full-snapshot error-page parity (XSS legs ported).
-- P06-GAP-1: HTTP-level concurrent same-token reset race pin (non-deterministic on mem adapter).
-- P02-GAP-3: `sendOnSignIn:true` resend leg has code but no claimed test.
-- P11-GAP-2: JWE multi-secret legs rely on `cookies/` tests, no `crypto/` ledger claim.
-- P10-GAP-1: ledger `notes` text claims post-signature payload-schema validation is open — it is wired; update the ledger note (ledger untouched in this v2 recreation).
-
-Recorded exclusions (not backlog): P05-GAP-2 chunked `Set-Cookie` issuance
-(read-only per `SCOPE.md`); all social/plugin/JWKS legs; CSRF/origin/form-data
-matrix legs; concurrent-delete/reset mem-adapter race pins.
+Recorded exclusions (not backlog): JWKS custom signer (needs jwt plugin),
+full plugin/social provider systems, CSRF per-endpoint callbackURL skip
+adoption (stays with route handlers).
 
 ## Wave-10 exclusion registry
 

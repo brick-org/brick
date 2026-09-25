@@ -147,9 +147,13 @@
         {
           "case": "should expire malformed compact session_data and fall through to session_token DB validation",
           "goTest": "TestV1_MalformedCacheExpiredAndServed"
+        },
+        {
+          "case": "clears retired session_data when session_token is missing/invalid (incl. on auth failure)",
+          "goTest": "TestF4_StaleCleanupOnFailure"
         }
       ],
-      "notes": "Malformed-expiry fallthrough and disabled-cache cleanup covered; cross-subdomain migration, JWT/JWE-strategy fallback, and chunked re-issue legs open/excluded."
+      "notes": "Malformed-expiry fallthrough, disabled-cache cleanup, and retired-cleanup-on-failure covered; cross-subdomain migration, JWT/JWE-strategy fallback, and chunked re-issue legs open/excluded."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/api/routes/email-verification.test.ts",
@@ -256,9 +260,17 @@
         {
           "case": "should handle email case insensitivity when sending verification email while signed in",
           "goTest": "TestTriageV1_SendVerificationSignedInCaseInsensitive"
+        },
+        {
+          "case": "change-email resend links escape token/callbackURL",
+          "goTest": "TestF6_ChangeEmailConfirmationResendEscapes + TestF6_ChangeEmailLegacyResendEscapes"
+        },
+        {
+          "case": "should sign after verification (session reuse on email match)",
+          "goTest": "TestF6_AutoSignInReusesMatchingSession + TestF6_AutoSignInMintsOnMismatch (supplement)"
         }
       ],
-      "notes": "Auto-sign-in, expiresIn, hooks, encoding, case-insensitivity covered; body-consumption JS semantics excluded."
+      "notes": "Auto-sign-in (+session reuse), expiresIn, hooks, encoding (incl. change-email resends), case-insensitivity covered; already-verified null-shape held by existing pin; body-consumption JS semantics excluded."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/api/routes/error.test.ts",
@@ -282,9 +294,13 @@
         {
           "case": "should sanitize code parameter",
           "goTest": "TestErrorPageSanitizesCode"
+        },
+        {
+          "case": "full error-page snapshot parity (defaults, knobs, toggles, copy, links)",
+          "goTest": "TestF3ErrorPageDefaultSnapshot + TestF3ErrorPageCustomizedSnapshot + TestF3ErrorPageDecorationToggles + TestF3ErrorPageCustomDescriptionSnapshot"
         }
       ],
-      "notes": "XSS sanitization covered by error_test.go; full snapshot parity open."
+      "notes": "XSS sanitization covered by error_test.go; full snapshot parity closed by f3_error_test.go (body/grid var(--background) fallbacks, exact text/html, all knobs). Residual: production-bounce nil-vs-zero needs types pointer."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/api/routes/password.test.ts",
@@ -617,9 +633,13 @@
         {
           "case": "sets Cache-Control: no-store on unauthenticated GET /get-session responses",
           "goTest": "DEVIATION (fail-closed): no-store set on success only; follows from the null-shape deviation above"
+        },
+        {
+          "case": "should update the session every time when set to 0",
+          "goTest": "TestF4_UpdateAgeTriState + TestF4_ExplicitZeroAlwaysRefresh (UpdateAge *int tri-state)"
         }
       ],
-      "notes": "Full 85-case triage done: 38 cited to pre-existing suites, 16 ported (triage_v1_session), 10 excluded (JWKS x5, plugin authority, returnHeaders, plugin-endpoint freshness, client-concurrency x2), 3 fail-closed deviations (null-shape), 1 accepted divergence (unknown-only update passes through, pinned), 1 open (explicit updateAge:0 needs *int tri-state, types frozen)."
+      "notes": "Full 85-case triage done: 38 cited to pre-existing suites, 16 ported (triage_v1_session), 10 excluded (JWKS x5, plugin authority, returnHeaders, plugin-endpoint freshness, client-concurrency x2), 3 fail-closed deviations (null-shape), 1 accepted divergence (unknown-only update passes through). updateAge:0 closed via *int (F9); VersionFunc-500 held by existing fail-closed pin."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/api/routes/sign-in.test.ts",
@@ -686,9 +706,21 @@
         {
           "case": "verification email will not be sent if sendOnSignIn is disabled",
           "goTest": "TestTriageV1_SignInNoResendWhenDisabled"
+        },
+        {
+          "case": "email format gate 400 INVALID_EMAIL (sign-in.ts validation)",
+          "goTest": "TestF2_SignInMalformedEmailIs400"
+        },
+        {
+          "case": "callbackURL Location header (trusted only)",
+          "goTest": "TestF2_SignInCallbackURLSetsLocationHeader"
+        },
+        {
+          "case": "verification email sent when sendOnSignIn is enabled",
+          "goTest": "TestF2_SignInSendOnSignInResends"
         }
       ],
-      "notes": "Cookie header, no-resend, lowercase storage covered; CSRF/origin/form-data/social-callback legs excluded."
+      "notes": "Cookie header, resend on/off, format gate, Location header, lowercase storage covered; social-callback legs excluded. Origin/CSRF enforcement now wired (F10); TestOriginMiddleware_NoCookie* realigned to upstream validateFormCsrf."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/api/routes/sign-out.test.ts",
@@ -846,9 +878,17 @@
         {
           "case": "should call onExistingUserSignUp when autoSignIn is false without requireEmailVerification",
           "goTest": "TestGenericV1_AutoSignInFalseDuplicateFiresHook"
+        },
+        {
+          "case": "should accept form-urlencoded content type",
+          "goTest": "TestF1_SignUpFormURLEncoded + TestF1_SignUpFormValidationParity"
+        },
+        {
+          "case": "should not send verification email when sendOnSignUp is false, even with requireEmailVerification",
+          "goTest": "TestF1_SendOnSignUpExplicitFalse + TestF1_SendOnSignUpTrueSendsWithoutRequire (SendOnSignUp *bool tri-state)"
         }
       ],
-      "notes": "Full triage done: validateUserInfo gates, hook skip legs, autoSignIn-false token-null/synthetic/hook (G1 fixed: generic-duplicate now covers autoSignIn=false), sendOnSignUp true/default; CSRF/form-data/admin-synthetic/sendOnSignUp-false excluded."
+      "notes": "Full triage done: validateUserInfo gates, hook skip legs, autoSignIn-false token-null/synthetic/hook, sendOnSignUp true/default/explicit-false (*bool), form-urlencoded bodies; CSRF/admin-synthetic legs excluded."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/api/routes/update-user.test.ts",
@@ -984,9 +1024,17 @@
         {
           "case": "should ignore cookie cache for sensitive operations like changePassword",
           "goTest": "TestTriageV1_ChangePasswordIgnoresCookieCache"
+        },
+        {
+          "case": "should delete every session from deleted user (secondary-storage variant)",
+          "goTest": "TestF7_DeleteUserDirectPurgesSecondary + TestF7_DeleteUserCallbackPurgesSecondary"
+        },
+        {
+          "case": "should revoke other sessions (replacement Set-Cookie)",
+          "goTest": "TestF5_ChangePasswordRevokeEmitsSetCookie (supplement)"
         }
       ],
-      "notes": "Change-password rotation, delete-disabled, cache-bypass covered; concurrent-delete race not deterministically pinnable on the mem adapter (DBs serialize); secondary legs helper-pinned + wired."
+      "notes": "Change-password rotation (+replacement Set-Cookie), delete-disabled, cache-bypass, secondary purge on all delete paths covered; concurrent-delete race not deterministically pinnable on the mem adapter (DBs serialize)."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/cookies/cookies.test.ts",
@@ -1287,9 +1335,17 @@
         {
           "case": "should use the configured logger for an invalid signed compact cookie",
           "goTest": "TestSchemaV1_CompactRejectsNullEmailVerified (codec) + TestSchemaV1_InvalidCacheWarnsAndMisses (route warn+miss) + TestSchemaV1_JWTRejectsNullEmailVerified + TestSchemaV1_JWERejectsNullEmailVerified"
+        },
+        {
+          "case": "chunked session-data cookie issuance (single/multi/oversize)",
+          "goTest": "TestF8 ChunkWriteStaysSingleUnderLimit + SplitsIndexed + OversizeSkips + AttributesPushOverLimit"
+        },
+        {
+          "case": "Expires=0 Invalid-Date + unknown-attr preservation + Max-Age=0 wire rendering",
+          "goTest": "TestF8 ExpiresZeroIsInvalidDate + UnknownAttrsPreservedInParseMap + MaxAgeZeroWireRendering"
         }
       ],
-      "notes": "Full triage done (118 ledger blocks = 97 it-headings + 21 describe containers; 115 runtime-expanded its): 72 cited (34 recorded + 38 to pre-existing suites), 7 ported (triage_v1_cookies), 17 excluded (chunk writes x5, JWKS x4, route-legs x4, social x2, JS-interop x2), 1 FEATURE-GAP open (G1 post-signature payload-schema validation)."
+      "notes": "Chunked multi-cookie writes now wired (read+write); post-signature payload-schema validation wired (ledger note corrected); remaining deltas are pinned exclusions (JWKS/plugin signer, social legs) or minor wire notes."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/crypto/password.test.ts",
@@ -1368,9 +1424,17 @@
         {
           "case": "should verify old hash with very long password",
           "goTest": "TestV1_PasswordEmptyAndVeryLong (very-long leg)"
+        },
+        {
+          "case": "should reject untrusted redirectTo (RESET_PASSWORD_DISABLED shape)",
+          "goTest": "TestF5_RequestResetDisabledUpstreamCode (supplement)"
+        },
+        {
+          "case": "reset USER_NOT_FOUND is 400 (upstream password.ts:304)",
+          "goTest": "TestF5_ResetUserNotFoundIsBadRequest"
         }
       ],
-      "notes": "All 14 covered: noble back-compat legs share the byte-identical scrypt path (N=16384/r=16/p=1/dkLen=64, hex-salt-UTF8, NFKC, salt:key)."
+      "notes": "Reset issuance/validation/expiry/revocation matrices covered; revoke emits replacement Set-Cookie; concurrent-reset race same mem-adapter note as delete."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/crypto/secret-rotation.test.ts",
@@ -1487,9 +1551,13 @@
         {
           "case": "rejects token with mismatched kid (no fallback)",
           "goTest": "TestV1_JWECacheMismatchedKidNoFallback"
+        },
+        {
+          "case": "JWE encode/decode single + same-config + rotated + legacy + kid-less + mismatched-kid",
+          "goTest": "TestF11_JWE_SingleSecretString + SameConfig + RotatedContainingOldKey + KidLessFallbackTriesAllSecrets + LegacyStringConfig + MismatchedKidNoFallback"
         }
       ],
-      "notes": "Envelope parse/format, symmetric rotation matrices, and JWE kid-selection legs covered; parseSecretsEnv/validateSecretsArray/buildSecretConfig live in src/context (sibling scope)."
+      "notes": "Envelope parse/format, symmetric rotation matrices, JWE multi-secret legs (single/same/rotated/legacy/kid-less/mismatched) covered; parseSecretsEnv/validateSecretsArray helpers live in src/context."
     }
   ],
   "scope": {
