@@ -10,6 +10,7 @@ import (
 
 	authapi "github.com/brick-org/brick/auth/src/api"
 	authroutes "github.com/brick-org/brick/auth/src/api/routes"
+	authstate "github.com/brick-org/brick/auth/src/api/state"
 	"github.com/brick-org/brick/auth/src/cookies"
 	"github.com/brick-org/brick/auth/src/types"
 	"github.com/danielgtaylor/huma/v2"
@@ -491,6 +492,7 @@ func BetterAuth(opts Options) (Auth, error) {
 
 	// Resolve the full framework context services (mirroring upstream
 	// createAuthContext's ctx fields that this layer owns).
+	applyCookieRefreshCacheConstruction(&opts)
 	finalizeAuthContext(&ctx, opts, secret, secretCfg, publish)
 
 	// Wrap the adapter with lifecycle hooks via NewHookedAdapterWithOptions
@@ -975,6 +977,50 @@ func resolveSessionConfig(opts Options) types.ResolvedSessionConfig {
 		freshAge = *opts.Session.FreshAge
 	}
 	return types.ResolvedSessionConfig{UpdateAge: updateAge, ExpiresIn: expiresIn, FreshAge: freshAge}
+}
+
+// applyCookieRefreshCacheConstruction wires the stateless cookie-cache
+// refresh decision into BetterAuth construction, mirroring upstream
+// ctx.sessionConfig.cookieRefreshCache (create-context.ts:318-351) with
+// hasServerSessionStore = database || secondaryStorage
+// (store-capabilities.ts:3-5):
+//
+//   - unset refreshCache stays disabled quietly;
+//   - stateful (DB or SecondaryStorage) + configured refreshCache logs the
+//     upstream warn and forces the effective RefreshCache off so issued
+//     configs carry the disabled state;
+//   - stateless + configured stays enabled with the explicit updateAge or the
+//     20%-of-maxAge floor.
+//
+// It delegates the decision table to authstate.ResolveCookieRefreshCache and
+// only mutates the effective RefreshCache on opts; the table itself and the
+// per-request flag mechanics are untouched. Call after plugin init so the
+// final options are resolved, before finalizeAuthContext so the context and
+// router carry the effective state.
+func applyCookieRefreshCacheConstruction(opts *Options) {
+	if opts == nil {
+		return
+	}
+	rc := opts.Session.CookieCache.RefreshCache
+	configured := rc.Enabled || rc.UpdateAge != 0 || rc.ShouldRefresh != nil
+	if !configured {
+		return
+	}
+	hasServerStore := opts.DB != nil || opts.SecondaryStorage != nil
+	enabled, effectiveUpdateAge, warnDisable := authstate.ResolveCookieRefreshCache(
+		configured, rc.UpdateAge, opts.Session.CookieCache.MaxAge, hasServerStore,
+	)
+	if warnDisable {
+		authNotef(*opts, "warn", "[better-auth] `session.cookieCache.refreshCache` is enabled while `database` or `secondaryStorage` is configured. `refreshCache` is meant for stateless (DB-less) setups. Disabling `refreshCache` — remove it from your config to silence this warning.")
+	}
+	if !enabled {
+		opts.Session.CookieCache.RefreshCache.Enabled = false
+		opts.Session.CookieCache.RefreshCache.UpdateAge = 0
+		opts.Session.CookieCache.RefreshCache.ShouldRefresh = nil
+		return
+	}
+	opts.Session.CookieCache.RefreshCache.Enabled = true
+	opts.Session.CookieCache.RefreshCache.UpdateAge = effectiveUpdateAge
 }
 
 // schemaCheckEnabled reports whether the per-request schema validator
