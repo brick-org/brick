@@ -177,7 +177,7 @@ func ledgerGoSources(t *testing.T, includeTests bool) []string {
 
 func TestParityLedger_CoreRouteCatalog(t *testing.T) {
 	if len(ledgerCoreRoutes) != 23 {
-		t.Fatalf("core route catalog has %d entries, want 23 (v1 core-only, see SCOPE.md)", len(ledgerCoreRoutes))
+		t.Fatalf("core route catalog has %d entries, want 23 (v1 core-only, see docs/SCOPE.md)", len(ledgerCoreRoutes))
 	}
 	var blob strings.Builder
 	for _, f := range ledgerGoSources(t, false) {
@@ -267,6 +267,6 @@ func TestParityLedger_UpstreamTestManifest(t *testing.T) {
 		}
 	}
 	if total := len(m.UpstreamTests); total != 13 {
-		t.Errorf("manifest has %d upstream test files, want 13 (v1 core-only, see SCOPE.md)", total)
+		t.Errorf("manifest has %d upstream test files, want 13 (v1 core-only, see docs/SCOPE.md)", total)
 	}
 }

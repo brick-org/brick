@@ -47,7 +47,7 @@ Live DB runs need `-p 1`. Upstream pin: Better Auth v1.7.5 @ `5468e6bf`
 
 ## 4. Hard rules
 
-- Never edit `parity_ledger.json` or `SCOPE.md` in fixer batches;
+- Never edit `parity_ledger.json` or `docs/SCOPE.md` in fixer batches;
   never weaken an existing test (conflict → revert + BLOCKED + test name).
 - Frozen: `src/utils/boolean.go`, `constants.go`, `hide-metadata.go`
   (renamed from `*.gen.go`; content untouched, do not hand-edit).
