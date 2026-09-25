@@ -26,7 +26,7 @@ const (
 )
 
 // LoggerOptions mirrors better-auth's top-level logger config surface
-// (vendor/better-auth/packages/core/src/env/logger.ts:47-58).
+// (core/src/env/logger.ts).
 //
 // Upstream defaults (documented, not applied by the Go runtime): disabled
 // is false, disableColors follows TTY detection, and level defaults to
@@ -53,13 +53,13 @@ type LoggerOptions struct {
 }
 
 // LogLevels in ascending verbosity order, mirroring upstream `levels`
-// (vendor/.../core/src/env/logger.ts:38). Success sorts between info and
+// (vendor/.../core/src/env/logger.ts). Success sorts between info and
 // warn; custom handlers receive it as "info".
 var logLevelOrder = []LogLevel{LogLevelDebug, LogLevelInfo, LogLevelSuccess, LogLevelWarn, LogLevelError}
 
 // ShouldPublishLog reports whether a message at msgLevel passes the
 // configured current level, mirroring upstream shouldPublishLog
-// (vendor/.../core/src/env/logger.ts:40-45): a message publishes when its
+// (vendor/.../core/src/env/logger.ts): a message publishes when its
 // order index meets or exceeds the current level's. Empty current means
 // upstream's "warn" default. Unknown levels fail closed (do not publish).
 func ShouldPublishLog(current, msgLevel LogLevel) bool {
@@ -96,7 +96,7 @@ func NormalizeLogLevelForHandler(level LogLevel) string {
 
 // MatchesHostPattern reports whether host matches an upstream dynamic
 // allowedHosts pattern, mirroring matchesHostPattern
-// (vendor/.../src/utils/url.ts:361-386): case-insensitive, with "*" and "?"
+// (vendor/.../src/utils/url.ts): case-insensitive, with "*" and "?"
 // wildcards. A pattern carrying "://" or a path matches against its host
 // part only; empty inputs never match.
 func MatchesHostPattern(host, pattern string) bool {
@@ -130,7 +130,6 @@ func normalizeHostPatternPart(value string) string {
 }
 
 // TelemetryOptions mirrors better-auth's top-level telemetry config surface
-// (vendor/better-auth/packages/core/src/types/init-options.ts:1805-1820).
 //
 // The Go runtime publishes no network telemetry (there is no telemetry
 // endpoint or custom-track plumbing to POST to — upstream createTelemetry
@@ -150,7 +149,7 @@ type TelemetryOptions struct {
 }
 
 // TelemetryEvent mirrors the publishTelemetry event shape from upstream
-// context (vendor/better-auth/packages/core/src/types/context.ts:463-467):
+// context (core/src/types/context.ts):
 // a type tag, an optional anonymous ID, and an event payload. The Go runtime
 // publishes no network telemetry: PublishTelemetry reports local Logger
 // diagnostics only.
@@ -163,7 +162,6 @@ type TelemetryEvent struct {
 
 // InstrumentationOptions mirrors better-auth's experimental.instrumentation
 // config surface
-// (vendor/better-auth/packages/core/src/types/init-options.ts:1829-1838).
 // The Go runtime has no OpenTelemetry tracer; WithSpan executes the function
 // directly while preserving name/attribute plumbing for future wiring.
 //
@@ -178,7 +176,6 @@ type InstrumentationOptions struct {
 
 // ExperimentalOptions mirrors better-auth's top-level experimental config
 // surface
-// (vendor/better-auth/packages/core/src/types/init-options.ts:1824-1840).
 // Instrumentation is honored as a tracing passthrough (see WithSpan);
 // unknown future flags stay preserved-but-inactive.
 // Runtime: wired:auth/instrumentation.go (instrumentation passthrough).
@@ -189,7 +186,7 @@ type ExperimentalOptions struct {
 }
 
 // RateLimitRule configures request limits for a single window
-// (upstream BetterAuthRateLimitRule, init-options.ts:215-229).
+// (upstream BetterAuthRateLimitRule).
 type RateLimitRule struct {
 	// Window is the rolling window in seconds.
 	// Runtime: wired:auth/api/rate_limiter.go:153 (resolveRateLimit).
@@ -244,7 +241,7 @@ type RateLimitCustomStorage interface {
 type RateLimitRuleResolver func(r *http.Request, current RateLimitRule) (RateLimitRule, bool)
 
 // RateLimitOptions configures top-level auth route rate limiting
-// (upstream BetterAuthRateLimitOptions, init-options.ts:251-293).
+// (upstream BetterAuthRateLimitOptions).
 type RateLimitOptions struct {
 	// Enabled is a pointer so nil can mean "use the default behaviour".
 	// Upstream default (documented, behavior unchanged here): enabled only
@@ -323,7 +320,6 @@ type RequestBeforeHookFunc func(ctx huma.Context) (huma.Context, error)
 type RequestAfterHookFunc func(ctx huma.Context)
 
 // HooksOptions mirrors better-auth's top-level hooks option
-// (init-options.ts:1784-1795).
 type HooksOptions struct {
 	// Before runs before auth routing; it may replace the request context.
 	// Runtime: wired:auth/api/index.go:68.
@@ -337,8 +333,7 @@ type HooksOptions struct {
 type APIErrorHandler func(err huma.StatusError, ctx huma.Context)
 
 // ErrorPageColors configures the default error page colors
-// (upstream onAPIError.customizeDefaultErrorPage.colors,
-// init-options.ts:1748-1761).
+// (upstream onAPIError.customizeDefaultErrorPage.colors).
 type ErrorPageColors struct {
 	Background        string
 	Foreground        string
@@ -355,8 +350,7 @@ type ErrorPageColors struct {
 }
 
 // ErrorPageSize configures the default error page sizing tokens
-// (upstream onAPIError.customizeDefaultErrorPage.size,
-// init-options.ts:1762-1770).
+// (upstream onAPIError.customizeDefaultErrorPage.size).
 type ErrorPageSize struct {
 	RadiusSm string
 	RadiusMd string
@@ -368,15 +362,13 @@ type ErrorPageSize struct {
 }
 
 // ErrorPageFont configures the default error page font families
-// (upstream onAPIError.customizeDefaultErrorPage.font,
-// init-options.ts:1771-1774).
+// (upstream onAPIError.customizeDefaultErrorPage.font).
 type ErrorPageFont struct {
 	DefaultFamily string
 	MonoFamily    string
 }
 
 // DefaultErrorPageOptions mirrors better-auth's customizeDefaultErrorPage option
-// (init-options.ts:1747-1778).
 type DefaultErrorPageOptions struct {
 	Colors                   ErrorPageColors
 	Size                     ErrorPageSize
@@ -387,7 +379,6 @@ type DefaultErrorPageOptions struct {
 }
 
 // APIErrorOptions mirrors better-auth's top-level onAPIError option
-// (init-options.ts:1719-1780).
 //
 // DEVIATION (loud, intentional): upstream onError is
 // `(error: unknown, ctx: AuthContext) => void | Promise<void>`; the Go
@@ -414,7 +405,6 @@ type APIErrorOptions struct {
 }
 
 // ChangeEmailOptions mirrors better-auth's user.changeEmail config block
-// (init-options.ts:980-1005).
 type ChangeEmailOptions struct {
 	// Enabled gates the change-email flow. Upstream default: false.
 	// Runtime: wired:auth/api/routes/account.go:198 (update gate).
@@ -439,7 +429,6 @@ type ChangeEmailOptions struct {
 }
 
 // DeleteUserOptions mirrors better-auth's user.deleteUser config block
-// (init-options.ts:1009-1047).
 type DeleteUserOptions struct {
 	// Enabled gates the delete-user flow.
 	// Runtime: wired:auth/api/routes/account.go:390.
@@ -483,7 +472,7 @@ type DeleteUserOptions struct {
 }
 
 // DBModelOptions mirrors better-auth's BetterAuthDBOptions per-model block
-// (modelName, fields, additionalFields; init-options.ts:231-249) that is
+// (modelName, fields, additionalFields) that is
 // spread into the user, session, account, and verification option blocks.
 //
 // Upstream defaults (documented, behavior unchanged here): the model name
@@ -499,7 +488,7 @@ type DBModelOptions struct {
 
 	// Fields maps logical field names to database columns (excluding "id").
 	// Runtime: wired:auth/index.go:295 (ResolveSchema merge; route-level
-	// decoding is incomplete per the PARITY row-key note).
+	// decoding is incomplete).
 	Fields map[string]string
 
 	// AdditionalFields declares extra fields on the model (excluding "id"
@@ -564,7 +553,7 @@ type ValidateUserInfoResult struct {
 }
 
 // ValidateUserInfoFunc mirrors better-auth's user.validateUserInfo hook
-// (init-options.ts:970-976): return nil to allow, or a result to reject.
+// return nil to allow, or a result to reject.
 // Browser flows redirect to the configured error URL; programmatic flows
 // surface a 403. The EndpointContext carries the request when one exists
 // (nil-request calls mirror upstream context-init invocations). Enforced at
@@ -576,7 +565,6 @@ type ValidateUserInfoResult struct {
 type ValidateUserInfoFunc func(data ValidateUserInfoData, ctx EndpointContext) (*ValidateUserInfoResult, error)
 
 // UserOptions mirrors better-auth's top-level user config block
-// (init-options.ts:948-1049).
 type UserOptions struct {
 	// Model customizes the user table name, column mapping, and additional
 	// fields. Mirrors better-auth's BetterAuthDBOptions<"user", ...> spread
@@ -599,7 +587,6 @@ type UserOptions struct {
 }
 
 // AccountLinkingOptions mirrors better-auth's account.accountLinking block
-// (init-options.ts:1203-1302).
 type AccountLinkingOptions struct {
 	// nil or true = account linking enabled (default); false = disabled.
 	// Runtime: wired:auth/api/routes/social.go:374 (linking gate).
@@ -659,7 +646,6 @@ func (o AccountLinkingOptions) RequireLocalEmailVerifiedValue() bool {
 }
 
 // AccountOptions mirrors better-auth's top-level account config block
-// (init-options.ts:1191-1348).
 type AccountOptions struct {
 	// Model customizes the account table name, column mapping, and
 	// additional fields. Mirrors better-auth's
@@ -770,7 +756,7 @@ type CookieAttributes struct {
 }
 
 // CookieConfig overrides a named auth cookie's name and attributes
-// (upstream advanced.cookies entries, init-options.ts:413-420).
+// (upstream advanced.cookies entries).
 // Runtime: wired:auth/cookies/attributes.go:67 (prefix/name assembly).
 type CookieConfig struct {
 	// Name overrides the cookie name (prefix handling bypassed when set).
@@ -782,7 +768,7 @@ type CookieConfig struct {
 }
 
 // CrossSubDomainCookiesOptions configures cookie sharing across subdomains
-// (upstream advanced.crossSubDomainCookies, init-options.ts:383-401).
+// (upstream advanced.crossSubDomainCookies).
 type CrossSubDomainCookiesOptions struct {
 	// Enabled toggles cross-subdomain cookies.
 	// Runtime: wired:auth/api/routes/session.go (issueSessionCookies and the
@@ -800,7 +786,6 @@ type CrossSubDomainCookiesOptions struct {
 }
 
 // IPAddressOptions exposes better-auth's advanced IP address config surface
-// (init-options.ts:299-342).
 type IPAddressOptions struct {
 	// IPAddressHeaders lists headers consulted for the client IP.
 	// Runtime: wired:auth/api/rate_limiter.go:298 (custom header support).
@@ -838,7 +823,7 @@ const (
 )
 
 // GenerateIDFunc mirrors better-auth's GenerateIdFn
-// (init-options.ts:45-48): it receives the model name and an optional size
+// it receives the model name and an optional size
 // hint and returns a new ID, or false to fall back to the database's
 // auto-generated ID. NOTE: upstream passes a single options object
 // `{model, size}`; the Go form takes positional args. Consumed by the
@@ -848,7 +833,7 @@ const (
 type GenerateIDFunc func(model string, size *int) (string, bool)
 
 // GenerateIDOption mirrors better-auth's advanced.database.generateId
-// value (init-options.ts:459): a custom function, false (database auto ID),
+// value: a custom function, false (database auto ID),
 // or a "serial"/"uuid" shorthand. The zero value preserves current runtime
 // ID generation. Consumed by the resolved AuthContext.GenerateID.
 // Runtime: wired:auth/index.go (resolver + context).
@@ -864,7 +849,7 @@ type GenerateIDOption struct {
 }
 
 // AdvancedDatabaseOptions mirrors better-auth's advanced.database config
-// block (init-options.ts:435-487). See per-field runtime owners below.
+// block. See per-field runtime owners below.
 type AdvancedDatabaseOptions struct {
 	// DefaultFindManyLimit is the default record count for findMany calls.
 	// Upstream default (documented): 100. The shared constant already is
@@ -895,7 +880,7 @@ type AdvancedDatabaseOptions struct {
 }
 
 // BackgroundTaskHandler mirrors better-auth's
-// advanced.backgroundTasks.handler (init-options.ts:524-526): it receives a
+// advanced.backgroundTasks.handler: it receives a
 // unit of deferred work to run after the response is sent (e.g. Vercel's
 // waitUntil or the Cloudflare Workers ctx.waitUntil).
 //
@@ -907,7 +892,7 @@ type AdvancedDatabaseOptions struct {
 type BackgroundTaskHandler func(task func())
 
 // BackgroundTasksOptions mirrors better-auth's advanced.backgroundTasks
-// config block (init-options.ts:502-526). Dispatched by RunInBackground in
+// config block. Dispatched by RunInBackground in
 // auth/index.go.
 // Runtime: wired:auth/index.go (RunInBackground dispatches Handler).
 type BackgroundTasksOptions struct {
@@ -917,7 +902,6 @@ type BackgroundTasksOptions struct {
 }
 
 // AdvancedOptions mirrors better-auth's advanced runtime and cookie config
-// (init-options.ts:295-536).
 type AdvancedOptions struct {
 	// IPAddress configures client-IP resolution for rate limiting and
 	// session tracking. See per-field owners in IPAddressOptions.
@@ -987,7 +971,7 @@ type AdvancedOptions struct {
 
 // SecondaryStorage mirrors better-auth's SecondaryStorage contract used for
 // session and rate-limit data
-// (vendor/better-auth/packages/core/src/db/type.ts:320-363). TTLs are in
+// (core/src/db/type.ts). TTLs are in
 // seconds; a nil TTL on Set means no expiry. Table inclusion drops
 // secondary-stored tables (schema.go); session reads/writes consume it in
 // auth/api/routes/session.go, verification reads/writes in
@@ -1031,7 +1015,7 @@ const (
 )
 
 // VerificationStoreIdentifier mirrors better-auth's
-// verification.storeIdentifier option (init-options.ts:1363-1368): a mode,
+// verification.storeIdentifier option: a mode,
 // an optional custom hash function, and optional per-identifier overrides.
 // Upstream shape is `{ default: StoreIdentifierOption, overrides?: ... }`
 // where each option is "plain" | "hashed" | { hash }; here Mode+Hash carry
@@ -1057,7 +1041,7 @@ type VerificationStoreIdentifier struct {
 
 // VerificationOptions mirrors better-auth's top-level verification config
 // block (BetterAuthDBOptions<"verification", ...> plus verification
-// behavior flags; init-options.ts:1349-1375).
+// behavior flags).
 type VerificationOptions struct {
 	// Model customizes the verification table name, column mapping, and
 	// additional fields.
@@ -1096,8 +1080,8 @@ const (
 
 // DynamicBaseURLConfig mirrors better-auth's DynamicBaseURLConfig for
 // multi-domain deployments (e.g. preview URLs)
-// (init-options.ts:146-183). Upstream baseURL is `string |
-// DynamicBaseURLConfig` (init-options.ts:189); Go keeps the static BaseURL
+// Upstream baseURL is `string |
+// DynamicBaseURLConfig`; Go keeps the static BaseURL
 // string and carries the object form in Options.DynamicBaseURL (exactly one
 // may be set — see ValidateOptions). x-forwarded-host is only honored when
 // Advanced.TrustedProxyHeaders is enabled upstream. BetterAuth validates and
@@ -1120,7 +1104,7 @@ type DynamicBaseURLConfig struct {
 // ValidateDatabaseHints.
 //
 // Upstream `database` object-form connection selectors (casing, debugLogs,
-// transaction, schemaName; init-options.ts:631-664) configure the Kysely
+// transaction, schemaName) configure the Kysely
 // adapter factory. Go adapters are constructed by the caller before
 // BetterAuth runs, so no hint had an applicable adapter/runtime consumer:
 // they were validated-and-preserved inert values. Per the parity rule
@@ -1132,26 +1116,26 @@ type DynamicBaseURLConfig struct {
 // never as validation-only fields.
 
 // Options configures the auth instance (upstream BetterAuthOptions,
-// init-options.ts:538-1841). Every field carries a Runtime marker naming
+// init-options.ts). Every field carries a Runtime marker naming
 // the owning runtime file; "wired" means BetterAuth/routes consume it,
 // "excluded(W10-XX)" names the intentional-exclusion registry entry in
-// PARITY_V2.md. No field is silently ignored: the Wave-10 audit removed or
+// registry. No field is silently ignored: the Wave-10 audit removed or
 // wired every pending marker.
 type Options struct {
 	// AppName identifies the application in auth UX contexts.
-	// Mirrors better-auth's appName option (init-options.ts:548).
+	// Mirrors better-auth's appName option.
 	// Runtime: wired:auth/index.go:285 (default "Better Auth" + context).
 	AppName string
 
 	// BaseURL is the full application URL, e.g. "https://myapp.com".
 	// Its origin is always trusted. Mirrors the string half of upstream's
-	// baseURL option (init-options.ts:572); the object half lives in
+	// baseURL option; the object half lives in
 	// DynamicBaseURL. Set exactly one of the two (see ValidateOptions).
 	// Runtime: wired:auth/api/index.go:39 (origin middleware).
 	BaseURL string
 
 	// DynamicBaseURL carries the object half of upstream's baseURL option
-	// (DynamicBaseURLConfig, init-options.ts:189) for multi-domain
+	// (DynamicBaseURLConfig) for multi-domain
 	// deployments. Nil means static-BaseURL mode. Exactly one of BaseURL
 	// and DynamicBaseURL may be set.
 	// Runtime: wired:auth/index.go (validation + trusted-origin expansion +
@@ -1160,16 +1144,16 @@ type Options struct {
 	DynamicBaseURL *DynamicBaseURLConfig
 
 	// BasePath is the route path prefix, default "/api/auth"
-	// (upstream basePath, init-options.ts:580).
+	// (upstream basePath).
 	// Runtime: wired:auth/index.go:282 (default) via auth/api/index.go:24.
 	BasePath string
 	// Secret is the legacy single secret, preserved for backwards compatibility
-	// (upstream secret, init-options.ts:604; env fallback owned by
+	// (upstream secret; env fallback owned by
 	// auth/context/secret-utils.go:133).
 	// Runtime: wired:auth/context/secret-utils.go:133 (resolveSecrets).
 	Secret string
 	// Secrets holds versioned secrets for non-destructive rotation
-	// (upstream secrets, init-options.ts:617; BETTER_AUTH_SECRETS env form
+	// (upstream secrets; BETTER_AUTH_SECRETS env form
 	// owned by auth/context/secret-utils.go:133).
 	// Runtime: wired:auth/context/secret-utils.go:133 (resolveSecrets).
 	Secrets []Secret
@@ -1181,7 +1165,7 @@ type Options struct {
 	// DB is the database adapter (bun, gorm, …).
 	//
 	// DEVIATION (loud, intentional, stable): upstream names this option
-	// `database` (BetterAuthOptions.database, init-options.ts:621). This port names it DB for
+	// `database` (BetterAuthOptions.database). This port names it DB for
 	// Go brevity and to avoid confusion with the `db` package name in
 	// imports (`db.Adapter` vs `Database`). Renaming DB→Database would be
 	// mechanical (100+ call sites in routes/plugins/tests) but churns the
@@ -1196,7 +1180,7 @@ type Options struct {
 	// Runtime: wired:auth/index.go:409 (hook wrapping + route use).
 	DB Adapter
 	// Plugins extends auth with routes, schema, hooks, and error codes
-	// (upstream plugins, init-options.ts:943).
+	// (upstream plugins).
 	// Runtime: wired:auth/index.go:319 (declaration-order init).
 	Plugins []Plugin
 
@@ -1205,31 +1189,31 @@ type Options struct {
 	Schema PluginSchema
 
 	// EmailAndPassword configures credential auth (upstream
-	// emailAndPassword, init-options.ts:791). See per-field owners in
+	// emailAndPassword). See per-field owners in
 	// email-password.go.
 	// Runtime: wired:auth/api/routes/sign_up.go:42 (enable gate).
 	EmailAndPassword EmailAndPasswordOptions
 	// EmailVerification configures verification email flows (upstream
-	// emailVerification, init-options.ts:716). See per-field owners in
+	// emailVerification). See per-field owners in
 	// email-password.go.
 	// Runtime: wired:auth/api/routes/email_verification.go:91.
 	EmailVerification EmailVerificationOptions
 	// Session configures session lifetime/refresh/storage (upstream
-	// session, init-options.ts:1050). See per-field owners in
+	// session). See per-field owners in
 	// email-password.go.
 	// Runtime: wired:auth/api/routes/session.go:366 (expiry/refresh).
 	Session SessionOptions
 	// User configures user model, admission gate, and lifecycle flows
-	// (upstream user, init-options.ts:948).
+	// (upstream user).
 	// Runtime: wired:auth/api/routes/account.go:198 (change-email gate).
 	User UserOptions
 	// Account configures OAuth account storage and linking (upstream
-	// account, init-options.ts:1191).
+	// account).
 	// Runtime: wired:auth/api/routes/social.go:38 (linking).
 	Account AccountOptions
 
 	// Verification mirrors better-auth's top-level verification config
-	// block (init-options.ts:1349). Table inclusion is wired; identifier
+	// block. Table inclusion is wired; identifier
 	// handling is types-only.
 	// Runtime: wired:auth/schema.go:509 (table inclusion);
 	// pending:auth/api/routes/email_verification.go:265 (identifier handling).
@@ -1237,7 +1221,7 @@ type Options struct {
 
 	// SecondaryStorage stores session and rate-limit data.
 	// Mirrors better-auth's top-level secondaryStorage option
-	// (init-options.ts:712). Table inclusion, session/verification runtime,
+	// Table inclusion, session/verification runtime,
 	// and rate-limit backends consume it (see the secondary-storage runtime
 	// in auth/api/routes/session.go and email_verification.go).
 	// Runtime: wired:auth/schema.go (table inclusion) + session/verification
@@ -1248,14 +1232,14 @@ type Options struct {
 	// beyond the app's own BasePath origin. Supports wildcards:
 	//   "*.example.com"           — any subdomain
 	//   "https://*.example.com"   — any subdomain, HTTPS only
-	// Mirrors the static half of upstream trustedOrigins (init-options.ts:1404).
+	// Mirrors the static half of upstream trustedOrigins.
 	// Runtime: wired:auth/api/index.go:39 (origin middleware via
 	// IsTrustedOrigin; collection finalized at auth/index.go:387).
 	TrustedOrigins []string
 
 	// TrustedOriginsFunc returns additional trusted origins per request.
 	// Its results are merged with TrustedOrigins. Mirrors better-auth's
-	// dynamic trustedOrigins function variant (init-options.ts:1404; sync
+	// dynamic trustedOrigins function variant (init-options.ts; sync
 	// here, upstream is Awaitable and may yield nullish entries — nil/empty
 	// entries are filtered at auth/index.go:387). The request may be nil
 	// (context-init calls).
@@ -1264,27 +1248,25 @@ type Options struct {
 	TrustedOriginsFunc func(r *http.Request) []string
 
 	// SocialProviders is the list of enabled OAuth / social auth providers.
-	// Mirrors upstream socialProviders (init-options.ts:940).
+	// Mirrors upstream socialProviders.
 	// No current runtime: social login is not registered and no provider
 	// factories ship with this module.
 	SocialProviders []OAuthProvider
 
 	// DisabledPaths disables specific auth routes using better-auth-style
 	// relative paths like "/sign-in/email" (upstream disabledPaths,
-	// init-options.ts:1801).
 	// Runtime: wired:auth/api/index.go:28 (middleware normalization).
 	DisabledPaths []string
 
 	// DatabaseHooks configures global DB lifecycle hooks that run in addition
 	// to plugin hooks. Mirrors better-auth's top-level databaseHooks option
-	// (init-options.ts:1426).
 	// Runtime: wired:auth/index.go (user-sourced hook merge via NewHookedAdapterWithOptions).
 	DatabaseHooks DBHooks
 
 	// OnAfterCommitHookError reports post-commit (Transaction flush)
 	// after-hook failures after the surrounding work has committed, mirroring
 	// upstream runWithTransaction's onAfterCommitHookError option
-	// (core/src/context/transaction.ts:107). Reporting cannot roll back
+	// (core/src/context/transaction.ts). Reporting cannot roll back
 	// committed work or suppress later hooks; without a handler the first
 	// flush failure fails the Transaction call instead. Nil (the default)
 	// preserves the fail-first behavior.
@@ -1302,17 +1284,17 @@ type Options struct {
 
 	// RateLimit configures global and per-route request limits for auth
 	// endpoints. Mirrors better-auth's top-level rateLimit option subset
-	// (init-options.ts:1415). See per-field owners in RateLimitOptions.
+	// See per-field owners in RateLimitOptions.
 	// Runtime: wired:auth/api/rate_limiter.go:135 (resolveRateLimit).
 	RateLimit RateLimitOptions
 
 	// Hooks configures global request hooks that run around every auth route
-	// (upstream hooks, init-options.ts:1784).
+	// (upstream hooks).
 	// Runtime: wired:auth/api/index.go:68.
 	Hooks HooksOptions
 
 	// OnAPIError configures auth API error handling parity options
-	// (upstream onAPIError, init-options.ts:1719).
+	// (upstream onAPIError).
 	// Runtime: wired:auth/api/routes/hooks.go:41.
 	OnAPIError APIErrorOptions
 
@@ -1324,19 +1306,19 @@ type Options struct {
 	Logger LoggerOptions
 
 	// Telemetry configures auth telemetry parity options (upstream
-	// telemetry, init-options.ts:1805). Enabled publishes a local init
+	// telemetry). Enabled publishes a local init
 	// diagnostic (no network); Debug logs per-event payloads.
 	// Runtime: wired:auth/telemetry.go (enabled/env gate + PublishTelemetry).
 	Telemetry TelemetryOptions
 
 	// Experimental mirrors better-auth's top-level experimental config
-	// surface (init-options.ts:1824). Instrumentation Enabled (default true
+	// surface. Instrumentation Enabled (default true
 	// when nil) keeps WithSpan tracing active as a passthrough.
 	// Runtime: wired:auth/instrumentation.go (instrumentation passthrough).
 	Experimental ExperimentalOptions
 
 	// Advanced configures runtime request handling and cookie behavior that
-	// better-auth groups under options.advanced (init-options.ts:295). See
+	// better-auth groups under options.advanced. See
 	// per-field owners in AdvancedOptions.
 	// Runtime: wired:auth/api/index.go:39 (CSRF/origin middleware).
 	Advanced AdvancedOptions

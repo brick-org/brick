@@ -2,18 +2,14 @@ package types
 
 // DPoP (RFC 9449) integrator-facing option surface.
 //
-// The proof-verification runtime lives in auth/oauth2 (see VerifyDpopProof
-// there, mirroring vendor/better-auth/packages/core/src/oauth2/dpop.ts) and
+// The proof-verification runtime lives in auth/oauth2 and
 // the sender-constraint enforcement lives in the OAuth Provider plugin. This
 // file carries only the pure, dependency-free surface integrators configure:
 // the plugin `dpop` option bag, its upstream defaults, and the `dpop_jkt`
 // shape validator. Nothing here performs I/O.
 
 // DPoPSigningAlgorithm is an accepted JWS algorithm for DPoP proof JWTs.
-//
-// Upstream: DpopSigningAlgorithm in
-// vendor/better-auth/packages/core/src/oauth2/dpop.ts
-// (DPOP_SIGNING_ALGORITHMS). Symmetric and `none` algorithms are never
+// Symmetric and `none` algorithms are never
 // accepted.
 type DPoPSigningAlgorithm string
 
@@ -27,28 +23,15 @@ const (
 
 // DefaultDPoPSigningAlgorithms lists the DPoP proof JWS algorithms accepted
 // when DPoPOptions.SigningAlgorithms is nil.
-//
-// Upstream: DPOP_SIGNING_ALGORITHMS in
-// vendor/better-auth/packages/core/src/oauth2/dpop.ts, advertised as the
-// default for `dpop.signingAlgorithms` in
-// vendor/better-auth/packages/oauth-provider/src/types/index.ts.
 var DefaultDPoPSigningAlgorithms = []string{"EdDSA", "ES256", "ES512", "PS256", "RS256"}
 
 // DefaultDPoPProofMaxAgeSeconds bounds the accepted age of a DPoP proof JWT
-// in seconds when DPoPOptions.ProofMaxAgeSeconds is unset.
-//
-// Upstream: the `dpop.proofMaxAgeSeconds` default (300) in
-// vendor/better-auth/packages/oauth-provider/src/types/index.ts, matching
-// DEFAULT_DPOP_PROOF_MAX_AGE_SECONDS in core/src/oauth2/dpop.ts.
+// in seconds when DPoPOptions.ProofMaxAgeSeconds is unset. Default 300.
 const DefaultDPoPProofMaxAgeSeconds = 300
 
 // DPoPOptions tunes DPoP proof validation without changing the enablement
 // contract: DPoP is enforced when a client or resource asks for DPoP-bound
-// access tokens.
-//
-// Upstream: the `dpop?: { proofMaxAgeSeconds?, signingAlgorithms? }` option
-// bag in vendor/better-auth/packages/oauth-provider/src/types/index.ts.
-// Pure option surface; the OAuth Provider plugin owns the runtime
+// access tokens. Pure option surface; the OAuth Provider plugin owns the runtime
 // consumption (its flat DPoPProofMaxAgeSeconds/DPoPSigningAlgorithms fields
 // predate this bag — future wiring may resolve them through it).
 type DPoPOptions struct {
@@ -87,10 +70,6 @@ func (o DPoPOptions) EffectiveSigningAlgorithms() []string {
 // ValidDPoPJkt reports whether jkt has the upstream `dpop_jkt` shape: a
 // base64url-encoded SHA-256 JWK thumbprint (RFC 7638), exactly 43 chars from
 // [A-Za-z0-9_-] with no padding. Pure validator; no I/O.
-//
-// Upstream: dpopJktSchema in
-// vendor/better-auth/packages/oauth-provider/src/types/zod.ts
-// (/^[A-Za-z0-9_-]{43}$/).
 func ValidDPoPJkt(jkt string) bool {
 	if len(jkt) != 43 {
 		return false

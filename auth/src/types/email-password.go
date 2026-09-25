@@ -78,7 +78,6 @@ type DeleteAccountVerificationData struct {
 }
 
 // EmailAndPasswordOptions mirrors better-auth's emailAndPassword config block
-// (init-options.ts:791-936).
 type EmailAndPasswordOptions struct {
 	// Enable email and password authentication (upstream enabled).
 	// Runtime: wired:auth/api/routes/sign_up.go:42 (sign-up gate).
@@ -177,7 +176,6 @@ func (o EmailAndPasswordOptions) Validate() error {
 }
 
 // EmailVerificationOptions mirrors better-auth's emailVerification config block
-// (init-options.ts:716-787).
 type EmailVerificationOptions struct {
 	// SendVerificationEmail delivers the verification link to the user.
 	// Runtime: wired:auth/api/routes/sign_up.go:154 (sign-up delivery) and
@@ -192,8 +190,7 @@ type EmailVerificationOptions struct {
 	SendVerificationEmailRequest func(data VerificationEmailData, r *http.Request) error
 
 	// Automatically send a verification email after sign-up.
-	// Tri-state mirroring upstream `sendOnSignUp?: boolean`
-	// (init-options.ts): nil (unset) follows
+	// Tri-state mirroring upstream `sendOnSignUp?: boolean`: nil (unset) follows
 	// EmailAndPassword.RequireEmailVerification; non-nil true sends
 	// unconditionally and non-nil false never sends. Resolve with
 	// ResolveSendOnSignUp.
@@ -262,7 +259,6 @@ func ResolveSendOnSignUp(sendOnSignUp *bool, requireVerification bool) bool {
 
 // SessionCookieCacheStrategy selects the session cookie-cache encoding.
 // Mirrors better-auth's session.cookieCache.strategy value
-// (init-options.ts:1125).
 type SessionCookieCacheStrategy string
 
 const (
@@ -284,7 +280,7 @@ const (
 // SessionCookieCacheShouldRefresh mirrors the upstream cookie-cache
 // refreshCache `shouldRefresh` function form: it decides per session/user
 // whether the stateless cache should refresh before expiry. The pinned
-// upstream type (init-options.ts:1141-1152) only carries `boolean |
+// upstream type only carries `boolean |
 // { updateAge }` while its own doc comment advertises an updateAge-or-
 // shouldRefresh object; this hook is preserved for that advertised form and
 // is consulted by the cookie-cache refresh path.
@@ -293,7 +289,7 @@ type SessionCookieCacheShouldRefresh func(session Session, user User) bool
 
 // SessionCookieCacheRefresh controls stateless cookie-cache refresh before
 // expiry (without querying the database). Mirrors better-auth's
-// session.cookieCache.refreshCache value (init-options.ts:1141-1152):
+// session.cookieCache.refreshCache value:
 // false disables automatic refresh; Enabled refreshes when UpdateAge
 // seconds of lifetime remain (upstream default: 20% of maxAge).
 // Runtime: wired:auth/api/routes/session.go (refreshSessionIfNeeded + maybeRefreshCookieCache).
@@ -313,7 +309,7 @@ type SessionCookieCacheRefresh struct {
 }
 
 // SessionCookieCacheVersionFunc mirrors better-auth's
-// session.cookieCache.version function form (init-options.ts:1164-1173):
+// session.cookieCache.version function form:
 // it derives the cache version from the session and user so rotating it
 // invalidates existing caches. Upstream also allows an async function;
 // Go is sync (return an error instead of a rejected promise). When set it
@@ -322,7 +318,7 @@ type SessionCookieCacheRefresh struct {
 type SessionCookieCacheVersionFunc func(session Session, user User) (string, error)
 
 // SessionCookieCacheOptions mirrors the supported subset of better-auth's
-// session.cookieCache config (init-options.ts:1105-1174).
+// session.cookieCache config.
 type SessionCookieCacheOptions struct {
 	// Enable caching session+user payloads in a signed cookie.
 	// Runtime: wired:auth/api/routes/session.go:71 (read path) and :487
@@ -398,7 +394,6 @@ type SessionPersistenceOptions struct {
 }
 
 // SessionOptions mirrors better-auth's session config block
-// (init-options.ts:1050-1190).
 type SessionOptions struct {
 	// Model customizes the session table name, column mapping, and
 	// additional fields. Mirrors better-auth's
@@ -411,8 +406,7 @@ type SessionOptions struct {
 	ExpiresIn int
 
 	// How often the session expiry is refreshed on use, in seconds.
-	// Tri-state mirroring upstream `session.updateAge?: number`
-	// (init-options.ts, default 1 day): nil (unset) defaults to 86400;
+	// Tri-state mirroring upstream `session.updateAge?: number` (default 1 day): nil (unset) defaults to 86400;
 	// explicit 0 refreshes on every use (always-refresh); >0 is seconds.
 	// Resolve with ResolveUpdateAgeSeconds / UpdateAgeDuration.
 	// Runtime: wired:auth/api/routes/session.go:392 (sessionUpdateAge).
@@ -442,21 +436,21 @@ type SessionOptions struct {
 	FreshAge *int
 
 	// StoreSessionInDatabase mirrors upstream storeSessionInDatabase
-	// (init-options.ts:1091): with secondary storage configured, sessions
+	// with secondary storage configured, sessions
 	// persist in both stores and reads fall back to the database.
 	// Runtime: wired:auth/api/routes/session.go (dual-write/fallback) +
 	// auth/index.go (startup gate requires a backend when set).
 	StoreSessionInDatabase bool
 
 	// PreserveSessionInDatabase mirrors upstream preserveSessionInDatabase
-	// (init-options.ts:1101): with StoreSessionInDatabase, session rows
+	// with StoreSessionInDatabase, session rows
 	// survive secondary eviction (ended, not deleted).
 	// Runtime: wired:auth/api/routes/session.go (sign-out/delete paths) +
 	// auth/index.go (startup gate requires a backend when set).
 	PreserveSessionInDatabase bool
 
 	// CookieCache configures signed session caching in a secondary cookie
-	// (upstream cookieCache, init-options.ts:1105). See per-field owners in
+	// (upstream cookieCache). See per-field owners in
 	// SessionCookieCacheOptions.
 	// Runtime: wired:auth/api/routes/session.go:71 (read path).
 	CookieCache SessionCookieCacheOptions

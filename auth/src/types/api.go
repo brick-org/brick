@@ -2,18 +2,9 @@ package types
 
 import "net/http"
 
-// File boundary: auth/src/types/api.go, mirroring the upstream
-// src/types/api.ts boundary.
-//
-// Content note: upstream api.ts is type-inference only (InferAPI over
-// endpoints) with no Go equivalent. This file carries the BASE_ERROR_CODES
-// surface (upstream @better-auth/core error codes) plus the HttpError
-// metadata helpers, moved unchanged from the former types/errors.go per
-// SOURCE_LAYOUT_MOVE_LIST.md (types/errors.go -> types/api.go).
+// Mirrors upstream src/types/api.ts; carries BASE_ERROR_CODES plus HttpError helpers.
 
 // RawError mirrors better-auth's RawError ({ code, message }).
-//
-// Upstream TypeScript name: RawError (packages/core/src/utils/error-codes.ts).
 // Code is the UPPER_SNAKE key (e.g. "USER_NOT_FOUND"); Message is the
 // human-readable string from BASE_ERROR_CODES. Use String() or Code to get
 // the key; the message is for display only.
@@ -51,10 +42,7 @@ func (e HttpError) String() string { return e.Code }
 // BASE_ERROR_CODES key.
 //
 // Upstream pins only the { code, message } pair per key; the status varies by
-// throw site (e.g. USER_NOT_FOUND is thrown as NOT_FOUND, BAD_REQUEST, and
-// UNAUTHORIZED across routes). This maps each key to its most common
-// upstream status, surveyed from
-// vendor/better-auth/packages/{better-auth/src,core/src} (v1.7.5):
+// throw site. This maps each key to its most common upstream status:
 //   - multi-status codes resolve to the majority throw-site status
 //     (USER_NOT_FOUND -> 404, INVALID_TOKEN -> 401, FAILED_TO_GET_USER_INFO
 //     -> 401, FAILED_TO_CREATE_USER -> 422, FAILED_TO_CREATE_SESSION -> 500)
@@ -123,8 +111,7 @@ func NewHttpError(code string) HttpError {
 	return HttpError{Code: code, Message: msg, Status: StatusForCode(code)}
 }
 
-// BaseErrorMessages holds every BASE_ERROR_CODES message from
-// vendor/better-auth/packages/core/src/error/codes.ts (v1.7.5) in upstream
+// BaseErrorMessages holds every BASE_ERROR_CODES message in upstream
 // order, keyed by code. Use BaseErrorCodes for the full {code,message}
 // objects; this map is for message-only readers.
 var BaseErrorMessages = map[string]string{
@@ -180,7 +167,7 @@ var BaseErrorMessages = map[string]string{
 }
 
 // BaseErrorCodeOrder lists every BASE_ERROR_CODES key in upstream definition
-// order (vendor/.../error/codes.ts). Use it when merging plugin and base
+// order. Use it when merging plugin and base
 // codes so BASE entries apply last, mirroring
 // `$ERROR_CODES: { ...pluginCodes, ...BASE_ERROR_CODES }`.
 var BaseErrorCodeOrder = []string{
@@ -247,7 +234,6 @@ var BaseErrorCodes = func() map[string]RawError {
 }()
 
 // Error code constants mirroring better-auth BASE_ERROR_CODES.
-// source: vendor/better-auth/packages/core/src/error/codes.ts
 const (
 	ErrUserNotFound                         = "USER_NOT_FOUND"
 	ErrFailedToCreateUser                   = "FAILED_TO_CREATE_USER"

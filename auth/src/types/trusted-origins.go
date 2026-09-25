@@ -14,7 +14,7 @@ import (
 // IsTrustedOriginWithEnv.
 //
 // Upstream: env.BETTER_AUTH_TRUSTED_ORIGINS in
-// vendor/better-auth/packages/better-auth/src/context/helpers.ts
+// better-auth/src/context/helpers.ts
 // (getTrustedOrigins splits on "," and drops falsy entries).
 const TrustedOriginsEnvVar = "BETTER_AUTH_TRUSTED_ORIGINS"
 
@@ -89,7 +89,7 @@ func CollectTrustedOrigins(static []string, r *http.Request, resolvers ...Truste
 // results. Empty entries are dropped at every stage.
 //
 // Upstream equivalent: getTrustedOrigins in
-// vendor/better-auth/packages/better-auth/src/context/helpers.ts minus the
+// better-auth/src/context/helpers.ts minus the
 // env read and minus dynamic baseURL expansion (BaseURL stays a static
 // string in this port; see DynamicBaseURLConfig, types-only).
 func ResolveTrustedOrigins(opts Options, r *http.Request) []string {

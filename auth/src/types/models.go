@@ -2,15 +2,7 @@ package types
 
 import "time"
 
-// File boundary: auth/src/types/models.go, mirroring the upstream
-// src/types/models.ts boundary (which re-exports the User, Session,
-// Account, Verification, and RateLimit models).
-//
-// Content note: User and Session are moved unchanged from the former
-// types/email-password.go tail per SOURCE_LAYOUT_MOVE_LIST.md (public types
-// toward the auth.go/models.ts boundary). Account, Verification, and
-// RateLimit have no dedicated Go structs; their shapes are covered by the
-// adapter row contract and plugin schemas.
+// Mirrors upstream src/types/models.ts.
 
 // User is the canonical user model returned by auth routes.
 type User struct {

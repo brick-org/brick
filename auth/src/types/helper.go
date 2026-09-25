@@ -5,18 +5,10 @@ import (
 	"github.com/google/uuid"
 )
 
-// File boundary: auth/src/types/helper.go, mirroring the upstream
-// src/types/helper.ts boundary.
-//
-// Content note: upstream helper.ts is type-level only (Prettify,
-// UnionToIntersection, ...) with no Go equivalent. This file carries the
-// generateId runtime (MintModelID), moved unchanged from the former
-// types/generate-id.go per SOURCE_LAYOUT_MOVE_LIST.md
-// (types/generate-id.go -> types/helper.go).
+// Mirrors upstream src/types/helper.ts.
 
 // MintModelID mints a model row ID honoring Advanced.Database.GenerateID,
-// mirroring upstream generateIdFunc (create-context.ts:248-263) and the
-// adapter idField defaultValue (core/src/db/adapter/get-id-field.ts:59-90):
+// mirroring upstream generateIdFunc and the adapter idField defaultValue:
 //
 //   - a custom Func wins (receives model + optional size hint, may return
 //     false for database-issued IDs);
@@ -32,8 +24,6 @@ import (
 // (session tokens, verification tokens, OAuth state) are NOT model IDs:
 // upstream mints those with generateId(n) directly, bypassing the context
 // generator, so they must keep crypto randomness and never flow through here.
-//
-// Upstream TypeScript name: generateId.
 func MintModelID(opts Options, model string, size *int) (string, bool) {
 	if fn := opts.Advanced.Database.GenerateID.Func; fn != nil {
 		return fn(model, size)

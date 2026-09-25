@@ -2,30 +2,11 @@ package types
 
 import authdb "github.com/brick-org/brick/auth/src/db"
 
-// Adapter types are defined in db and re-exported here to keep the public
-// Options surface aligned with Better Auth's types package.
-//
-// Every exported symbol in auth/db/adapter-base.go is reachable via this package
-// (type alias, constant, or function re-export), so types is the single
-// public import for the adapter contract. Method sets on aliased types
-// (Adapter, Config, Connector, WhereMode, SortDirection) come along with
-// the alias; there is no wrapper to drift.
-//
-// Upstream TypeScript names (vendor/better-auth/packages/core/src/db/adapter):
-// WhereOperator/Where -> WhereOperator/Where, DBAdapter -> Adapter,
-// SortBy direction "asc"|"desc" -> SortDirection, the factory limit default
-// (100) -> DefaultFindManyLimit.
-//
-// Join absence: upstream FindOne/FindMany accept JoinOption (resolved to
-// JoinConfig by the factory, with separate-query fallback when
-// advanced.database.joins is off). This contract has no join parameter and
-// no JoinOption/JoinConfig equivalent; callers needing related rows issue
-// separate queries. See auth/db.Adapter for the full divergence list.
+// Adapter types are defined in db and re-exported here.
+// Upstream: core/src/db/adapter.
+// No join parameter; callers needing related rows issue separate queries.
 type (
 	// Operator is a where-clause comparison operator ("eq", "ne", ...).
-	//
-	// Upstream TypeScript name: WhereOperator
-	// (packages/core/src/db/adapter/index.ts).
 	Operator = authdb.Operator
 	// WhereOperator is the historical alias for Operator, matching
 	// upstream's WhereOperator name directly.
@@ -38,9 +19,7 @@ type (
 	// SortDirection is the valid SortBy.Direction vocabulary
 	// ("asc", "desc").
 	SortDirection = authdb.SortDirection
-	// Where is a partial mirror of Better Auth's adapter Where type.
 	Where = authdb.Where
-	// SortBy is a partial mirror of upstream's findMany sortBy.
 	SortBy = authdb.SortBy
 	// Adapter is the database contract implemented by ORM-specific adapters.
 	Adapter = authdb.Adapter

@@ -144,7 +144,7 @@ const (
 // endpoint. Mirrors the per-provider tokenEndpointAuth used upstream (e.g.
 // TikTok, Reddit).
 //
-// Upstream: vendor/better-auth/packages/core/src/oauth2/token-endpoint-auth.ts:9-29
+// Upstream: core/src/oauth2/token-endpoint-auth.ts
 // (TokenEndpointAuth).
 //
 // Intentional exclusion (W10-01): legacy helper shape with zero runtime
@@ -295,7 +295,6 @@ type OAuthProviderConfig struct {
 // IDTokenNonceComparison selects how an ID-token `nonce` claim is compared
 // to the expected nonce recovered from OAuth state.
 //
-// Upstream: vendor/better-auth/packages/core/src/oauth2/oauth-provider.ts:33-37
 // (OAuthIdTokenConfig nonceComparison).
 //
 // Runtime: wired:auth/oauth2 (VerifyIDTokenNonceClaim enforces it).
@@ -313,7 +312,6 @@ const (
 // signature, issuer, audience, max-age, and nonce checks pass. Return false
 // to reject the token (e.g. Google's hosted-domain `hd` restriction).
 //
-// Upstream: vendor/better-auth/packages/core/src/oauth2/oauth-provider.ts:44-50
 // (OAuthIdTokenConfig verifyClaims).
 //
 // Runtime: wired:auth/oauth2 (VerifyIDTokenWithConfig enforces it;
@@ -325,7 +323,6 @@ type VerifyClaimsFunc func(claims map[string]any) bool
 // custom `verify` branch of OAuthIdTokenConfig used by providers that
 // verify against a remote endpoint instead of a local JWKS (e.g. LINE).
 //
-// Upstream: vendor/better-auth/packages/core/src/oauth2/oauth-provider.ts:58-62
 // (OAuthIdTokenConfig verify branch) and oauth-provider.ts:344-350
 // (ProviderOptions verifyIdToken).
 //
@@ -336,7 +333,6 @@ type VerifyIDTokenFunc func(token, nonce string) (bool, error)
 // DefaultJWKSCacheTTL bounds how long a fetched JWKS is trusted before it
 // is refetched.
 //
-// Upstream: vendor/better-auth/packages/core/src/oauth2/verify.ts:77
 // (JWKS_CACHE_TTL_MS = 5 * 60 * 1000).
 //
 // Runtime: wired:auth/oauth2 (default behind JWKSOptions.EffectiveCacheTTL,
@@ -346,7 +342,6 @@ const DefaultJWKSCacheTTL = 5 * time.Minute
 // DefaultJWKSNoKidRefetchCooldown bounds how often a kid-less verification
 // failure retries against a freshly fetched JWKS.
 //
-// Upstream: vendor/better-auth/packages/core/src/oauth2/verify.ts:78
 // (JWKS_NO_KID_REFETCH_COOLDOWN_MS = 30 * 1000).
 //
 // Runtime: wired:auth/oauth2 (kid-miss refetch cooldown in idtoken_config.go).
@@ -355,7 +350,6 @@ const DefaultJWKSNoKidRefetchCooldown = 30 * time.Second
 // DefaultIDTokenMaxAge is the maximum ID-token age accepted by the Google,
 // Apple, and Microsoft providers.
 //
-// Upstream: vendor/better-auth/packages/core/src/social-providers/google.ts:73,
 // apple.ts:134, and microsoft-entra-id.ts:232 (each "1h").
 //
 // Runtime: wired:social-providers (default MaxTokenAge in the Google ID-token
@@ -366,7 +360,6 @@ const DefaultIDTokenMaxAge = "1h"
 // signature verification: the remote set URL, cache TTL, permitted
 // algorithms (alg pin), and optional inline static keys.
 //
-// Upstream: vendor/better-auth/packages/core/src/oauth2/verify.ts:43-52
 // (JwksFetchOptions) with TTL from verify.ts:77.
 //
 // Runtime: wired:auth/oauth2 (idtoken_config.go: cached fetch with TTL + kid-miss refetch).
@@ -399,7 +392,6 @@ func (o JWKSOptions) EffectiveCacheTTL() time.Duration {
 // fetch URL scoped by provider ID, so a token is only ever matched against
 // the key set published by its own source. Pure helper; no I/O.
 //
-// Upstream: vendor/better-auth/packages/core/src/oauth2/verify.ts:331-334
 // (cache scoped to the jwksFetch source string).
 //
 // Runtime: wired:auth/oauth2 (JWKS fetch cache key in idtoken_config.go).
@@ -415,7 +407,6 @@ func JWKSCacheKey(providerID, jwksURL string) string {
 // Verify is set, the JWKS branch is skipped and Verify performs remote
 // verification instead (the `verify` branch).
 //
-// Upstream: vendor/better-auth/packages/core/src/oauth2/oauth-provider.ts:16-63
 // (OAuthIdTokenConfig).
 //
 // Runtime: wired:auth/oauth2 (VerifyIDTokenWithConfig is the verification
@@ -448,7 +439,6 @@ type OAuthIDTokenConfig struct {
 // UsesCustomVerifier reports whether ID-token verification delegates to the
 // custom Verify hook instead of the JWKS branch. Pure helper.
 //
-// Upstream: vendor/better-auth/packages/core/src/oauth2/verify-id-token.ts:80-82
 // (`"verify" in config` branch).
 //
 // Runtime: wired:auth/oauth2 (custom-verifier branch in
@@ -472,7 +462,7 @@ type IDTokenConfigProvider interface {
 // that minted it. TakeNonce must delete on read (single use).
 //
 // Upstream: the idTokenNonce round-trip through OAuth state, declared in
-// vendor/better-auth/packages/core/src/oauth2/oauth-provider.ts:160-167
+// core/src/oauth2/oauth-provider.ts
 // (createAuthorizationURL idTokenNonce) and consumed as expectedIdTokenNonce
 // in oauth-provider.ts:193-199.
 //
@@ -486,7 +476,6 @@ type NonceStore interface {
 
 // IDTokenNonceOptions configures OIDC nonce enforcement for a provider.
 //
-// Upstream: vendor/better-auth/packages/core/src/oauth2/oauth-provider.ts:257-260
 // (requiresIdTokenNonce).
 //
 // Runtime: wired:auth/api/routes (nonceOptionsFor in social.go resolves the
@@ -508,7 +497,6 @@ type IDTokenNonceOptions struct {
 // require shared OAuth redirect routes to bind ID-token verification to an
 // authorization-request nonce.
 //
-// Upstream: vendor/better-auth/packages/core/src/oauth2/oauth-provider.ts:257-260
 // (requiresIdTokenNonce).
 //
 // Runtime: wired:auth/api/routes (probed by nonceOptionsFor in social.go).
@@ -549,7 +537,6 @@ func IsValidNonceString(nonce string) bool {
 // value: strict equality, or additionally the hex SHA-256 of the expected
 // nonce for the exact-or-sha256 comparison (Apple). Pure helper; no I/O.
 //
-// Upstream: vendor/better-auth/packages/core/src/oauth2/verify-id-token.ts:15-30
 // (nonceMatches).
 //
 // Runtime: wired:auth/oauth2 (same contract as NonceMatches; this copy keeps types dependency-free).
@@ -570,7 +557,6 @@ func MatchIDTokenNonce(claimNonce, expected string, comparison IDTokenNonceCompa
 // TokenEndpointAuthPrivateKeyJWT authenticates with an RFC 7523 client
 // assertion JWT instead of a client secret.
 //
-// Upstream: vendor/better-auth/packages/core/src/oauth2/token-endpoint-auth.ts:20-22
 // (TokenEndpointAuth private_key_jwt branch).
 //
 // Runtime: wired:auth/oauth2 (private_key_jwt branch in ApplyTokenEndpointAuthEx).
@@ -580,7 +566,6 @@ const TokenEndpointAuthPrivateKeyJWT TokenEndpointAuthMethod = "private_key_jwt"
 // provider hook. There is no Go hook surface for it yet; the constant
 // reserves the wire value.
 //
-// Upstream: vendor/better-auth/packages/core/src/oauth2/token-endpoint-auth.ts:24-28
 // (TokenEndpointAuth custom branch).
 //
 // Runtime: wired:auth/oauth2 (mapped in baseProvider.TokenEndpointAuthMethod;
@@ -591,7 +576,6 @@ const TokenEndpointAuthCustom TokenEndpointAuthMethod = "custom"
 // TokenEndpointSecretAuthentication selects the legacy secret transport:
 // HTTP Basic auth or POST body credentials.
 //
-// Upstream: vendor/better-auth/packages/core/src/oauth2/token-endpoint-auth.ts:33
 // (TokenEndpointSecretAuthentication).
 //
 // Runtime: wired:auth/oauth2 (TokenAuthConfig.SecretAuthentication selects
@@ -608,7 +592,6 @@ const (
 // ClientAssertionType is the fixed assertion-type URN sent alongside every
 // private_key_jwt client assertion.
 //
-// Upstream: vendor/better-auth/packages/core/src/oauth2/client-assertion.ts:73-74
 // (CLIENT_ASSERTION_TYPE).
 //
 // Runtime: wired:auth/oauth2 (client_assertion_type body parameter in
@@ -617,7 +600,6 @@ const ClientAssertionType = "urn:ietf:params:oauth:client-assertion-type:jwt-bea
 
 // ClientAssertionContext carries the inputs a client-assertion signer needs.
 //
-// Upstream: vendor/better-auth/packages/core/src/oauth2/client-assertion.ts:81-85
 // (ClientAssertionContext).
 //
 // Runtime: wired:auth/oauth2 (built by ApplyTokenEndpointAuthEx and passed
@@ -632,7 +614,6 @@ type ClientAssertionContext struct {
 // context (iss=sub=clientID, aud=tokenEndpoint). The assertion type is
 // always ClientAssertionType.
 //
-// Upstream: vendor/better-auth/packages/core/src/oauth2/client-assertion.ts:87-89
 // (ClientAssertionGetter) with signing in client-assertion.ts:116-164.
 //
 // Runtime: wired:auth/oauth2 (fed into TokenAuthConfig.GetClientAssertion by
@@ -676,7 +657,6 @@ type DiscoveryProvider interface {
 // authorization-server issuer so callbacks can validate the `iss` query
 // parameter (RFC 9207 mix-up defense).
 //
-// Upstream: vendor/better-auth/packages/core/src/oauth2/oauth-provider.ts:251-253
 // (OAuthProvider issuer).
 //
 // Runtime: wired:auth/api/routes (ValidateCallbackIssuer enforces it at the
@@ -689,7 +669,6 @@ type IssuerProvider interface {
 // their OAuth callback handler under a custom path (must start with "/").
 // Providers using the shared `/callback/<id>` route omit this.
 //
-// Upstream: vendor/better-auth/packages/core/src/oauth2/oauth-provider.ts:143-153
 // (OAuthProvider callbackPath).
 //
 // Runtime: wired:auth/api/routes (OAuthCallbackPath in social.go probes it;
@@ -702,7 +681,6 @@ type CallbackPathProvider interface {
 // accept callbacks arriving without a `state` parameter because they
 // initiate OAuth without RP-side flow kickoff.
 //
-// Upstream: vendor/better-auth/packages/core/src/oauth2/oauth-provider.ts:272-280
 // (OAuthProvider allowIdpInitiated).
 //
 // Runtime: wired:auth/api/routes (allowsIdPInitiated/bounceIdPInitiated in
@@ -714,9 +692,8 @@ type AllowIDPInitiatedProvider interface {
 // IDTokenSignInDisabler is optionally implemented by providers that block
 // ID-token sign-in (upstream disableIdTokenSignIn, default false).
 //
-// Upstream: vendor/better-auth/packages/core/src/oauth2/oauth-provider.ts:332-337
 // (ProviderOptions disableIdTokenSignIn) gated by supportsIdTokenSignIn in
-// vendor/better-auth/packages/core/src/oauth2/verify-id-token.ts:40-46.
+// core/src/oauth2/verify-id-token.ts.
 //
 // Runtime: wired:social-providers (SupportsIDTokenSignIn gates the
 // client-submitted id_token path at POST /sign-in/social in social.go).
@@ -730,7 +707,6 @@ type IDTokenSignInDisabler interface {
 // set, redirecting with signup_disabled (callback) or 401 OAUTH_LINK_ERROR
 // (id_token branch).
 //
-// Upstream: vendor/better-auth/packages/core/src/oauth2/oauth-provider.ts:265-269
 // (OAuthProvider disableSignUp) and ProviderOptions disableSignUp
 // (oauth-provider.ts:379-382), consumed as
 // `(provider.disableImplicitSignUp && !requestSignUp) ||
@@ -749,7 +725,6 @@ type DisableSignUpProvider interface {
 // flow carried requestSignUp=true (persisted in OAuth state from the
 // sign-in body).
 //
-// Upstream: vendor/better-auth/packages/core/src/oauth2/oauth-provider.ts:261-265
 // (OAuthProvider disableImplicitSignUp) and ProviderOptions
 // disableImplicitSignUp (oauth-provider.ts:374-378).
 //
@@ -765,7 +740,6 @@ type DisableImplicitSignUpProvider interface {
 // name/image/email/emailVerified from the provider profile; otherwise the
 // stored row stands.
 //
-// Upstream: vendor/better-auth/packages/core/src/oauth2/oauth-provider.ts:400-405
 // (ProviderOptions overrideUserInfoOnSignIn), consumed as overrideUserInfo
 // in link-account.ts:323-371.
 //
@@ -783,7 +757,6 @@ type OverrideUserInfoProvider interface {
 // EMAIL_NOT_VERIFIED. The gate reads the local user's verification state,
 // not the provider claim on each request.
 //
-// Upstream: vendor/better-auth/packages/core/src/oauth2/oauth-provider.ts:406-428
 // (ProviderOptions requireEmailVerification), enforced in
 // link-account.ts:460-492.
 //
@@ -816,7 +789,6 @@ type RequestAwareIDTokenVerifier interface {
 // OpenID Connect providers, the `sub` claim) and never derive identity from
 // the mapped local user.
 //
-// Upstream: vendor/better-auth/packages/core/src/oauth2/oauth-provider.ts:177-184
 // (OAuthProvider accountSubject) with context in oauth-provider.ts:97-100.
 //
 // Runtime: wired:auth/api/routes (accepted on OAuthProviderConfig, stored
@@ -837,7 +809,6 @@ type AccountSubjectProvider interface {
 
 // GetUserInfoHookFunc overrides user-info resolution for a provider.
 //
-// Upstream: vendor/better-auth/packages/core/src/oauth2/oauth-provider.ts:357-362
 // (ProviderOptions getUserInfo).
 //
 // Runtime: wired:social-providers (bag GetUserInfo hook overrides resolution
@@ -850,7 +821,6 @@ type GetUserInfoHookFunc func(tokens *OAuthTokens) (*OAuthUserInfo, error)
 // verification); later entries are additional accepted audiences. Pure
 // helper; no I/O.
 //
-// Upstream: vendor/better-auth/packages/core/src/oauth2/utils.ts:93-96
 // (getPrimaryClientId).
 //
 // Intentional exclusion (W10-01): single-string client IDs (upstream index
@@ -868,7 +838,6 @@ func PrimaryClientID(clientIDs ...string) string {
 
 // GoogleIssuers lists the accepted Google ID-token issuers.
 //
-// Upstream: vendor/better-auth/packages/core/src/social-providers/google.ts:112
 // and google.ts:224.
 //
 // Runtime: wired:social-providers (accepted issuers in the Google ID-token
@@ -877,7 +846,6 @@ var GoogleIssuers = []string{"https://accounts.google.com", "accounts.google.com
 
 // GoogleJWKSURL serves Google's public signing keys.
 //
-// Upstream: vendor/better-auth/packages/core/src/social-providers/google.ts:289.
 //
 // Runtime: wired:social-providers (JWKS URL in the Google ID-token config
 // built by bags.go).
@@ -885,7 +853,6 @@ const GoogleJWKSURL = "https://www.googleapis.com/oauth2/v3/certs"
 
 // GoogleDefaultScopes are requested unless disabled.
 //
-// Upstream: vendor/better-auth/packages/core/src/social-providers/google.ts:172-174.
 //
 // Runtime: wired:social-providers (default scopes in GoogleWithProviderOptions
 // via resolveScopes in bags.go).
@@ -896,26 +863,22 @@ var GoogleDefaultScopes = []string{"email", "profile", "openid"}
 // knobs (ClientID, ClientSecret, Scope, DisableDefaultScope, RedirectURI,
 // AuthorizationEndpoint, Prompt, MapProfileToUser, ...).
 //
-// Upstream: vendor/better-auth/packages/core/src/social-providers/google.ts:41-71
-// (GoogleOptions).
-//
 // Runtime: wired:social-providers (GoogleWithProviderOptions in bags.go
 // consumes the full bag: credentials, scopes, AccessType, Display, Hd,
 // IncludeGrantedScopes, IDToken, Nonce, and every OAuthProviderConfig hook).
 type GoogleProviderOptions struct {
 	OAuthProviderConfig
 	// AccessType is the authorization access type ("offline" or "online").
-	// Upstream: google.ts:46.
 	AccessType string
 	// Display is the authorization display mode ("page", "popup", "touch",
-	// or "wap"). Upstream: google.ts:50.
+	// or "wap").
 	Display string
 	// Hd is the hosted-domain (Google Workspace) restriction. It is sent
 	// as the `hd` authorization hint and enforced against the verified
-	// `hd` claim; "*" requires any Workspace domain. Upstream: google.ts:59.
+	// `hd` claim; "*" requires any Workspace domain.
 	Hd string
 	// IncludeGrantedScopes sends include_granted_scopes=true for
-	// incremental auth. Nil (default) means true. Upstream: google.ts:70.
+	// incremental auth. Nil (default) means true.
 	IncludeGrantedScopes *bool
 	// IDToken declares Google's JWKS verification config (upstream
 	// google.ts:221-235).
@@ -927,7 +890,6 @@ type GoogleProviderOptions struct {
 // EffectiveIncludeGrantedScopes reports whether incremental auth scopes are
 // requested. Nil defaults to true (upstream default). Pure helper.
 //
-// Upstream: vendor/better-auth/packages/core/src/social-providers/google.ts:191-195.
 //
 // Runtime: wired:social-providers (include_granted_scopes parameter in
 // GoogleWithProviderOptions).
@@ -942,7 +904,6 @@ func (o GoogleProviderOptions) EffectiveIncludeGrantedScopes() bool {
 // satisfies the configured hosted-domain restriction. "*" accepts any
 // Workspace hosted domain. Pure helper; no I/O.
 //
-// Upstream: vendor/better-auth/packages/core/src/social-providers/google.ts:137-147
 // (isGoogleHostedDomainAllowed).
 //
 // Runtime: wired:social-providers (hd claim enforcement in
@@ -963,7 +924,6 @@ func IsGoogleHostedDomainAllowed(configuredHostedDomain string, tokenHostedDomai
 
 // GithubDefaultScopes are requested unless disabled.
 //
-// Upstream: vendor/better-auth/packages/core/src/social-providers/github.ts:75-77.
 //
 // Runtime: wired:social-providers (default scopes in GitHubWithProviderOptions
 // via resolveScopes in bags.go).
@@ -973,9 +933,6 @@ var GithubDefaultScopes = []string{"read:user", "user:email"}
 // required; every other knob lives in the embedded OAuthProviderConfig.
 // GitHub has no ID-token surface upstream.
 //
-// Upstream: vendor/better-auth/packages/core/src/social-providers/github.ts:58-60
-// (GithubOptions).
-//
 // Runtime: wired:social-providers (GitHubWithProviderOptions in bags.go
 // consumes credentials, scopes, and every OAuthProviderConfig hook).
 type GithubProviderOptions struct {
@@ -984,7 +941,6 @@ type GithubProviderOptions struct {
 
 // AppleIssuer is the fixed Apple ID-token issuer.
 //
-// Upstream: vendor/better-auth/packages/core/src/social-providers/apple.ts:127.
 //
 // Runtime: wired:social-providers (issuer in the Apple ID-token config built
 // by bags.go).
@@ -992,7 +948,6 @@ const AppleIssuer = "https://appleid.apple.com"
 
 // AppleJWKSURL serves Apple's public signing keys.
 //
-// Upstream: vendor/better-auth/packages/core/src/social-providers/apple.ts:193-194.
 //
 // Runtime: wired:social-providers (JWKS URL in the Apple ID-token config
 // built by bags.go).
@@ -1000,7 +955,6 @@ const AppleJWKSURL = "https://appleid.apple.com/auth/keys"
 
 // AppleDefaultScopes are requested unless disabled.
 //
-// Upstream: vendor/better-auth/packages/core/src/social-providers/apple.ts:99.
 //
 // Runtime: wired:social-providers (default scopes in AppleWithProviderOptions
 // via resolveScopes in bags.go).
@@ -1009,9 +963,6 @@ var AppleDefaultScopes = []string{"email", "name"}
 // AppleProviderOptions mirrors upstream AppleOptions with PascalCase field
 // names. It embeds OAuthProviderConfig for the common ProviderOptions knobs.
 //
-// Upstream: vendor/better-auth/packages/core/src/social-providers/apple.ts:74-78
-// (AppleOptions).
-//
 // Runtime: wired:social-providers (AppleWithProviderOptions in bags.go
 // consumes the full bag: credentials, scopes, AppBundleIdentifier, Audience,
 // IDToken with exact-or-sha256 nonce comparison, Nonce, and every
@@ -1019,13 +970,12 @@ var AppleDefaultScopes = []string{"email", "name"}
 type AppleProviderOptions struct {
 	OAuthProviderConfig
 	// AppBundleIdentifier, when set, is the ID-token audience instead of
-	// the client ID (native-app bundle). Upstream: apple.ts:76.
+	// the client ID (native-app bundle).
 	AppBundleIdentifier string
 	// Audience lists additional accepted ID-token audiences.
-	// Upstream: apple.ts:77.
 	Audience []string
 	// IDToken declares Apple's JWKS verification config with
-	// exact-or-sha256 nonce comparison (upstream apple.ts:125-136).
+	// exact-or-sha256 nonce comparison.
 	IDToken OAuthIDTokenConfig
 	// Nonce configures OIDC nonce enforcement for this provider.
 	Nonce IDTokenNonceOptions
@@ -1035,7 +985,6 @@ type AppleProviderOptions struct {
 // Audience first, then the app bundle identifier, then the client ID.
 // Pure helper; no I/O.
 //
-// Upstream: vendor/better-auth/packages/core/src/social-providers/apple.ts:128-133.
 //
 // Runtime: wired:social-providers (audience resolution in
 // AppleWithProviderOptions via EffectiveAudience).
@@ -1047,7 +996,6 @@ func (o AppleProviderOptions) EffectiveAudience(clientID string) []string {
 // precedence as the provider: explicit audience, app bundle identifier,
 // client ID. Pure helper; no I/O.
 //
-// Upstream: vendor/better-auth/packages/core/src/social-providers/apple.ts:128-133.
 //
 // Runtime: wired:social-providers (via EffectiveAudience in
 // AppleWithProviderOptions; no direct external callers).
@@ -1063,7 +1011,6 @@ func ResolveAppleAudience(clientID, appBundleIdentifier string, audience []strin
 
 // DiscordDefaultScopes are requested unless disabled.
 //
-// Upstream: vendor/better-auth/packages/core/src/social-providers/discord.ts:93.
 //
 // Runtime: wired:social-providers (default scopes in DiscordWithProviderOptions
 // via resolveScopes in bags.go).
@@ -1071,7 +1018,6 @@ var DiscordDefaultScopes = []string{"identify", "email"}
 
 // DiscordDefaultPrompt is sent when no prompt is configured.
 //
-// Upstream: vendor/better-auth/packages/core/src/social-providers/discord.ts:104
 // (options.prompt || "none").
 //
 // Runtime: wired:social-providers (via EffectivePrompt in
@@ -1082,26 +1028,21 @@ const DiscordDefaultPrompt = "none"
 // field names. It embeds OAuthProviderConfig for the common ProviderOptions
 // knobs. Discord has no ID-token surface upstream.
 //
-// Upstream: vendor/better-auth/packages/core/src/social-providers/discord.ts:80-84
-// (DiscordOptions).
-//
 // Runtime: wired:social-providers (DiscordWithProviderOptions in bags.go
 // consumes credentials, scopes, Prompt, Permissions, and every
 // OAuthProviderConfig hook).
 type DiscordProviderOptions struct {
 	OAuthProviderConfig
 	// Prompt is the authorization prompt ("none" or "consent").
-	// Upstream: discord.ts:82.
 	Prompt string
 	// Permissions is sent as the `permissions` parameter when the bot
-	// scope is requested. Nil means unset. Upstream: discord.ts:83.
+	// scope is requested. Nil means unset.
 	Permissions *int
 }
 
 // EffectivePrompt reports the authorization prompt, defaulting to "none".
 // Pure helper.
 //
-// Upstream: vendor/better-auth/packages/core/src/social-providers/discord.ts:104.
 //
 // Runtime: wired:social-providers (authorization prompt in
 // DiscordWithProviderOptions).
@@ -1114,7 +1055,6 @@ func (o DiscordProviderOptions) EffectivePrompt() string {
 
 // MicrosoftDefaultTenant is used when no tenant is configured.
 //
-// Upstream: vendor/better-auth/packages/core/src/social-providers/microsoft-entra-id.ts:138
 // (tenantId default) and microsoft-entra-id.ts:164.
 //
 // Runtime: wired:social-providers (via EffectiveTenant in
@@ -1123,7 +1063,6 @@ const MicrosoftDefaultTenant = "common"
 
 // MicrosoftDefaultAuthority is the default Entra ID authority.
 //
-// Upstream: vendor/better-auth/packages/core/src/social-providers/microsoft-entra-id.ts:142
 // (authority default) and microsoft-entra-id.ts:169.
 //
 // Runtime: wired:social-providers (via EffectiveAuthority in
@@ -1132,7 +1071,6 @@ const MicrosoftDefaultAuthority = "https://login.microsoftonline.com"
 
 // MicrosoftDefaultProfilePhotoSize is the default Graph profile photo size.
 //
-// Upstream: vendor/better-auth/packages/core/src/social-providers/microsoft-entra-id.ts:159
 // (profilePhotoSize default) and microsoft-entra-id.ts:287.
 //
 // Runtime: wired:social-providers (via EffectiveProfilePhotoSize in
@@ -1142,14 +1080,12 @@ const MicrosoftDefaultProfilePhotoSize = 48
 // MicrosoftConsumerTenantID is the fixed tenant ID carried as the `tid`
 // claim by every personal (consumer) Microsoft account token.
 //
-// Upstream: vendor/better-auth/packages/core/src/social-providers/microsoft-entra-id.ts:26.
 //
 // Runtime: wired:social-providers (consumer-tenant `tid` check in bags.go).
 const MicrosoftConsumerTenantID = "9188040d-6c67-4c5b-b112-36a304b66dad"
 
 // MicrosoftDefaultScopes are requested unless disabled.
 //
-// Upstream: vendor/better-auth/packages/core/src/social-providers/microsoft-entra-id.ts:201-203.
 //
 // Runtime: wired:social-providers (default scopes in
 // MicrosoftWithProviderOptions via resolveScopes in bags.go).
@@ -1159,9 +1095,6 @@ var MicrosoftDefaultScopes = []string{"openid", "profile", "email", "User.Read",
 // field names. It embeds OAuthProviderConfig for the common ProviderOptions
 // knobs.
 //
-// Upstream: vendor/better-auth/packages/core/src/social-providers/microsoft-entra-id.ts:131-161
-// (MicrosoftOptions).
-//
 // Runtime: wired:social-providers (MicrosoftWithProviderOptions in bags.go
 // consumes the full bag: TenantID, Authority, ProfilePhotoSize,
 // DisableProfilePhoto, ClientAssertion, IDToken, Nonce, and every
@@ -1170,26 +1103,21 @@ type MicrosoftProviderOptions struct {
 	OAuthProviderConfig
 	// TenantID selects the Entra tenant ("common", "organizations",
 	// "consumers", or a tenant GUID). Default "common".
-	// Upstream: microsoft-entra-id.ts:138.
 	TenantID string
 	// Authority is the authentication authority URL (CIAM scenarios use
 	// https://<tenant-id>.ciamlogin.com). Default MicrosoftDefaultAuthority.
-	// Upstream: microsoft-entra-id.ts:142.
 	Authority string
 	// ProfilePhotoSize selects the Graph profile-photo size. Zero selects
-	// MicrosoftDefaultProfilePhotoSize. Upstream: microsoft-entra-id.ts:159.
+	// MicrosoftDefaultProfilePhotoSize.
 	ProfilePhotoSize int
 	// DisableProfilePhoto skips the Graph photo fetch.
-	// Upstream: microsoft-entra-id.ts:161.
 	DisableProfilePhoto bool
 	// ClientAssertion returns an RFC 7523 assertion for token endpoint
 	// authentication (private_key_jwt / workload identity federation).
 	// It cannot be combined with a client secret.
-	// Upstream: microsoft-entra-id.ts:151.
 	ClientAssertion ClientAssertionFunc
 	// IDToken declares Microsoft's JWKS verification config with
-	// tenant-bound issuer/claim checks (upstream
-	// microsoft-entra-id.ts:229-272).
+	// tenant-bound issuer/claim checks.
 	IDToken OAuthIDTokenConfig
 	// Nonce configures OIDC nonce enforcement for this provider.
 	Nonce IDTokenNonceOptions
@@ -1198,7 +1126,6 @@ type MicrosoftProviderOptions struct {
 // EffectiveTenant reports the Entra tenant, defaulting to "common". Pure
 // helper.
 //
-// Upstream: vendor/better-auth/packages/core/src/social-providers/microsoft-entra-id.ts:164.
 //
 // Runtime: wired:social-providers (tenant routing in
 // MicrosoftWithProviderOptions).
@@ -1213,7 +1140,6 @@ func (o MicrosoftProviderOptions) EffectiveTenant() string {
 // trimmed so endpoint URLs and the issuer comparison never produce a double
 // slash. Pure helper.
 //
-// Upstream: vendor/better-auth/packages/core/src/social-providers/microsoft-entra-id.ts:169-172.
 //
 // Runtime: wired:social-providers (authority routing in
 // MicrosoftWithProviderOptions).
@@ -1231,7 +1157,6 @@ func (o MicrosoftProviderOptions) EffectiveAuthority() string {
 // EffectiveProfilePhotoSize reports the Graph photo size, defaulting to 48.
 // Pure helper.
 //
-// Upstream: vendor/better-auth/packages/core/src/social-providers/microsoft-entra-id.ts:287.
 //
 // Runtime: wired:social-providers (Graph photo fetch in
 // MicrosoftWithProviderOptions).
@@ -1248,7 +1173,6 @@ func (o MicrosoftProviderOptions) EffectiveProfilePhotoSize() int {
 // returns "" for them and the tenant-bound issuer otherwise. Pure helper;
 // no I/O.
 //
-// Upstream: vendor/better-auth/packages/core/src/social-providers/microsoft-entra-id.ts:238-243.
 //
 // Runtime: wired:social-providers (tenant-bound issuer check in bags.go).
 func MicrosoftIssuer(authority, tenant string) string {
@@ -1263,7 +1187,6 @@ func MicrosoftIssuer(authority, tenant string) string {
 // MicrosoftJWKSURL returns the JWKS URL for an authority and tenant. Pure
 // helper; no I/O.
 //
-// Upstream: vendor/better-auth/packages/core/src/social-providers/microsoft-entra-id.ts:381
 // (`${authority}/${tenant}/discovery/v2.0/keys`).
 //
 // Runtime: wired:social-providers (JWKS URL in the Microsoft ID-token config

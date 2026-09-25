@@ -67,7 +67,6 @@ type PluginInitPatch struct {
 // runs first (validation/setup), then InitPatches (patches). A non-nil error
 // from either aborts BetterAuth with a wrapped error.
 //
-// Upstream TypeScript name: the `init()` return value.
 type PluginInitPatches interface {
 	// InitPatches returns option/context patches for the resolved context.
 	InitPatches(AuthContext) (PluginInitPatch, error)
@@ -94,8 +93,7 @@ type PluginOnResponseHandler func(response *http.Response, ctx AuthContext) (*Pl
 
 // PluginMiddleware is a plugin-declared path-scoped request middleware.
 //
-// Upstream TypeScript name: BetterAuthPlugin["middlewares"] entry
-// ({ path, middleware } in vendor/better-auth/packages/core/src/types/plugin.ts).
+// ({ path, middleware } in core/src/types/plugin.ts).
 type PluginMiddleware struct {
 	Path    string
 	Handler RequestBeforeHookFunc
@@ -103,8 +101,7 @@ type PluginMiddleware struct {
 
 // PluginRateLimitRule is a plugin-declared path matcher with rate limit settings.
 //
-// Upstream TypeScript name: BetterAuthPlugin["rateLimit"] entry
-// ({ window, max, pathMatcher } in vendor/better-auth/packages/core/src/types/plugin.ts).
+// ({ window, max, pathMatcher } in core/src/types/plugin.ts).
 type PluginRateLimitRule struct {
 	Window      int
 	Max         int
@@ -113,28 +110,24 @@ type PluginRateLimitRule struct {
 
 // PluginOnRequestProvider declares better-auth style plugin onRequest behavior.
 //
-// Upstream TypeScript name: BetterAuthPlugin["onRequest"].
 type PluginOnRequestProvider interface {
 	OnRequest() PluginOnRequestHandler
 }
 
 // PluginOnResponseProvider declares better-auth style plugin onResponse behavior.
 //
-// Upstream TypeScript name: BetterAuthPlugin["onResponse"].
 type PluginOnResponseProvider interface {
 	OnResponse() PluginOnResponseHandler
 }
 
 // PluginMiddlewareProvider declares path-scoped plugin middlewares.
 //
-// Upstream TypeScript name: BetterAuthPlugin["middlewares"].
 type PluginMiddlewareProvider interface {
 	Middlewares() []PluginMiddleware
 }
 
 // PluginRateLimitProvider declares path-scoped plugin rate limit rules.
 //
-// Upstream TypeScript name: BetterAuthPlugin["rateLimit"].
 type PluginRateLimitProvider interface {
 	RateLimitRules() []PluginRateLimitRule
 }
@@ -216,7 +209,7 @@ type TableSchema struct {
 	// last-wins, `in`-presence check for index skipping). Nil means absent
 	// (inherit previous); non-nil (including explicit false) wins. When set,
 	// MergeSchemas syncs DisableMigration to *DisableMigrations for legacy
-	// readers. Upstream TypeScript name: disableMigrations.
+	// readers.
 	DisableMigrations *bool
 	// Order hints migration/creation ordering. Mirrors better-auth's
 	// schema order field.
@@ -280,7 +273,7 @@ type FieldTransform struct {
 //
 // Upstream accepts any Standard Schema object (Zod, Valibot, ArkType — see
 // DBFieldAttributeConfig["validator"] in
-// vendor/better-auth/packages/core/src/db/type.ts); the portable Go
+// core/src/db/type.ts); the portable Go
 // equivalent is a pair of synchronous validation functions for stored
 // (Input) and returned (Output) values. A non-nil error rejects the write.
 //
@@ -326,7 +319,6 @@ type FieldAttribute struct {
 	Validator *FieldValidator
 	// FieldName overrides the physical column name. Mirrors better-auth's
 	// fieldName. Accepted and preserved; route-level decoding is incomplete
-	// (see the PARITY row-key contract note).
 	FieldName string
 	// Sortable marks text fields for varchar-style sorting. Mirrors
 	// better-auth's sortable flag.
@@ -369,7 +361,7 @@ type DBHooks map[string]ModelHooks
 // UpdateMany/DeleteMany/ConsumeOne groups. UpdateMany shares the Update
 // group and DeleteMany/ConsumeOne share the Delete group (mirroring
 // upstream updateManyWithHooks/deleteManyWithHooks/consumeOneWithHooks in
-// vendor/better-auth/packages/better-auth/src/db/with-hooks.ts, as wired by
+// better-auth/src/db/with-hooks.ts, as wired by
 // auth/hooked_adapter.go).
 type ModelHooks struct {
 	Create OperationHooks
@@ -536,7 +528,7 @@ type EndpointRegisterFunc func(api any, basePath string, opts Options)
 //
 // Upstream TypeScript names: BaseModelNames ("user" | "account" | "session" |
 // "verification") plus the "rate-limit" member of ModelNames in
-// vendor/better-auth/packages/core/src/db/type.ts. Custom plugin models
+// core/src/db/type.ts. Custom plugin models
 // remain free-form strings.
 const (
 	// ModelUser is the "user" model key.
@@ -554,7 +546,7 @@ const (
 
 // PluginVersionProvider is an OPTIONAL plugin capability mirroring
 // upstream's `version?: string` field (BetterAuthPlugin in
-// vendor/better-auth/packages/core/src/types/plugin.ts).
+// core/src/types/plugin.ts).
 //
 // Discovered via type assertion alongside the legacy Plugin interface;
 // plugins that do not implement it keep working unchanged.
@@ -565,7 +557,7 @@ type PluginVersionProvider interface {
 
 // PluginOptionsProvider is an OPTIONAL plugin capability mirroring
 // upstream's `options?: Record<string, any>` field (BetterAuthPlugin in
-// vendor/better-auth/packages/core/src/types/plugin.ts).
+// core/src/types/plugin.ts).
 //
 // Discovered via type assertion alongside the legacy Plugin interface;
 // plugins that do not implement it keep working unchanged.
@@ -576,7 +568,7 @@ type PluginOptionsProvider interface {
 
 // PluginInferProvider is an OPTIONAL plugin capability mirroring upstream's
 // `$Infer?: Record<string, any>` field (BetterAuthPlugin in
-// vendor/better-auth/packages/core/src/types/plugin.ts). The Go identifier
+// core/src/types/plugin.ts). The Go identifier
 // drops the `$` prefix, which is not expressible in Go.
 //
 // Type-inference adaptation stays manual: upstream derives client and
@@ -590,7 +582,7 @@ type PluginInferProvider interface {
 
 // PluginMigration mirrors a kysely Migration entry carried by upstream's
 // `migrations?: Record<string, Migration>` plugin field (BetterAuthPlugin in
-// vendor/better-auth/packages/core/src/types/plugin.ts). Only use this when
+// core/src/types/plugin.ts). Only use this when
 // bypassing the schema option with per-table migration control; schema
 // driven tables migrate automatically.
 type PluginMigration struct {
@@ -602,7 +594,7 @@ type PluginMigration struct {
 
 // PluginMigrationsProvider is an OPTIONAL plugin capability mirroring
 // upstream's `migrations?: Record<string, Migration>` field
-// (BetterAuthPlugin in vendor/better-auth/packages/core/src/types/plugin.ts).
+// (BetterAuthPlugin in core/src/types/plugin.ts).
 //
 // Collected by CollectPluginMigrations (later plugins win on name
 // collisions) and executed in sorted order by RunPluginMigrationsUp.
@@ -619,7 +611,7 @@ type PluginMigrationsProvider interface {
 // PluginAdapterOverrideFunc overrides a single database operation for a
 // plugin, mirroring one entry of upstream's
 // `adapter?: { [key: string]: (...args: any[]) => Awaitable<any> }` field
-// (BetterAuthPlugin in vendor/better-auth/packages/core/src/types/plugin.ts).
+// (BetterAuthPlugin in core/src/types/plugin.ts).
 // Upstream operations are async; the Go form is synchronous and reports
 // errors directly.
 type PluginAdapterOverrideFunc func(ctx context.Context, args ...any) (any, error)
@@ -627,12 +619,11 @@ type PluginAdapterOverrideFunc func(ctx context.Context, args ...any) (any, erro
 // PluginAdapterOverrides maps operation names (e.g. "create", "findOne") to
 // plugin-supplied database operation overrides.
 //
-// Upstream TypeScript name: BetterAuthPlugin["adapter"].
 type PluginAdapterOverrides map[string]PluginAdapterOverrideFunc
 
 // PluginAdapterOverridesProvider is an OPTIONAL plugin capability mirroring
 // upstream's `adapter?` field (BetterAuthPlugin in
-// vendor/better-auth/packages/core/src/types/plugin.ts).
+// core/src/types/plugin.ts).
 //
 // Collected by CollectAdapterOverrides (later plugins win per operation)
 // and consulted by HookedAdapter for the hooked write operations,
@@ -647,7 +638,7 @@ type PluginAdapterOverridesProvider interface {
 
 // PluginNamedEndpointsProvider is an OPTIONAL plugin capability mirroring
 // the upstream map form of `endpoints?: { [key: string]: Endpoint }`
-// (BetterAuthPlugin in vendor/better-auth/packages/core/src/types/plugin.ts).
+// (BetterAuthPlugin in core/src/types/plugin.ts).
 //
 // The legacy Endpoints() []Endpoint slice keeps working and remains the
 // registration surface; this map form exists for upstream-faithful
@@ -661,7 +652,7 @@ type PluginNamedEndpointsProvider interface {
 
 // PluginHookContext is the TypeScript-faithful route-hook context,
 // mirroring upstream's HookEndpointContext
-// (vendor/better-auth/packages/core/src/types/plugin.ts): a partial
+// (core/src/types/plugin.ts): a partial
 // endpoint/input context plus the auth context carrying the returned value
 // and response headers.
 //
@@ -694,7 +685,7 @@ type PluginHookContext struct {
 // PluginTSRouteBeforeHook is a TypeScript-faithful route-level before hook,
 // mirroring one entry of upstream's `hooks.before` array
 // ({ matcher, handler: AuthMiddleware } in
-// vendor/better-auth/packages/core/src/types/plugin.ts) over
+// core/src/types/plugin.ts) over
 // PluginHookContext instead of huma.Context.
 //
 // OPTIONAL: the legacy Huma-shaped PluginRouteBeforeHook keeps working;
@@ -712,7 +703,7 @@ type PluginTSRouteBeforeHook struct {
 // PluginTSRouteAfterHook is a TypeScript-faithful route-level after hook,
 // mirroring one entry of upstream's `hooks.after` array
 // ({ matcher, handler: AuthMiddleware } in
-// vendor/better-auth/packages/core/src/types/plugin.ts) over
+// core/src/types/plugin.ts) over
 // PluginHookContext instead of huma.Context.
 //
 // OPTIONAL: the legacy Huma-shaped PluginRouteAfterHook keeps working;
@@ -730,7 +721,6 @@ type PluginTSRouteAfterHook struct {
 // PluginTSRouteHooks groups TypeScript-faithful route-level before/after
 // hooks for a plugin.
 //
-// Upstream TypeScript name: BetterAuthPlugin["hooks"].
 type PluginTSRouteHooks struct {
 	Before []PluginTSRouteBeforeHook
 	After  []PluginTSRouteAfterHook
@@ -739,7 +729,6 @@ type PluginTSRouteHooks struct {
 // PluginTSRouteHooksProvider declares TypeScript-faithful route-level hooks
 // over PluginHookContext.
 //
-// Upstream TypeScript name: BetterAuthPlugin["hooks"]. Discovered via type
 // assertion alongside the legacy RouteHooks() PluginRouteHooks Huma surface,
 // which keeps working unchanged. CollectTSRouteHooks merges providers in
 // plugin declaration order; the routes package runs them around handlers.
@@ -780,7 +769,7 @@ func NewFieldValidator(input, output FieldValidatorFunc) *FieldValidator {
 // converting a value across the storage round-trip (input: before storage,
 // output: after retrieval), mirroring one side of upstream's
 // `transform?: { input?, output? }` (DBFieldAttributeConfig in
-// vendor/better-auth/packages/core/src/db/type.ts). Upstream transforms are
+// core/src/db/type.ts). Upstream transforms are
 // async value-to-value functions; the Go form is synchronous and reports
 // errors, which abort the operation.
 type FieldTransformFunc func(value any) (any, error)
