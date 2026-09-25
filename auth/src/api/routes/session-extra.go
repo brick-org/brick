@@ -2,6 +2,7 @@ package routes
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -96,7 +97,7 @@ func RevokeOtherSessions(api huma.API, basePath string, opts types.Options) {
 			return nil, huma.NewError(types.StatusForCode(types.ErrFailedToGetSession), types.ErrFailedToGetSession)
 		}
 
-		sessionRow, userRow, refreshed, err := loadSessionAndUser(ctx, opts, token)
+		sessionRow, _, _, err := loadSessionAndUser(ctx, opts, token)
 		if err != nil {
 			if errors.Is(err, errSessionExpired) {
 				// Kept 401 (differs from StatusForCode 400): expired-session auth
@@ -108,15 +109,17 @@ func RevokeOtherSessions(api huma.API, basePath string, opts types.Options) {
 		}
 
 		userID := stringField(sessionRow, "user_id", "userId")
-		// Tokens to revoke: secondary references when a secondary backend is
-		// configured (upstream deleteSessions over the cached set), else the
-		// database rows. Listing errors are operational failures (500).
+		// Live-only others (upstream session.ts:853-870): listSessions then
+		// filter expiresAt > now, excluding the current token. Expired rows
+		// survive; no cookies are written on this path.
+		now := time.Now().UTC()
 		var otherTokens []string
 		if opts.SecondaryStorage != nil {
+			nowMs := now.UnixMilli()
 			refs := getSecondarySessionRefs(opts, userID)
 			otherTokens = make([]string, 0, len(refs))
 			for _, ref := range refs {
-				if ref.Token != token {
+				if ref.Token != token && ref.Token != "" && ref.ExpiresAt > nowMs {
 					otherTokens = append(otherTokens, ref.Token)
 				}
 			}
@@ -132,9 +135,14 @@ func RevokeOtherSessions(api huma.API, basePath string, opts types.Options) {
 			}
 			otherTokens = make([]string, 0, len(rows))
 			for _, row := range rows {
-				if target := stringField(row, "token"); target != "" && target != token {
-					otherTokens = append(otherTokens, target)
+				target := stringField(row, "token")
+				if target == "" || target == token {
+					continue
 				}
+				if exp := sessionExpiresAt(row); exp.IsZero() || !exp.After(now) {
+					continue
+				}
+				otherTokens = append(otherTokens, target)
 			}
 		}
 
@@ -148,13 +156,6 @@ func RevokeOtherSessions(api huma.API, basePath string, opts types.Options) {
 		}
 
 		out := &revokeOtherSessionsOutput{}
-		if refreshed {
-			headers := headersWithStoredRequest(ctx, input.CookieRequestHeaders)
-			cookiesOut, cookieErr := issueSessionCookiesWithContext(ctx, opts, headers, token, rowToSession(sessionRow, opts), rowToUser(userRow, opts), opts.Session, time.Now().UTC(), false)
-			if cookieErr == nil {
-				out.SetCookie = cookiesOut
-			}
-		}
 		out.Body.Status = true
 		return out, nil
 	})
@@ -170,8 +171,43 @@ type updateSessionInput struct {
 type updateSessionOutput struct {
 	SetCookie []http.Cookie `header:"Set-Cookie"`
 	Body      struct {
-		Session types.Session `json:"session"`
+		Session flatSession `json:"session"`
 	}
+}
+
+// flatSession serializes a types.Session the way upstream parseSessionOutput
+// does: additional fields merge flat onto the session object instead of
+// nesting under "additionalFields" (precedent: flatUser in sign-up.go).
+// types.Session keeps the nested Go shape; only the update-session JSON
+// boundary flattens, so get-session/list-sessions shapes are untouched.
+type flatSession types.Session
+
+// MarshalJSON implements json.Marshaler.
+func (s flatSession) MarshalJSON() ([]byte, error) {
+	out := map[string]any{
+		"id":        s.ID,
+		"userId":    s.UserID,
+		"token":     s.Token,
+		"expiresAt": s.ExpiresAt,
+		"createdAt": s.CreatedAt,
+		"updatedAt": s.UpdatedAt,
+	}
+	if s.IPAddress != nil {
+		out["ipAddress"] = *s.IPAddress
+	}
+	if s.UserAgent != nil {
+		out["userAgent"] = *s.UserAgent
+	}
+	if s.ActiveOrganizationID != nil {
+		out["activeOrganizationId"] = *s.ActiveOrganizationID
+	}
+	if s.ActiveTeamID != nil {
+		out["activeTeamId"] = *s.ActiveTeamID
+	}
+	for k, v := range s.AdditionalFields {
+		out[k] = v
+	}
+	return json.Marshal(out)
 }
 
 // sessionUpdateFields validates an update-session body against the full
@@ -284,7 +320,7 @@ func UpdateSession(api huma.API, basePath string, opts types.Options) {
 			}
 			out := &updateSessionOutput{}
 			out.SetCookie = cookiesOut
-			out.Body.Session = updated.Session
+			out.Body.Session = flatSession(updated.Session)
 			return out, nil
 		}
 
@@ -322,7 +358,7 @@ func UpdateSession(api huma.API, basePath string, opts types.Options) {
 
 		out := &updateSessionOutput{}
 		out.SetCookie = cookiesOut
-		out.Body.Session = session
+		out.Body.Session = flatSession(session)
 		return out, nil
 	})
 }
@@ -365,6 +401,6 @@ func updateSessionStateless(ctx context.Context, input *updateSessionInput, opts
 
 	out := &updateSessionOutput{}
 	out.SetCookie = cookiesOut
-	out.Body.Session = merged
+	out.Body.Session = flatSession(merged)
 	return out, nil
 }
