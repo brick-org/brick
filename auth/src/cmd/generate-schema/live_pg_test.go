@@ -133,8 +133,8 @@ func liveColumnTypes(t *testing.T, db *sql.DB, table string) map[string]string {
 }
 
 // TestLivePG_FullPlanApplyAndIntrospect applies the fresh-install postgres
-// plan for core + rate-limit + admin/org/oauthprovider/jwt schemas and
-// proves the resulting shape.
+// plan for the v1 core + rate-limit schemas and proves the resulting shape
+// (plugin schemas are v1-excluded per SCOPE.md and asserted nowhere here).
 func TestLivePG_FullPlanApplyAndIntrospect(t *testing.T) {
 	db := requireLivePG(t)
 	ctx := context.Background()
@@ -172,17 +172,18 @@ func TestLivePG_FullPlanApplyAndIntrospect(t *testing.T) {
 		byKey[key] = auth.PhysicalTableName(key, tbl, cfg)
 	}
 
-	// Admin plugin columns land on the core user/session tables.
+	// Core user/session columns (v1 scope: no admin/org plugin columns such
+	// as role/banned/impersonated_by/active_organization_id).
 	userCols := liveColumnTypes(t, db, byKey["user"])
-	for _, col := range []string{"id", "email", "name", "role", "banned", "ban_reason", "ban_expires"} {
+	for _, col := range []string{"id", "email", "name"} {
 		if _, ok := userCols[col]; !ok {
-			t.Fatalf("user table missing plugin/core column %s (have %v)", col, userCols)
+			t.Fatalf("user table missing core column %s (have %v)", col, userCols)
 		}
 	}
 	sessionCols := liveColumnTypes(t, db, byKey["session"])
-	for _, col := range []string{"id", "token", "impersonated_by", "active_organization_id"} {
+	for _, col := range []string{"id", "token"} {
 		if _, ok := sessionCols[col]; !ok {
-			t.Fatalf("session table missing plugin/core column %s (have %v)", col, sessionCols)
+			t.Fatalf("session table missing core column %s (have %v)", col, sessionCols)
 		}
 	}
 
@@ -207,14 +208,6 @@ func TestLivePG_FullPlanApplyAndIntrospect(t *testing.T) {
 		t.Fatalf("last_request must be bigint, got %q", rlCols["last_request"])
 	}
 
-	// JWT + oauthprovider tables exist with their key columns.
-	for key, col := range map[string]string{"jwks": "public_key", "oauthClient": "client_id"} {
-		cols := liveColumnTypes(t, db, byKey[key])
-		if _, ok := cols[col]; !ok {
-			t.Fatalf("%s table missing column %s (have %v)", key, col, cols)
-		}
-	}
-
 	// Primary keys on every table.
 	for _, tbl := range tables {
 		var n int
@@ -229,7 +222,7 @@ func TestLivePG_FullPlanApplyAndIntrospect(t *testing.T) {
 
 	// FK-safe ordering proof: the plan carries FK references and applied in
 	// order without error. Scope the FK count to our tables (the shared DB
-	// may hold others); at least the org/member chain must be enforced.
+	// may hold others); at least the core userId chain must be enforced.
 	ourFKs := 0
 	for _, tbl := range tables {
 		var n int
@@ -240,7 +233,7 @@ func TestLivePG_FullPlanApplyAndIntrospect(t *testing.T) {
 		ourFKs += n
 	}
 	if ourFKs == 0 {
-		t.Fatal("full plan must enforce at least one FK (org/member chain)")
+		t.Fatal("full plan must enforce at least one FK (core userId chain)")
 	}
 
 	// Deferred indexes exist in pg_indexes for our tables.
@@ -256,11 +249,11 @@ func TestLivePG_FullPlanApplyAndIntrospect(t *testing.T) {
 	t.Logf("applied %d tables, %d own FKs, %d indexes", len(tables), ourFKs, indexed)
 }
 
-// TestLivePG_DiffPlanAddsPluginTables applies a core-only fresh plan, then
-// the incremental core->full diff (new tables + ALTER ADD COLUMN units),
+// TestLivePG_DiffPlanAddsExtensionTables applies a core-only fresh plan,
+// then the incremental core->core+rate-limit diff (new tables only),
 // proving safe-startup migrations execute live without destructive
-// statements.
-func TestLivePG_DiffPlanAddsPluginTables(t *testing.T) {
+// statements. (Plugin-table diffs are v1-excluded per SCOPE.md.)
+func TestLivePG_DiffPlanAddsExtensionTables(t *testing.T) {
 	db := requireLivePG(t)
 	ctx := context.Background()
 	full, cfg := livePlanConfig(t, liveDesiredSchema(t), "v10d")
@@ -295,11 +288,11 @@ func TestLivePG_DiffPlanAddsPluginTables(t *testing.T) {
 		}
 	}
 	if len(diff.Tables) == 0 {
-		t.Fatal("diff must create the missing plugin tables")
+		t.Fatal("diff must create the missing extension tables")
 	}
 	applyPlanStatements(t, db, diff.Script())
 
-	// Plugin tables exist after the diff apply.
+	// Extension tables (rate-limit) exist after the diff apply.
 	pluginKeys := 0
 	for key, tbl := range full {
 		if coreKeys[key] {
@@ -317,15 +310,15 @@ func TestLivePG_DiffPlanAddsPluginTables(t *testing.T) {
 		}
 	}
 	if pluginKeys == 0 {
-		t.Fatal("full schema must add plugin tables beyond core")
+		t.Fatal("full schema must add extension tables beyond core")
 	}
-	t.Logf("core tables + %d plugin tables via incremental diff", pluginKeys)
+	t.Logf("core tables + %d extension tables via incremental diff", pluginKeys)
 
-	// Plugin-added columns on existing core tables arrive via ALTER units.
-	userCols := liveColumnTypes(t, db, auth.PhysicalTableName("user", full["user"], cfg))
-	for _, col := range []string{"role", "banned"} {
-		if _, ok := userCols[col]; !ok {
-			t.Fatalf("diff must ALTER the user table with %s (have %v)", col, userCols)
+	// No plugin-column ALTERs in v1 scope: the diff must not reference
+	// admin/org columns.
+	for _, col := range []string{"role", "banned", "impersonated_by", "active_organization_id", "organizations", "members"} {
+		if strings.Contains(strings.ToLower(diff.Script()), col) {
+			t.Fatalf("v1 diff must not reference plugin surface %q", col)
 		}
 	}
 }
