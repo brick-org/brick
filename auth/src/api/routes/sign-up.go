@@ -158,7 +158,9 @@ func SignUpEmail(api huma.API, basePath string, opts types.Options) {
 		}
 
 		email := strings.ToLower(input.Body.Email)
-		shouldReturnGenericDuplicateResponse := opts.EmailAndPassword.RequireEmailVerification
+		// Upstream sign-up.ts:236-238: the generic-duplicate response
+		// applies when requireEmailVerification OR autoSignIn === false.
+		shouldReturnGenericDuplicateResponse := opts.EmailAndPassword.RequireEmailVerification || !autoSignInEnabled(opts)
 		shouldSkipAutoSignIn := !autoSignInEnabled(opts) || shouldReturnGenericDuplicateResponse
 
 		// Additional user fields (upstream parseUserInput "create",

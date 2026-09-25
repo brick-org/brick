@@ -232,9 +232,33 @@
         {
           "case": "should set emailVerified on all sessions",
           "goTest": "TestWiringV1_VerifyEmailFlipsSecondarySessions + TestSecondaryV1 route coverage (secondary fan-out wired in all verify legs)"
+        },
+        {
+          "case": "should sign after verification",
+          "goTest": "TestTriageV1_VerifyEmailAutoSignInMintsSession"
+        },
+        {
+          "case": "should use custom expiresIn",
+          "goTest": "TestTriageV1_VerifyEmailExpiredTokenRejected"
+        },
+        {
+          "case": "should call afterEmailVerification callback when email is verified",
+          "goTest": "TestTriageV1_VerifyEmailAfterHookFires"
+        },
+        {
+          "case": "should call beforeEmailVerification callback when email is verified",
+          "goTest": "TestTriageV1_VerifyEmailBeforeHookFires"
+        },
+        {
+          "case": "should properly encode callbackURL with query parameters when sending verification email",
+          "goTest": "TestTriageV1_SendVerificationCallbackEncoding"
+        },
+        {
+          "case": "should handle email case insensitivity when sending verification email while signed in",
+          "goTest": "TestTriageV1_SendVerificationSignedInCaseInsensitive"
         }
       ],
-      "notes": "Sender API-error propagation, delivery, verified-skip, redirect/encoding covered; cleanup flags and secondary-storage legs open."
+      "notes": "Auto-sign-in, expiresIn, hooks, encoding, case-insensitivity covered; body-consumption JS semantics excluded."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/api/routes/error.test.ts",
@@ -347,9 +371,33 @@
         {
           "case": "should require a session to verify password",
           "goTest": "TestCredsV1_VerifyPasswordStatuses (supplement)"
+        },
+        {
+          "case": "should send a reset password email when enabled",
+          "goTest": "TestTriageV1_ResetEmailCarriesLongToken"
+        },
+        {
+          "case": "should fail on invalid password",
+          "goTest": "TestTriageV1_ResetShortPasswordRejected"
+        },
+        {
+          "case": "should update account's updatedAt when resetting password",
+          "goTest": "TestTriageV1_ResetBumpsAccountUpdatedAt"
+        },
+        {
+          "case": "should expire",
+          "goTest": "TestTriageV1_ResetExpiredTokenRejected"
+        },
+        {
+          "case": "should revoke other sessions when revokeSessionsOnPasswordReset is enabled",
+          "goTest": "TestTriageV1_ResetRevokesSessionsWhenEnabled"
+        },
+        {
+          "case": "should not revoke other sessions by default",
+          "goTest": "TestTriageV1_ResetKeepsSessionsByDefault"
         }
       ],
-      "notes": "Generic messages, redirectTo trust, sender-failure, single-use, callback redirects, verify-password statuses covered; revocation-on-reset and enumeration timing open."
+      "notes": "Reset issuance/validation/expiry/revocation matrices covered; concurrent-reset race same mem-adapter note as delete."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/api/routes/session-api.test.ts",
@@ -630,9 +678,17 @@
         {
           "case": "should read the ip address and user agent from the headers",
           "goTest": "TestIPUA_SignInStoresIPAndUserAgent"
+        },
+        {
+          "case": "should return a response with a set-cookie header",
+          "goTest": "TestTriageV1_SignInSetsSessionCookie"
+        },
+        {
+          "case": "verification email will not be sent if sendOnSignIn is disabled",
+          "goTest": "TestTriageV1_SignInNoResendWhenDisabled"
         }
       ],
-      "notes": "Warn logs, additionalFields, case-insensitivity covered; CSRF/origin/form-data legs excluded."
+      "notes": "Cookie header, no-resend, lowercase storage covered; CSRF/origin/form-data/social-callback legs excluded."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/api/routes/sign-out.test.ts",
@@ -758,9 +814,41 @@
         {
           "case": "should rollback when session creation fails",
           "goTest": "TestOrphanV1_SessionCreateFailureRemovesUser + SecondaryMirror/Cookie variants (compensating delete, no tx needed)"
+        },
+        {
+          "case": "should allow email/password sign-up when validateUserInfo returns void",
+          "goTest": "TestTriageV1_SignUpValidateUserInfoAllows"
+        },
+        {
+          "case": "should not call onExistingUserSignUp when enumeration protection is inactive",
+          "goTest": "TestTriageV1_SignUpExistingHookSkippedWhenInactive"
+        },
+        {
+          "case": "should not call onExistingUserSignUp for new user sign-ups",
+          "goTest": "TestTriageV1_SignUpExistingHookSkippedForNewUser"
+        },
+        {
+          "case": "should return token: null for new sign-up when autoSignIn is disabled",
+          "goTest": "TestTriageV1_SignUpAutoSignInFalseTokenNull"
+        },
+        {
+          "case": "should send verification email when sendOnSignUp is true",
+          "goTest": "TestTriageV1_SignUpSendOnSignUpTrue"
+        },
+        {
+          "case": "should send verification email when sendOnSignUp is not set but requireEmailVerification is true (default)",
+          "goTest": "TestTriageV1_SignUpSendOnSignUpDefault"
+        },
+        {
+          "case": "should return synthetic user for existing email when autoSignIn is disabled without requireEmailVerification",
+          "goTest": "TestGenericV1_AutoSignInFalseDuplicateIsSynthetic (generic-duplicate condition extended to autoSignIn=false)"
+        },
+        {
+          "case": "should call onExistingUserSignUp when autoSignIn is false without requireEmailVerification",
+          "goTest": "TestGenericV1_AutoSignInFalseDuplicateFiresHook"
         }
       ],
-      "notes": "Additional-fields create, synthetic parity, enumeration, URL-encoding covered by creds_v1_signup suite; CSRF/form-data/secondary-storage legs excluded."
+      "notes": "Full triage done: validateUserInfo gates, hook skip legs, autoSignIn-false token-null/synthetic/hook (G1 fixed: generic-duplicate now covers autoSignIn=false), sendOnSignUp true/default; CSRF/form-data/admin-synthetic/sendOnSignUp-false excluded."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/api/routes/update-user.test.ts",
@@ -880,9 +968,25 @@
         {
           "case": "should preserve the replacement session in secondary storage",
           "goTest": "TestSecondaryV1_DeleteAllThenRecreateKeepsOnlyReplacement (helper; ChangePassword wiring open)"
+        },
+        {
+          "case": "should update the user's password",
+          "goTest": "TestTriageV1_ChangePasswordSuccessRotatesCredentials"
+        },
+        {
+          "case": "should update account's updatedAt when changing password",
+          "goTest": "TestTriageV1_ChangePasswordBumpsAccountUpdatedAt"
+        },
+        {
+          "case": "should not delete user if deleteUser is disabled",
+          "goTest": "TestTriageV1_DeleteUserDisabledIs404"
+        },
+        {
+          "case": "should ignore cookie cache for sensitive operations like changePassword",
+          "goTest": "TestTriageV1_ChangePasswordIgnoresCookieCache"
         }
       ],
-      "notes": "Update/change-email/delete-user matrices covered by creds_v1_account/setpassword suites; secondary fan-out wired in UpdateUser post-commit, change-email direct leg, and ChangePassword revocation (fail-loud per D05); secondary-storage multi-write legs open."
+      "notes": "Change-password rotation, delete-disabled, cache-bypass covered; concurrent-delete race not deterministically pinnable on the mem adapter (DBs serialize); secondary legs helper-pinned + wired."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/cookies/cookies.test.ts",
@@ -1244,9 +1348,29 @@
         {
           "case": "should handle Unicode characters",
           "goTest": "TestV1_PasswordUnicode (Cyrillic+CJK supplement)"
+        },
+        {
+          "case": "should verify a hash created by the old @noble/hashes implementation",
+          "goTest": "TestPasswordVerifiesBetterAuthScryptVector (byte-identical params; same code path)"
+        },
+        {
+          "case": "should reject wrong password against old hash",
+          "goTest": "TestV1_PasswordRejectsWrongAgainstStoredHash (same passwords)"
+        },
+        {
+          "case": "should verify old hash with Unicode password",
+          "goTest": "TestV1_PasswordUnicode (same string)"
+        },
+        {
+          "case": "should verify old hash with empty password",
+          "goTest": "TestV1_PasswordEmptyAndVeryLong"
+        },
+        {
+          "case": "should verify old hash with very long password",
+          "goTest": "TestV1_PasswordEmptyAndVeryLong"
         }
       ],
-      "notes": "Scrypt format/vectors/NFKC/long/case/Unicode covered; @noble/hashes backward-compat legs open (different code path)."
+      "notes": "All 14 covered: noble back-compat legs share the byte-identical scrypt path (N=16384/r=16/p=1/dkLen=64, hex-salt-UTF8, NFKC, salt:key)."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/crypto/secret-rotation.test.ts",

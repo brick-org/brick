@@ -496,16 +496,16 @@ files are v1-excluded and removed from this table (previously 73 files).
 | ----------------------------------------------------------------- | ----: | -------------- | ---------- | ------------: | -------------------------------------------------------------- |
 | `ba/api/routes/account.test.ts`                                   |    53 | partial        | AUTH-C7-02 |             2 | `account.go`, `account_extra.go` (+1)                          |
 | `ba/api/routes/cookie-cache-fallback.test.ts`                     |    11 | partial        | AUTH-C7-01 |             2 | `session.go`, `session_cache.go` (+1)                          |
-| `ba/api/routes/email-verification.test.ts`                        |    29 | partial        | AUTH-C7-02 |             9 | `routes/email_verification.go`, `crypto/email_verification.go` |
+| `ba/api/routes/email-verification.test.ts`                        |    29 | partial        | AUTH-C7-02 |             15 | `routes/email_verification.go`, `crypto/email_verification.go` |
 | `ba/api/routes/error.test.ts`                                     |     3 | partial        | AUTH-C7-04 |             2 | `error.go`                                                     |
-| `ba/api/routes/password.test.ts`                                  |    21 | partial        | AUTH-C7-02 |             13 | `password.go`, `password_extra.go`                             |
+| `ba/api/routes/password.test.ts`                                  |    21 | partial        | AUTH-C7-02 |             19 | `password.go`, `password_extra.go`                             |
 | `ba/api/routes/session-api.test.ts`                               |    85 | partial        | AUTH-C7-01 |            30 | `session.go`, `session_extra.go` (+1)                          |
-| `ba/api/routes/sign-in.test.ts`                                   |    30 | partial        | AUTH-C7-02 |             4 | `sign_in.go`                                                   |
+| `ba/api/routes/sign-in.test.ts`                                   |    30 | partial        | AUTH-C7-02 |             6 | `sign_in.go`                                                   |
 | `ba/api/routes/sign-out.test.ts`                                  |    10 | partial        | AUTH-C7-01 |             2 | `sign_out.go`                                                  |
-| `ba/api/routes/sign-up.test.ts`                                   |    40 | partial        | AUTH-C7-02 |            10 | `sign_up.go`                                                   |
-| `ba/api/routes/update-user.test.ts`                               |    35 | partial        | AUTH-C7-02 |             18 | `account.go`                                                   |
+| `ba/api/routes/sign-up.test.ts`                                   |    40 | partial        | AUTH-C7-02 |            18 | `sign_up.go`                                                   |
+| `ba/api/routes/update-user.test.ts`                               |    35 | partial        | AUTH-C7-02 |             22 | `account.go`                                                   |
 | `ba/cookies/cookies.test.ts`                                      |   118 | partial        | AUTH-C7-01 |            42 | `cookies.go`, `attributes.go` (+1)                             |
-| `ba/crypto/password.test.ts`                                      |    14 | partial        | AUTH-C7-02 |             8 | `password.go`                                                  |
+| `ba/crypto/password.test.ts`                                      |    14 | partial        | AUTH-C7-02 |             13 | `password.go`                                                  |
 | `ba/crypto/secret-rotation.test.ts`                               |    46 | partial        | AUTH-F6-03 |            14 | `symmetric.go`, `token.go` (+1)                                |
 
 Per-case names, verified `covered` mappings, and `notApplicableReason` values live in `parity_ledger.json`. Summary:
