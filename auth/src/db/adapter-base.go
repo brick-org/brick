@@ -30,6 +30,7 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -604,4 +605,110 @@ func isIdentifierPart(s string) bool {
 		return false
 	}
 	return true
+}
+
+// DuplicateKeyError is the typed constraint-violation error for unique /
+// primary-key conflicts, porting the duplicate detection the upstream
+// reserveVerificationValue needs without matching adapter-specific errors
+// at the call site (internal-adapter.ts re-reads the row instead).
+//
+// Adapters map their driver errors to this type at the adapter layer
+// (see MapDuplicateKeyError; the bun adapter maps Create failures), so
+// route code can branch on IsDuplicateKeyError instead of string-matching
+// wrapped driver errors. It unwraps to the original driver error.
+type DuplicateKeyError struct {
+	// Model is the logical model the conflicting write targeted.
+	Model string
+	// Cause is the original driver error.
+	Cause error
+}
+
+func (e *DuplicateKeyError) Error() string {
+	if e == nil {
+		return "db: duplicate key"
+	}
+	if e.Cause == nil {
+		return fmt.Sprintf("db: duplicate key on %q", e.Model)
+	}
+	return fmt.Sprintf("db: duplicate key on %q: %v", e.Model, e.Cause)
+}
+
+// Unwrap returns the original driver error.
+func (e *DuplicateKeyError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause
+}
+
+// IsDuplicateKeyError reports whether err (through %w wrapping) is a typed
+// unique/primary-key conflict. Routes map this to conflict responses.
+func IsDuplicateKeyError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var dup *DuplicateKeyError
+	return errors.As(err, &dup)
+}
+
+// MapDuplicateKeyError maps a driver constraint-violation error to a typed
+// *DuplicateKeyError, passing anything else (including nil) through
+// unchanged. Already-typed errors pass through as-is.
+//
+// Matched codes/phrases (case-insensitive), one per supported dialect:
+//   - PostgreSQL 23505 (unique_violation) / "duplicate key";
+//   - SQLite SQLITE_CONSTRAINT gated on a uniqueness signal ("unique",
+//     "primary key", extended codes 1555/1552; see isDuplicateKeyMessage),
+//     plus "unique/primary key constraint failed" for drivers that omit the
+//     code prefix (SQLITE_CONSTRAINT alone also covers NOT NULL/CHECK/FOREIGN
+//     KEY, so it never matches by itself);
+//   - MySQL 1062 (ER_DUP_ENTRY) / "duplicate entry";
+//   - MSSQL 2601 (unique index) / 2627 (unique constraint/PK).
+//
+// Matching is string-based so adapters stay import-free of driver packages;
+// see isDuplicateKeyMessage for the exact rules.
+func MapDuplicateKeyError(model string, err error) error {
+	if err == nil {
+		return nil
+	}
+	var dup *DuplicateKeyError
+	if errors.As(err, &dup) {
+		return err
+	}
+	if isDuplicateKeyMessage(err.Error()) {
+		return &DuplicateKeyError{Model: model, Cause: err}
+	}
+	return err
+}
+
+// isDuplicateKeyMessage reports whether a driver error string describes a
+// unique/primary-key conflict. Comparison is case-insensitive.
+func isDuplicateKeyMessage(msg string) bool {
+	lowered := strings.ToLower(msg)
+	// Strong per-dialect codes/phrases.
+	for _, needle := range []string{
+		"23505",                         // PostgreSQL unique_violation (SQLSTATE).
+		"duplicate key",                 // PostgreSQL "duplicate key value ..." / MSSQL "cannot insert duplicate key ...".
+		"duplicate entry",               // MySQL ER_DUP_ENTRY text.
+		"1062",                          // MySQL ER_DUP_ENTRY code.
+		"2601",                          // MSSQL unique-index violation.
+		"2627",                          // MSSQL unique-constraint/PK violation.
+		"unique constraint failed",      // SQLite (no code prefix).
+		"primary key constraint failed", // SQLite PK (no code prefix).
+	} {
+		if strings.Contains(lowered, needle) {
+			return true
+		}
+	}
+	// SQLite SQLITE_CONSTRAINT alone is ambiguous (also NOT NULL/CHECK/
+	// FOREIGN KEY), so it only counts with a uniqueness signal: the code
+	// names or the extended codes 1555 (UNIQUE) / 1552 (PRIMARYKEY).
+	if strings.Contains(lowered, "sqlite_constraint") || strings.Contains(lowered, "constraint failed") {
+		for _, signal := range []string{"unique", "primary key", "1555", "1552"} {
+			if strings.Contains(lowered, signal) {
+				return true
+			}
+		}
+	}
+	return false
 }

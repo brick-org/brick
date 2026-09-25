@@ -908,7 +908,10 @@ func (a *Adapter) Create(ctx context.Context, model string, data map[string]any,
 	if a.supportsReturning() {
 		persisted, err = a.createReturning(ctx, table, encoded)
 		if err != nil {
-			return nil, fmt.Errorf("bun Create %s: %w", model, err)
+			// Map constraint violations to the typed DuplicateKey error at
+			// the adapter layer (routes branch on IsDuplicateKeyError);
+			// anything else passes through unchanged.
+			return nil, fmt.Errorf("bun Create %s: %w", model, authdb.MapDuplicateKeyError(model, err))
 		}
 		if len(persisted) == 0 {
 			return nil, nil
@@ -916,7 +919,7 @@ func (a *Adapter) Create(ctx context.Context, model string, data map[string]any,
 	} else {
 		persisted, err = a.createFallback(ctx, model, table, encoded)
 		if err != nil {
-			return nil, fmt.Errorf("bun Create %s: %w", model, err)
+			return nil, fmt.Errorf("bun Create %s: %w", model, authdb.MapDuplicateKeyError(model, err))
 		}
 		if persisted == nil {
 			return nil, nil
