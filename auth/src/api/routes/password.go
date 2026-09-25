@@ -54,7 +54,13 @@ func RequestPasswordReset(api huma.API, basePath string, opts types.Options) {
 		genericOK.Body.Message = "If this email exists in our system, check your email for the reset link"
 
 		if opts.EmailAndPassword.SendResetPassword == nil && opts.EmailAndPassword.SendResetPasswordRequest == nil {
-			return nil, huma.Error400BadRequest("password reset is not enabled")
+			// Upstream password.ts:90-98 throws BAD_REQUEST with code
+			// RESET_PASSWORD_DISABLED and message "Reset password isn't
+			// enabled". Global config flag only: checked before any email
+			// lookup so existing and unknown emails answer identically
+			// (no per-email oracle).
+			Logf(opts, "error", "Reset password isn't enabled. Please pass an emailAndPassword.sendResetPassword function in your auth config!")
+			return nil, huma.NewError(http.StatusBadRequest, "RESET_PASSWORD_DISABLED: Reset password isn't enabled")
 		}
 
 		redirectTo := ""
@@ -289,11 +295,11 @@ func ResetPassword(api huma.API, basePath string, opts types.Options) {
 				{Field: "email", Value: legacyEmail},
 			}, nil)
 		}
-		// Upstream USER_NOT_FOUND resolves to 404 by majority (e.g. NOT_FOUND
-		// in admin/routes.ts:161); the reset-password route itself throws
-		// BAD_REQUEST (password.ts:304) but the canonical status wins here.
+		// Upstream reset-password throws BAD_REQUEST for a missing user
+		// (password.ts:304 BASE_ERROR_CODES.USER_NOT_FOUND); the route-level
+		// status wins over the canonical 404 majority.
 		if findErr != nil || userRow == nil {
-			return nil, huma.NewError(types.StatusForCode(types.ErrUserNotFound), types.ErrUserNotFound)
+			return nil, huma.NewError(http.StatusBadRequest, types.ErrUserNotFound)
 		}
 		userID = stringField(userRow, "id")
 
@@ -358,6 +364,7 @@ func ResetPassword(api huma.API, basePath string, opts types.Options) {
 type changePasswordInput struct {
 	Authorization string `header:"Authorization"`
 	Cookie        string `header:"Cookie"`
+	CookieRequestHeaders
 	Body          struct {
 		CurrentPassword string `json:"currentPassword" required:"true"`
 		NewPassword     string `json:"newPassword" required:"true"`
@@ -369,6 +376,7 @@ type changePasswordInput struct {
 }
 
 type changePasswordOutput struct {
+	SetCookie []http.Cookie `header:"Set-Cookie"`
 	Body struct {
 		Status bool      `json:"status"`
 		Token  *string   `json:"token,omitempty"`
@@ -480,6 +488,14 @@ func ChangePassword(api huma.API, basePath string, opts types.Options) {
 			user := rowToUser(userRow, opts)
 			if serr := writeSecondarySession(opts, session, user); serr != nil {
 				return nil, huma.NewError(types.StatusForCode(types.ErrFailedToCreateSession), types.ErrFailedToCreateSession)
+			}
+			// Upstream setSessionCookie(newSession) (update-user.ts:300-303):
+			// cookie-only clients need the replacement session cookie, not
+			// just the in-body token. Mirrors the newSessionCookies pattern
+			// used by UpdateUser/SignUp/SignIn (best-effort: a mint failure
+			// still returns the in-body token).
+			if cookiesOut, cookieErr := newSessionCookies(opts, input.CookieRequestHeaders, newToken, session, user, opts.Session, now); cookieErr == nil {
+				out.SetCookie = cookiesOut
 			}
 			out.Body.Token = &newToken
 			flat := flatUser(user)
