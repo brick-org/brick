@@ -495,12 +495,15 @@ func ChangePassword(api huma.API, basePath string, opts types.Options) {
 			}
 			// Upstream setSessionCookie(newSession) (update-user.ts:300-303):
 			// cookie-only clients need the replacement session cookie, not
-			// just the in-body token. Mirrors the newSessionCookies pattern
-			// used by UpdateUser/SignUp/SignIn (best-effort: a mint failure
-			// still returns the in-body token).
-			if cookiesOut, cookieErr := newSessionCookies(opts, input.CookieRequestHeaders, newToken, session, user, opts.Session, now); cookieErr == nil {
-				out.SetCookie = cookiesOut
+			// just the in-body token. A mint failure fails the route 500
+			// (FAILED_TO_CREATE_SESSION, canonical 500); the already-minted
+			// session row is kept (upstream create-then-cookie order, no
+			// rollback).
+			cookiesOut, cookieErr := newSessionCookies(opts, input.CookieRequestHeaders, newToken, session, user, opts.Session, now)
+			if cookieErr != nil {
+				return nil, huma.NewError(types.StatusForCode(types.ErrFailedToCreateSession), types.ErrFailedToCreateSession)
 			}
+			out.SetCookie = cookiesOut
 			out.Body.Token = &newToken
 			flat := flatUser(user)
 			out.Body.User = &flat
