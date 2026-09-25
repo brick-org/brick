@@ -33,6 +33,16 @@ func testSchema() auth.PluginSchema {
 
 func testConfig() auth.AdapterConfig { return auth.AdapterConfig{} }
 
+func TestJWTPluginSchemaIsRegisteredForMigrationGeneration(t *testing.T) {
+	schema, err := auth.PluginSchemasForIDs([]string{"jwt"})
+	if err != nil {
+		t.Fatalf("PluginSchemasForIDs(jwt) error = %v", err)
+	}
+	if _, ok := schema["jwks"]; !ok {
+		t.Fatalf("registered JWT schema is missing jwks table: %#v", schema)
+	}
+}
+
 func TestParseDialect(t *testing.T) {
 	for in, want := range map[string]Dialect{
 		"sqlite": DialectSQLite, "postgres": DialectPostgres,
