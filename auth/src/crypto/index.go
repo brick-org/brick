@@ -82,7 +82,7 @@ type SecretConfig struct {
 // parseInt(slice, 10), which accepts a numeric prefix (parseInt("1abc",10)
 // === 1, so "$ba$1abc$..." parses as version 1); Go strconv.Atoi rejects the
 // same input, so "$ba$1abc$..." fails closed here. Pinned by
-// TestF6ParseSecretsEnvStrictVersion; accepting prefixes would only widen
+// TestInitParseSecretsEnvStrictVersion; accepting prefixes would only widen
 // acceptance, never fix a ported leg.
 func ParseEnvelope(data string) (version int, ciphertext string, ok bool) {
 	if !strings.HasPrefix(data, EnvelopePrefix) {

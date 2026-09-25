@@ -265,7 +265,7 @@ func defaultAppName(appName string) string {
 //	if (!options.database):
 //	  account.storeAccountCookie defaults to true defu-style.
 //
-// Go zero-value deviation (pinned by TestF6DefuScalarZeroValueDeviation):
+// Go zero-value deviation (pinned by TestInitDefuScalarZeroValueDeviation):
 // plain bool falsy values cannot distinguish "unset" from explicit false,
 // so a false Enabled/StoreAccountCookie is treated as unset and filled.
 // Presence-tracked kinds (non-empty Strategy, non-zero MaxAge, configured

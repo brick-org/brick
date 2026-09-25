@@ -22,7 +22,7 @@ func g10OriginOptions(baseURL string) types.Options {
 
 // Non-login routes keep the permissive cookie-less fallback: a bare
 // untrusted Origin without cookies must NOT 403 on sign-out.
-func TestG10_SignOut_CookieLessBareOriginPasses(t *testing.T) {
+func TestRefreshCacheConstruction_SignOut_CookieLessBareOriginPasses(t *testing.T) {
 	opts := g10OriginOptions("https://app.example")
 	api := Router(humatest.NewAdapter(), "/api/auth", opts)
 	resp := humatest.Wrap(t, api).Post("/api/auth/sign-out",
@@ -34,7 +34,7 @@ func TestG10_SignOut_CookieLessBareOriginPasses(t *testing.T) {
 }
 
 // Same permissive fallback on another non-login mutating route.
-func TestG10_OtherRoute_CookieLessBareOriginPasses(t *testing.T) {
+func TestRefreshCacheConstruction_OtherRoute_CookieLessBareOriginPasses(t *testing.T) {
 	opts := g10OriginOptions("https://app.example")
 	api := Router(humatest.NewAdapter(), "/api/auth", opts)
 	resp := humatest.Wrap(t, api).Post("/api/auth/revoke-session",
@@ -46,7 +46,7 @@ func TestG10_OtherRoute_CookieLessBareOriginPasses(t *testing.T) {
 }
 
 // Non-login routes must not block cookie-less cross-site navigations.
-func TestG10_SignOut_CrossSiteNavigatePasses(t *testing.T) {
+func TestRefreshCacheConstruction_SignOut_CrossSiteNavigatePasses(t *testing.T) {
 	opts := g10OriginOptions("https://app.example")
 	api := Router(humatest.NewAdapter(), "/api/auth", opts)
 	resp := humatest.Wrap(t, api).Post("/api/auth/sign-out",
@@ -59,7 +59,7 @@ func TestG10_SignOut_CrossSiteNavigatePasses(t *testing.T) {
 }
 
 // Login legs keep the force gate: cross-site navigations 403.
-func TestG10_SignIn_CrossSiteNavigateBlocked(t *testing.T) {
+func TestRefreshCacheConstruction_SignIn_CrossSiteNavigateBlocked(t *testing.T) {
 	opts := g10OriginOptions("https://app.example")
 	api := Router(humatest.NewAdapter(), "/api/auth", opts)
 	resp := humatest.Wrap(t, api).Post("/api/auth/sign-in/email",
@@ -71,7 +71,7 @@ func TestG10_SignIn_CrossSiteNavigateBlocked(t *testing.T) {
 	}
 }
 
-func TestG10_SignUp_CrossSiteNavigateBlocked(t *testing.T) {
+func TestRefreshCacheConstruction_SignUp_CrossSiteNavigateBlocked(t *testing.T) {
 	opts := g10OriginOptions("https://app.example")
 	api := Router(humatest.NewAdapter(), "/api/auth", opts)
 	resp := humatest.Wrap(t, api).Post("/api/auth/sign-up/email",
@@ -84,7 +84,7 @@ func TestG10_SignUp_CrossSiteNavigateBlocked(t *testing.T) {
 }
 
 // Login legs keep the force gate: cookie-less untrusted bare Origin 403.
-func TestG10_SignIn_CookieLessUntrustedOriginBlocked(t *testing.T) {
+func TestRefreshCacheConstruction_SignIn_CookieLessUntrustedOriginBlocked(t *testing.T) {
 	opts := g10OriginOptions("https://app.example")
 	api := Router(humatest.NewAdapter(), "/api/auth", opts)
 	resp := humatest.Wrap(t, api).Post("/api/auth/sign-in/email",
@@ -95,7 +95,7 @@ func TestG10_SignIn_CookieLessUntrustedOriginBlocked(t *testing.T) {
 	}
 }
 
-func TestG10_SignUp_CookieLessUntrustedOriginBlocked(t *testing.T) {
+func TestRefreshCacheConstruction_SignUp_CookieLessUntrustedOriginBlocked(t *testing.T) {
 	opts := g10OriginOptions("https://app.example")
 	api := Router(humatest.NewAdapter(), "/api/auth", opts)
 	resp := humatest.Wrap(t, api).Post("/api/auth/sign-up/email",

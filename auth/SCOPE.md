@@ -104,7 +104,7 @@ descriptive name instead of swapping with the package-doc `index.go`
   Go exposes server-only `routes.SetPassword` instead (tested).
 - `sendOnSignUp: false` + `requireEmailVerification` does not send:
   `SendOnSignUp *bool` tri-state (nil follows requireEmailVerification),
-  closed post-v1-unfreeze and pinned by `TestF1_SendOnSignUpExplicitFalse`.
+  closed post-v1-unfreeze and pinned by `TestSignUpForm_SendOnSignUpExplicitFalse`.
 - Huma schema-validation failures are 422 vs upstream 400 (framework-wide
   convention, not per-route drift).
 - Chunked multi-cookie writes are wired (`BuildChunkedCookies`); reads
@@ -117,10 +117,10 @@ descriptive name instead of swapping with the package-doc `index.go`
 
 - Get-session null-shape: upstream answers 200 `null` for missing/expired
   sessions; Go matches since B14 (200 null + `Cache-Control: no-store`),
-  pinned by `TestB14_*`. Internal resolver keeps the error contract.
+  pinned by `TestSessionNull_*`. Internal resolver keeps the error contract.
 - Explicit `updateAge: 0` (always-refresh) is distinguished from unset
   (`UpdateAge *int` tri-state; `types` unfrozen post-v1) — closed and pinned
-  by `TestF4_UpdateAgeTriState`.
+  by `TestSessionUpdateAge_UpdateAgeTriState`.
 - Unknown-only update-session bodies 400 ("No fields to update") per
   upstream `parseSessionInput` since B2 — the union-passthrough divergence
   is closed. Output-side unknown fields still pass through.

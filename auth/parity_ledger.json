@@ -150,11 +150,11 @@
         },
         {
           "case": "clears retired session_data when session_token is missing/invalid (incl. on auth failure)",
-          "goTest": "TestF4_StaleCleanupOnFailure"
+          "goTest": "TestSessionUpdateAge_StaleCleanupOnFailure"
         },
         {
           "case": "expired session_token cleared alongside session_data on failure",
-          "goTest": "TestG4_ExpiredTokenCleanupCookieOnFailure"
+          "goTest": "TestSessionCookie_ExpiredTokenCleanupCookieOnFailure"
         }
       ],
       "notes": "Malformed-expiry fallthrough, disabled-cache cleanup, and retired-cleanup-on-failure covered; cross-subdomain migration, JWT/JWE-strategy fallback, and chunked re-issue legs open/excluded."
@@ -267,27 +267,27 @@
         },
         {
           "case": "change-email resend links escape token/callbackURL",
-          "goTest": "TestF6_ChangeEmailConfirmationResendEscapes + TestF6_ChangeEmailLegacyResendEscapes"
+          "goTest": "TestVerifyEmailResend_ChangeEmailConfirmationResendEscapes + TestVerifyEmailResend_ChangeEmailLegacyResendEscapes"
         },
         {
           "case": "should sign after verification (session reuse on email match)",
-          "goTest": "TestF6_AutoSignInReusesMatchingSession + TestF6_AutoSignInMintsOnMismatch (supplement)"
+          "goTest": "TestVerifyEmailResend_AutoSignInReusesMatchingSession + TestVerifyEmailResend_AutoSignInMintsOnMismatch (supplement)"
         },
         {
           "case": "should sign after verification (updateTo-leg session reuse)",
-          "goTest": "TestG6_ChangeEmailVerificationReusesMatchingSession + MintsOnMismatch + LegacyReuses + MintsOnMismatch (supplement)"
+          "goTest": "TestVerifySessionReuse_ChangeEmailVerificationReusesMatchingSession + MintsOnMismatch + LegacyReuses + MintsOnMismatch (supplement)"
         },
         {
           "case": "already-verified answers {status:true,user:null} (GET+POST, redirect unchanged)",
-          "goTest": "TestB3_AlreadyVerified* (process/post/get/redirect/fresh)"
+          "goTest": "TestVerifyEmailNullUser_AlreadyVerified* (process/post/get/redirect/fresh)"
         },
         {
           "case": "fresh plain verify answers {status:true,user:null} (GET+POST+process)",
-          "goTest": "TestF2_FreshPlainVerifyReturnsNull + root parity pins"
+          "goTest": "TestVerifyUpdateTo_FreshPlainVerifyReturnsNull + root parity pins"
         },
         {
           "case": "updateTo reuses pre-update activeSession token; fan-out post-commit log-only",
-          "goTest": "TestF2_UpdateToReusesPreUpdateToken + FanOutFailureStillSucceeds"
+          "goTest": "TestVerifyUpdateTo_UpdateToReusesPreUpdateToken + FanOutFailureStillSucceeds"
         }
       ],
       "notes": "Auto-sign-in (+session reuse), expiresIn, hooks, encoding (incl. change-email resends), case-insensitivity covered; already-verified null-shape held by existing pin; body-consumption JS semantics excluded."
@@ -317,10 +317,10 @@
         },
         {
           "case": "full error-page snapshot parity (defaults, knobs, toggles, copy, links)",
-          "goTest": "TestF3ErrorPageDefaultSnapshot + TestF3ErrorPageCustomizedSnapshot + TestF3ErrorPageDecorationToggles + TestF3ErrorPageCustomDescriptionSnapshot"
+          "goTest": "TestErrorPageDefaultSnapshot + TestErrorPageCustomizedSnapshot + TestErrorPageDecorationToggles + TestErrorPageCustomDescriptionSnapshot"
         }
       ],
-      "notes": "XSS sanitization covered by error_test.go; full snapshot parity closed by f3_error_test.go (body/grid var(--background) fallbacks, exact text/html, all knobs). Residual: production-bounce nil-vs-zero needs types pointer."
+      "notes": "XSS sanitization covered by error_test.go; full snapshot parity closed by error_page_snapshot_test.go (body/grid var(--background) fallbacks, exact text/html, all knobs). Residual: production-bounce nil-vs-zero needs types pointer."
     },
     {
       "file": "vendor/better-auth/packages/better-auth/src/api/routes/password.test.ts",
@@ -434,19 +434,19 @@
         },
         {
           "case": "should reject untrusted redirectTo (RESET_PASSWORD_DISABLED shape)",
-          "goTest": "TestF5_RequestResetDisabledUpstreamCode (supplement)"
+          "goTest": "TestPasswordResetCodes_RequestResetDisabledUpstreamCode (supplement)"
         },
         {
           "case": "reset USER_NOT_FOUND is 400 (upstream password.ts:304)",
-          "goTest": "TestF5_ResetUserNotFoundIsBadRequest"
+          "goTest": "TestPasswordResetCodes_ResetUserNotFoundIsBadRequest"
         },
         {
           "case": "should revoke other sessions when revokeSessionsOnPasswordReset is enabled (secondary purge)",
-          "goTest": "TestG5_ResetWithRevokePurgesSecondary + WithoutRevokeKeepsSessions (supplement)"
+          "goTest": "TestPasswordResetRevoke_ResetWithRevokePurgesSecondary + WithoutRevokeKeepsSessions (supplement)"
         },
         {
           "case": "should reject a concurrent reset using the same token",
-          "goTest": "TestB5_ConcurrentSameTokenResetPin (8 racers 1x200+7x400, -race green)"
+          "goTest": "TestResetPasswordRace_ConcurrentSameTokenResetPin (8 racers 1x200+7x400, -race green)"
         }
       ],
       "notes": "Reset issuance/validation/expiry/revocation matrices covered; concurrent-reset race same mem-adapter note as delete."
@@ -672,27 +672,27 @@
         },
         {
           "case": "should update the session every time when set to 0",
-          "goTest": "TestF4_UpdateAgeTriState + TestF4_ExplicitZeroAlwaysRefresh (UpdateAge *int tri-state)"
+          "goTest": "TestSessionUpdateAge_UpdateAgeTriState + TestSessionUpdateAge_ExplicitZeroAlwaysRefresh (UpdateAge *int tri-state)"
         },
         {
           "case": "shouldSkipSessionRefresh gates refresh paths",
-          "goTest": "TestG4_SkipGateSuppressesRefresh + TestG8_SkipGateSuppressesRefresh"
+          "goTest": "TestSessionCookie_SkipGateSuppressesRefresh"
         },
         {
           "case": "should return null when not authenticated (200 null + no-store)",
-          "goTest": "TestB14_* (missing/unknown/expired/deferred 200-null suite)"
+          "goTest": "TestSessionNull_* (missing/unknown/expired/deferred 200-null suite)"
         },
         {
           "case": "updateSession unknown-only bodies 400 (parseSessionInput parity)",
-          "goTest": "TestB2_UpdateSessionUnknownOnly400 + DeclaredAdditionalPasses"
+          "goTest": "TestUpdateSessionFields_UpdateSessionUnknownOnly400 + DeclaredAdditionalPasses"
         },
         {
           "case": "get-session 200 literal null; user-missing null; compact interop both directions",
-          "goTest": "TestF5_* (null literal, user-missing, compact read/write)"
+          "goTest": "TestSessionCompactNull_* (null literal, user-missing, compact read/write)"
         },
         {
           "case": "update-session extras flat top-level; revoke-other live-only, no cookies",
-          "goTest": "TestF4_UpdateSessionFlatTheme + RevokeOtherLiveOnlyNoCookies"
+          "goTest": "TestUpdateSessionFlat_UpdateSessionFlatTheme + TestUpdateSessionFlat_RevokeOtherLiveOnlyNoCookies"
         }
       ],
       "notes": "Full 85-case triage done: 38 cited to pre-existing suites, 16 ported (triage_v1_session), 10 excluded (JWKS x5, plugin authority, returnHeaders, plugin-endpoint freshness, client-concurrency x2), 3 fail-closed deviations (null-shape), 1 accepted divergence (unknown-only update passes through). updateAge:0 closed via *int (F9); VersionFunc-500 held by existing fail-closed pin."
@@ -765,19 +765,19 @@
         },
         {
           "case": "email format gate 400 INVALID_EMAIL (sign-in.ts validation)",
-          "goTest": "TestF2_SignInMalformedEmailIs400"
+          "goTest": "TestSignIn_MalformedEmailIs400"
         },
         {
           "case": "callbackURL Location header (trusted only)",
-          "goTest": "TestF2_SignInCallbackURLSetsLocationHeader"
+          "goTest": "TestSignIn_CallbackURLSetsLocationHeader"
         },
         {
           "case": "verification email sent when sendOnSignIn is enabled",
-          "goTest": "TestF2_SignInSendOnSignInResends"
+          "goTest": "TestSignIn_SendOnSignInResends"
         },
         {
           "case": "should accept form-urlencoded content type",
-          "goTest": "TestG2_SignInFormURLEncoded + FormValidationParity"
+          "goTest": "TestSignInForm_SignInFormURLEncoded + FormValidationParity"
         },
         {
           "case": "untrusted callbackURL 403 on sign-in/sign-up (global middleware parity)",
@@ -818,7 +818,7 @@
         },
         {
           "case": "sign-out requireHeaders 401 + optional body parsed (provider excluded)",
-          "goTest": "TestF6_SignOut*"
+          "goTest": "TestSignOut*"
         }
       ],
       "notes": "Core sign-out legs covered; provider-logout URL legs v1-excluded (no social providers)."
@@ -949,15 +949,15 @@
         },
         {
           "case": "should accept form-urlencoded content type",
-          "goTest": "TestF1_SignUpFormURLEncoded + TestF1_SignUpFormValidationParity"
+          "goTest": "TestSignUpForm_SignUpFormURLEncoded + TestSignUpForm_SignUpFormValidationParity"
         },
         {
           "case": "should not send verification email when sendOnSignUp is false, even with requireEmailVerification",
-          "goTest": "TestF1_SendOnSignUpExplicitFalse + TestF1_SendOnSignUpTrueSendsWithoutRequire (SendOnSignUp *bool tri-state)"
+          "goTest": "TestSignUpForm_SendOnSignUpExplicitFalse + TestSignUpForm_SendOnSignUpTrueSendsWithoutRequire (SendOnSignUp *bool tri-state)"
         },
         {
           "case": "invalid body rejected incl. mistyped known fields (zod parity)",
-          "goTest": "TestG1_SignUpJSONMistypedRememberMeIsClientError + NameIsClientError + UnmarshalMistypedKnownKeysError (supplement)"
+          "goTest": "TestSignUpMistyped_SignUpJSONMistypedRememberMeIsClientError + NameIsClientError + UnmarshalMistypedKnownKeysError (supplement)"
         }
       ],
       "notes": "Full triage done: validateUserInfo gates, hook skip legs, autoSignIn-false token-null/synthetic/hook, sendOnSignUp true/default/explicit-false (*bool), form-urlencoded bodies; CSRF/admin-synthetic legs excluded."
@@ -1099,23 +1099,23 @@
         },
         {
           "case": "should delete every session from deleted user (secondary-storage variant)",
-          "goTest": "TestF7_DeleteUserDirectPurgesSecondary + TestF7_DeleteUserCallbackPurgesSecondary"
+          "goTest": "TestDeleteUserPurge_DeleteUserDirectPurgesSecondary + TestDeleteUserPurge_DeleteUserCallbackPurgesSecondary"
         },
         {
           "case": "should revoke other sessions (replacement Set-Cookie)",
-          "goTest": "TestF5_ChangePasswordRevokeEmitsSetCookie (supplement)"
+          "goTest": "TestPasswordResetCodes_ChangePasswordRevokeEmitsSetCookie (supplement)"
         },
         {
           "case": "should delete with verification flow and password (token-before-freshness ordering)",
-          "goTest": "TestG7_DeleteUserStaleSessionValidTokenDeletes + WithoutTokenExpired + InvalidTokenUnauthorized (supplement)"
+          "goTest": "TestDeleteUserStale_DeleteUserStaleSessionValidTokenDeletes + WithoutTokenExpired + InvalidTokenUnauthorized (supplement)"
         },
         {
           "case": "delete-user invalid/wrong-owner token 404 (callback parity on POST path)",
-          "goTest": "TestC5_DeleteUserInvalidTokenNotFound + WrongOwnerBurnsToken"
+          "goTest": "TestDeleteUserToken_DeleteUserInvalidTokenNotFound + WrongOwnerBurnsToken"
         },
         {
           "case": "change-password non-revoke returns {token:null,user} (status compat kept)",
-          "goTest": "TestF1_ChangePasswordNonRevokeReturnsNullTokenAndUser"
+          "goTest": "TestChangePasswordShape_NonRevokeReturnsNullTokenAndUser"
         },
         {
           "case": "change-email/delete-user/reset-callback untrusted callbackURL 403",
@@ -1434,7 +1434,7 @@
         },
         {
           "case": "chunked session-data issuance on live paths (write side wired)",
-          "goTest": "TestG4_ChunkedIssuanceMultiCookieOnOversize + TestG8_OversizeIssuanceYieldsIndexedChunks + ShrinkExpiresStaleChunks"
+          "goTest": "TestSessionCookie_ChunkedIssuanceMultiCookieOnOversize + TestCookiesChunked_OversizeIssuanceYieldsIndexedChunks + ShrinkExpiresStaleChunks"
         }
       ],
       "notes": "Chunked multi-cookie writes now wired (read+write); post-signature payload-schema validation wired (ledger note corrected); remaining deltas are pinned exclusions (JWKS/plugin signer, social legs) or minor wire notes."
@@ -1638,7 +1638,7 @@
         },
         {
           "case": "JWE encode/decode single + same-config + rotated + legacy + kid-less + mismatched-kid",
-          "goTest": "TestF11_JWE_SingleSecretString + SameConfig + RotatedContainingOldKey + KidLessFallbackTriesAllSecrets + LegacyStringConfig + MismatchedKidNoFallback"
+          "goTest": "TestJWE__SingleSecretString + SameConfig + RotatedContainingOldKey + KidLessFallbackTriesAllSecrets + LegacyStringConfig + MismatchedKidNoFallback"
         }
       ],
       "notes": "Envelope parse/format, symmetric rotation matrices, JWE multi-secret legs (single/same/rotated/legacy/kid-less/mismatched) covered; parseSecretsEnv/validateSecretsArray helpers live in src/context."

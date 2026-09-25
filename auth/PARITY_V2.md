@@ -69,7 +69,7 @@ Second pass (batch: form transcode + `SendOnSignUp *bool`). Upstream
 
 | Area | Verdict | Evidence |
 |---|---|---|
-| Form-urlencoded accept (P01-GAP-1) | PORTED | TS `:38-41`; Go `sign-up.go:122-155,233-262,298` transcode middleware; `f1_forms_test.go:62-110` green |
+| Form-urlencoded accept (P01-GAP-1) | PORTED | TS `:38-41`; Go `sign-up.go:122-155,233-262,298` transcode middleware; `signup_form_bodies_test.go:62-110` green |
 | sendOnSignUp-false tri-state | PORTED | TS `:392-394` `??`; Go `types/email_password.go:194-201 (*bool)` + resolver wired at `sign-up.go:532`; all 3 legs tested |
 | OpenAPI JSON-only shape | PORTED | TS `:60-95` lists only `application/json`; Go keeps OpenAPI JSON-shaped, transcode runtime-only |
 | Middleware ordering (CSRF vs transcode) | PORTED, no regression | Global origin/CSRF `api/index.go:101-158` runs outer; op middleware inner, so CSRF still sees original `Content-Type` |
@@ -96,7 +96,7 @@ GAP / REGRESSION list:
 Upstream `sign-in.ts` (email leg `:400-639`; social `:196-398` excluded per
 `SCOPE.md`) vs `auth/src/api/routes/sign-in.go`. Batch: 400 INVALID_EMAIL
 gate, Location header, sendOnSignIn test — all three CONFIRMED closed
-(`f2_signin_test.go`; gate before lookup; Location trusted-only, body pair
+(`signin_location_resend_test.go`; gate before lookup; Location trusted-only, body pair
 verbatim; resend 403 + exactly 1 send).
 
 New gaps / regressions from the batch:
@@ -133,8 +133,8 @@ Remaining: provider RP-initiated logout EXCLUDED (no social); `ok` OperationID D
 
 Upstream `session.ts` + `update-session.ts` @ `5468e6bf` vs `session.go`,
 `session-extra.go`, `session-c701.go`. Batch claims CONFIRMED CLOSED:
-- `updateAge:0` tri-state PORTED: `types/email_password.go:419 (*int)` + resolvers; `session.go:714-734` pin + delegation; all refresh math uses it (`:659-671`, `:673-705`, `:2237-2239`, `src/index.go:968`); formula matches `session.ts:324-338`. Pinned by `f4_session_test.go` + `f9_types_test.go`.
-- Stale-cleanup on failure PORTED: `session.go:156-171` computes, `:193-210` rides on all failure returns, `:64-89` + `:259-278` surface on wire. Pinned by `f4_session_test.go:47-76`.
+- `updateAge:0` tri-state PORTED: `types/email_password.go:419 (*int)` + resolvers; `session.go:714-734` pin + delegation; all refresh math uses it (`:659-671`, `:673-705`, `:2237-2239`, `src/index.go:968`); formula matches `session.ts:324-338`. Pinned by `session_update_age_test.go` + `options_tristate_test.go`.
+- Stale-cleanup on failure PORTED: `session.go:156-171` computes, `:193-210` rides on all failure returns, `:64-89` + `:259-278` surface on wire. Pinned by `session_update_age_test.go:47-76`.
 - HELD items comments-only confirmed (null-shape, unknown-passthrough).
 - No nil-deref REGRESSION: 2 direct `resolveGetSession` callers guard `res!=nil`; all other routes use `loadSessionAndUser` (contract unchanged); in-tree `GetSessionFromRequest` consumers = 0 besides forwarder. Embedder note: callers must forward the 3rd return even when `err!=nil`.
 - `UpdateAgeDuration` vs old sites clean; `cookies/cache.go:74-85` keeps the separate cookie-cache knob (correctly distinct).
@@ -321,7 +321,7 @@ Still open (unassigned this round):
 - G9 per-endpoint callbackURL/redirectTo skip adoption (handlers stay on
   `IsTrustedRedirect`; minor).
 - RefreshCache construction wiring: RESOLVED by A2 (warn+disable at
-  construction) — pin `TestG10_RefreshCacheConstruction_*`.
+  construction) — pin `TestRefreshCacheConstruction_RefreshCacheConstruction_*`.
 
 ## Wave-10 exclusion registry
 

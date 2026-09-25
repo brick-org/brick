@@ -53,7 +53,7 @@ func telemetryBoolEnv(key string, fallback bool) bool {
 // while isTest() (NODE_ENV=test) unless the platform passes skipTestCheck.
 // Go applies no implicit test-environment suppression: explicit
 // Enabled/env controls are the whole gate, so test binaries observe the same
-// behavior as production when enabled. Pinned by TestF6TelemetryEnvTruthiness.
+// behavior as production when enabled. Pinned by TestInitTelemetryEnvTruthiness.
 func telemetryEnabled(opts Options) bool {
 	if opts.Telemetry.Enabled {
 		return true

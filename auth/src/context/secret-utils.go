@@ -30,7 +30,7 @@ import (
 // DEVIATION (strictness, loud): the version token is parsed strictly
 // (strconv.Atoi), while upstream parseInt is lenient (e.g. "1abc" parses as
 // 1). Trailing-garbage versions fail closed here. Pinned by
-// TestF6ParseSecretsEnvStrictVersion.
+// TestInitParseSecretsEnvStrictVersion.
 func ParseSecretsEnv(envValue string) ([]types.Secret, error) {
 	if envValue == "" {
 		return nil, nil

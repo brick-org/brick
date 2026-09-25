@@ -37,7 +37,7 @@ func splitPatchOptions(patch Options) (DBHooks, []string, func(*http.Request) []
 // (bool, string, int) cannot preserve an explicit falsy against a non-zero
 // patch — the patch fills. Presence-tracked kinds (pointers, slices, maps,
 // funcs, interfaces) honor base-wins exactly. Pinned by
-// TestF6DefuScalarZeroValueDeviation.
+// TestInitDefuScalarZeroValueDeviation.
 func defuOptions(base *Options, patch Options) {
 	defuReflect(reflect.ValueOf(base).Elem(), reflect.ValueOf(patch))
 }

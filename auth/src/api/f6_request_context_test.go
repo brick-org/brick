@@ -83,7 +83,7 @@ func f6DynamicOptions() types.Options {
 	}
 }
 
-func TestF6DynamicBaseURLAuthoritativeTwoHosts(t *testing.T) {
+func TestRequestContextDynamicBaseURLAuthoritativeTwoHosts(t *testing.T) {
 	opts := f6DynamicOptions()
 	opts.Plugins = []types.Plugin{&f6EchoPlugin{id: "f6-echo"}}
 	api := Router(humatest.NewAdapter(), "/api/auth", opts)
@@ -154,7 +154,7 @@ func TestF6DynamicBaseURLAuthoritativeTwoHosts(t *testing.T) {
 	}
 }
 
-func TestF6RequestStateAlwaysInstalledWithoutHooks(t *testing.T) {
+func TestRequestContextRequestStateAlwaysInstalledWithoutHooks(t *testing.T) {
 	// No hooks/plugins that would previously trigger the lifecycle
 	// middleware: request state + endpoint metadata must still be present.
 	opts := types.Options{BaseURL: "https://app.example", BasePath: "/api/auth"}
@@ -184,7 +184,7 @@ func TestF6RequestStateAlwaysInstalledWithoutHooks(t *testing.T) {
 	}
 }
 
-func TestF6MiddlewareResponseMutationAndLogger(t *testing.T) {
+func TestRequestContextMiddlewareResponseMutationAndLogger(t *testing.T) {
 	var reported bool
 	opts := types.Options{BaseURL: "https://app.example", BasePath: "/api/auth"}
 	opts.Logger.Log = func(level, message string, args ...any) { reported = true }
@@ -233,7 +233,7 @@ func (p *f6HookPlugin) TSRouteHooks() types.PluginTSRouteHooks {
 	}
 }
 
-func TestF6BackgroundTasksAndInstrumentation(t *testing.T) {
+func TestRequestContextBackgroundTasksAndInstrumentation(t *testing.T) {
 	// Handler dispatch through RunInBackground (upstream ctx.runInBackground).
 	var handled [][]string
 	opts := types.Options{BaseURL: "https://app.example", BasePath: "/api/auth"}
