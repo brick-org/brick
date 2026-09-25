@@ -106,11 +106,11 @@
       "covered": [
         {
           "case": "should list all accounts",
-          "goTest": "TestCredsV1_ListAccounts"
+          "goTest": "TestAccount_ListAccounts"
         },
         {
           "case": "should not expose empty scope tokens from stored empty account scope",
-          "goTest": "TestCredsV1_ListAccountsEmptyScope"
+          "goTest": "TestAccount_ListAccountsEmptyScope"
         }
       ],
       "notes": "List-accounts core legs covered; all social/link/token/account-cookie/stateless legs v1-excluded."
@@ -142,11 +142,11 @@
       "covered": [
         {
           "case": "ignores retired session_data when caching is disabled $mode",
-          "goTest": "TestV1_RetiredCacheCleanedWhenDisabled"
+          "goTest": "TestStaleCache_RetiredCacheCleanedWhenDisabled"
         },
         {
           "case": "should expire malformed compact session_data and fall through to session_token DB validation",
-          "goTest": "TestV1_MalformedCacheExpiredAndServed"
+          "goTest": "TestStaleCache_MalformedCacheExpiredAndServed"
         },
         {
           "case": "clears retired session_data when session_token is missing/invalid (incl. on auth failure)",
@@ -215,55 +215,55 @@
         },
         {
           "case": "should return APIError status when sendVerificationEmail throws (e.g. rate limit)",
-          "goTest": "TestCredsV1_SendVerificationSenderAPIErrorPropagates"
+          "goTest": "TestVerificationSend_SendVerificationSenderAPIErrorPropagates"
         },
         {
           "case": "should still surface errors from sendVerificationEmail after the minimum delay",
-          "goTest": "TestCredsV1_SendVerificationMissingEmailFloor"
+          "goTest": "TestVerificationSend_SendVerificationMissingEmailFloor"
         },
         {
           "case": "should send a verification email when enabled",
-          "goTest": "TestCredsV1_SendVerificationDelivers"
+          "goTest": "TestVerificationSend_SendVerificationDelivers"
         },
         {
           "case": "should not send verification email when a third party requests for an already verified user",
-          "goTest": "TestCredsV1_SendVerificationSkipsVerifiedThirdParty"
+          "goTest": "TestVerificationSend_SendVerificationSkipsVerifiedThirdParty"
         },
         {
           "case": "should redirect to callback",
-          "goTest": "TestCredsV1_VerifyEmailGetRedirectsToCallback (supplement)"
+          "goTest": "TestVerificationSend_VerifyEmailGetRedirectsToCallback (supplement)"
         },
         {
           "case": "should preserve encoded characters in callback URL",
-          "goTest": "TestCredsV1_VerifyEmailGetPreservesEncodedCallback"
+          "goTest": "TestVerificationSend_VerifyEmailGetPreservesEncodedCallback"
         },
         {
           "case": "should set emailVerified on all sessions",
-          "goTest": "TestWiringV1_VerifyEmailFlipsSecondarySessions + TestSecondaryV1 route coverage (secondary fan-out wired in all verify legs)"
+          "goTest": "TestSecondaryWiring_VerifyEmailFlipsSecondarySessions + TestSecondaryV1 route coverage (secondary fan-out wired in all verify legs)"
         },
         {
           "case": "should sign after verification",
-          "goTest": "TestTriageV1_VerifyEmailAutoSignInMintsSession"
+          "goTest": "TestCredentialTriage_VerifyEmailAutoSignInMintsSession"
         },
         {
           "case": "should use custom expiresIn",
-          "goTest": "TestTriageV1_VerifyEmailExpiredTokenRejected"
+          "goTest": "TestCredentialTriage_VerifyEmailExpiredTokenRejected"
         },
         {
           "case": "should call afterEmailVerification callback when email is verified",
-          "goTest": "TestTriageV1_VerifyEmailAfterHookFires"
+          "goTest": "TestCredentialTriage_VerifyEmailAfterHookFires"
         },
         {
           "case": "should call beforeEmailVerification callback when email is verified",
-          "goTest": "TestTriageV1_VerifyEmailBeforeHookFires"
+          "goTest": "TestCredentialTriage_VerifyEmailBeforeHookFires"
         },
         {
           "case": "should properly encode callbackURL with query parameters when sending verification email",
-          "goTest": "TestTriageV1_SendVerificationCallbackEncoding"
+          "goTest": "TestCredentialTriage_SendVerificationCallbackEncoding"
         },
         {
           "case": "should handle email case insensitivity when sending verification email while signed in",
-          "goTest": "TestTriageV1_SendVerificationSignedInCaseInsensitive"
+          "goTest": "TestCredentialTriage_SendVerificationSignedInCaseInsensitive"
         },
         {
           "case": "change-email resend links escape token/callbackURL",
@@ -374,63 +374,63 @@
         },
         {
           "case": "should not reveal user existence on failure",
-          "goTest": "TestCredsV1_RequestResetUnknownUserWarnsGeneric"
+          "goTest": "TestPasswordReset_RequestResetUnknownUserWarnsGeneric"
         },
         {
           "case": "should reject untrusted redirectTo",
-          "goTest": "TestCredsV1_RequestResetRejectsUntrustedRedirect (supplement)"
+          "goTest": "TestPasswordReset_RequestResetRejectsUntrustedRedirect (supplement)"
         },
         {
           "case": "should allow callbackURL to have multiple query params",
-          "goTest": "TestCredsV1_ResetURLCallbackEncoding"
+          "goTest": "TestPasswordReset_ResetURLCallbackEncoding"
         },
         {
           "case": "should not reveal failure of email sending",
-          "goTest": "TestCredsV1_ResetSenderFailureStillGeneric"
+          "goTest": "TestPasswordReset_ResetSenderFailureStillGeneric"
         },
         {
           "case": "shouldn't allow the token to be used twice",
-          "goTest": "TestCredsV1_ResetTokenSingleUseHTTP (HTTP-level supplement)"
+          "goTest": "TestPasswordReset_ResetTokenSingleUseHTTP (HTTP-level supplement)"
         },
         {
           "case": "should verify the token",
-          "goTest": "TestCredsV1_ResetCallbackRedirect (callback-route leg)"
+          "goTest": "TestPasswordReset_ResetCallbackRedirect (callback-route leg)"
         },
         {
           "case": "should verify password with correct password",
-          "goTest": "TestCredsV1_VerifyPasswordStatuses (supplement)"
+          "goTest": "TestPasswordReset_VerifyPasswordStatuses (supplement)"
         },
         {
           "case": "should fail to verify password with incorrect password",
-          "goTest": "TestCredsV1_VerifyPasswordStatuses (supplement)"
+          "goTest": "TestPasswordReset_VerifyPasswordStatuses (supplement)"
         },
         {
           "case": "should require a session to verify password",
-          "goTest": "TestCredsV1_VerifyPasswordStatuses (supplement)"
+          "goTest": "TestPasswordReset_VerifyPasswordStatuses (supplement)"
         },
         {
           "case": "should send a reset password email when enabled",
-          "goTest": "TestTriageV1_ResetEmailCarriesLongToken"
+          "goTest": "TestCredentialTriage_ResetEmailCarriesLongToken"
         },
         {
           "case": "should fail on invalid password",
-          "goTest": "TestTriageV1_ResetShortPasswordRejected"
+          "goTest": "TestCredentialTriage_ResetShortPasswordRejected"
         },
         {
           "case": "should update account's updatedAt when resetting password",
-          "goTest": "TestTriageV1_ResetBumpsAccountUpdatedAt"
+          "goTest": "TestCredentialTriage_ResetBumpsAccountUpdatedAt"
         },
         {
           "case": "should expire",
-          "goTest": "TestTriageV1_ResetExpiredTokenRejected"
+          "goTest": "TestCredentialTriage_ResetExpiredTokenRejected"
         },
         {
           "case": "should revoke other sessions when revokeSessionsOnPasswordReset is enabled",
-          "goTest": "TestTriageV1_ResetRevokesSessionsWhenEnabled"
+          "goTest": "TestCredentialTriage_ResetRevokesSessionsWhenEnabled"
         },
         {
           "case": "should not revoke other sessions by default",
-          "goTest": "TestTriageV1_ResetKeepsSessionsByDefault"
+          "goTest": "TestCredentialTriage_ResetKeepsSessionsByDefault"
         },
         {
           "case": "should reject untrusted redirectTo (RESET_PASSWORD_DISABLED shape)",
@@ -552,111 +552,111 @@
       "covered": [
         {
           "case": "should set cookies correctly on sign in",
-          "goTest": "TestV1_SessionTokenMaxAgeSignInDefault + TestV1_SessionTokenMaxAgeDefault (MaxAge defaults to expiresIn)"
+          "goTest": "TestSessionMaxAge_SessionTokenMaxAgeSignInDefault + TestSessionMaxAge_SessionTokenMaxAgeDefault (MaxAge defaults to expiresIn)"
         },
         {
           "case": "should not exceed the 400-day browser Max-Age ceiling on session refresh",
-          "goTest": "TestV1_SessionTokenMaxAgeRefreshCeiling"
+          "goTest": "TestSessionMaxAge_SessionTokenMaxAgeRefreshCeiling"
         },
         {
           "case": "should require a fresh session to list sessions",
-          "goTest": "TestV1_ExpiredSessionListRevokeIs401 (expired token now 401)"
+          "goTest": "TestSessionRevocation_ExpiredSessionListRevokeIs401 (expired token now 401)"
         },
         {
           "case": "should work without database (session stored in cookie only)",
-          "goTest": "TestV1_DBlessGetSessionFromCookieCache"
+          "goTest": "TestStatelessUpdate_DBlessGetSessionFromCookieCache"
         },
         {
           "case": "should respect disableSessionRefresh config when deferSessionRefresh is enabled",
-          "goTest": "TestV1_DeferWithDisableSessionRefresh"
+          "goTest": "TestUpdateFailclosed_DeferWithDisableSessionRefresh"
         },
         {
           "case": "fails closed when the backing session is revoked in a stateful deployment",
-          "goTest": "TestV1_UpdateSessionRevokedFailsClosed"
+          "goTest": "TestUpdateFailclosed_UpdateSessionRevokedFailsClosed"
         },
         {
           "case": "still refreshes the cookie in a DB-less deployment when no row exists",
-          "goTest": "TestV1_DBlessUpdateSessionFromCookieCache (previously panicked on nil DB)"
+          "goTest": "TestStatelessUpdate_DBlessUpdateSessionFromCookieCache (previously panicked on nil DB)"
         },
         {
           "case": "should store session in secondary storage",
-          "goTest": "TestCreationMirrorsSecondaryStorage (pre-existing) + TestSecondaryV1_RouteListRevokeSecondary"
+          "goTest": "TestCreationMirrorsSecondaryStorage (pre-existing) + TestSecondaryFanout_RouteListRevokeSecondary"
         },
         {
           "case": "should list sessions",
-          "goTest": "TestSecondaryV1_RouteListRevokeSecondary (secondary mode)"
+          "goTest": "TestSecondaryFanout_RouteListRevokeSecondary (secondary mode)"
         },
         {
           "case": "revoke session and list sessions",
-          "goTest": "TestSecondaryV1_RouteListRevokeSecondary"
+          "goTest": "TestSecondaryFanout_RouteListRevokeSecondary"
         },
         {
           "case": "should revoke session",
-          "goTest": "TestSecondaryV1_RouteListRevokeSecondary (no store residue)"
+          "goTest": "TestSecondaryFanout_RouteListRevokeSecondary (no store residue)"
         },
         {
           "case": "should list sessions",
-          "goTest": "TestTriageV1_ListSessionsPrimary"
+          "goTest": "TestSessionTriage_ListSessionsPrimary"
         },
         {
           "case": "should revoke session",
-          "goTest": "TestTriageV1_RevokeOwnSessionThenRevokeAll"
+          "goTest": "TestSessionTriage_RevokeOwnSessionThenRevokeAll"
         },
         {
           "case": "refreshes expired cache and reuses the replacement cookie",
-          "goTest": "TestTriageV1_CompactExpiredCacheRefreshes"
+          "goTest": "TestSessionTriage_CompactExpiredCacheRefreshes"
         },
         {
           "case": "should have max age expiry",
-          "goTest": "TestTriageV1_JWTCacheMaxAgeExpiry"
+          "goTest": "TestSessionTriage_JWTCacheMaxAgeExpiry"
         },
         {
           "case": "should preserve session expiry when refreshing stateless cookie cache",
-          "goTest": "TestTriageV1_StatelessRefreshPreservesExpiry"
+          "goTest": "TestSessionTriage_StatelessRefreshPreservesExpiry"
         },
         {
           "case": "should work without database when refreshCache threshold is reached",
-          "goTest": "TestTriageV1_StatelessRefreshPreservesExpiry (serves + re-issues, DB nil)"
+          "goTest": "TestSessionTriage_StatelessRefreshPreservesExpiry (serves + re-issues, DB nil)"
         },
         {
           "case": "should extend session_token cookie expiry when refreshCache threshold is reached",
-          "goTest": "TestTriageV1_StatelessRefreshPreservesExpiry (MaxAge=expiresIn)"
+          "goTest": "TestSessionTriage_StatelessRefreshPreservesExpiry (MaxAge=expiresIn)"
         },
         {
           "case": "should include additionalFields when retrieving from cookie cache",
-          "goTest": "TestTriageV1_CacheServesAdditionalFields"
+          "goTest": "TestSessionTriage_CacheServesAdditionalFields"
         },
         {
           "case": "should update session on POST when deferSessionRefresh is enabled",
-          "goTest": "TestTriageV1_DeferPostWritesDueSession"
+          "goTest": "TestSessionTriage_DeferPostWritesDueSession"
         },
         {
           "case": "should have consistent date types between cookie cache and refresh paths",
-          "goTest": "TestTriageV1_StatelessRefreshPreservesExpiry (equality across refresh)"
+          "goTest": "TestSessionTriage_StatelessRefreshPreservesExpiry (equality across refresh)"
         },
         {
           "case": "should update a custom additional field on a session",
-          "goTest": "TestTriageV1_UpdateSessionCustomFieldAndCookie"
+          "goTest": "TestSessionTriage_UpdateSessionCustomFieldAndCookie"
         },
         {
           "case": "should ignore core session fields",
-          "goTest": "TestTriageV1_UpdateSessionIgnoresCoreFields"
+          "goTest": "TestSessionTriage_UpdateSessionIgnoresCoreFields"
         },
         {
           "case": "should ignore core field userId",
-          "goTest": "TestTriageV1_UpdateSessionIgnoresCoreFields"
+          "goTest": "TestSessionTriage_UpdateSessionIgnoresCoreFields"
         },
         {
           "case": "should update session cookie after mutation",
-          "goTest": "TestTriageV1_UpdateSessionCustomFieldAndCookie (Set-Cookie on mutation)"
+          "goTest": "TestSessionTriage_UpdateSessionCustomFieldAndCookie (Set-Cookie on mutation)"
         },
         {
           "case": "a request cannot re-enable the cookie cache on a route that forces it off",
-          "goTest": "TestTriageV1_ForcedStrictChangePassword"
+          "goTest": "TestSessionTriage_ForcedStrictChangePassword"
         },
         {
           "case": "does not set Cache-Control: no-store on session-gated endpoints",
-          "goTest": "TestTriageV1_NoStoreAbsentElsewhere (list-sessions vehicle)"
+          "goTest": "TestSessionTriage_NoStoreAbsentElsewhere (list-sessions vehicle)"
         },
         {
           "case": "should return null when not authenticated",
@@ -741,27 +741,27 @@
       "covered": [
         {
           "case": "logs expected auth validation failures below error level",
-          "goTest": "TestCredsV1_SignInWarnLogs"
+          "goTest": "TestSignIn_SignInWarnLogs"
         },
         {
           "case": "should return additionalFields in signInEmail response",
-          "goTest": "TestCredsV1_SignInAdditionalFields"
+          "goTest": "TestSignIn_SignInAdditionalFields"
         },
         {
           "case": "should sign in with different email casing than sign-up",
-          "goTest": "TestCredsV1_SignInCaseInsensitive"
+          "goTest": "TestSignIn_SignInCaseInsensitive"
         },
         {
           "case": "should read the ip address and user agent from the headers",
-          "goTest": "TestIPUA_SignInStoresIPAndUserAgent"
+          "goTest": "TestClientIP_SignInStoresIPAndUserAgent"
         },
         {
           "case": "should return a response with a set-cookie header",
-          "goTest": "TestTriageV1_SignInSetsSessionCookie"
+          "goTest": "TestCredentialTriage_SignInSetsSessionCookie"
         },
         {
           "case": "verification email will not be sent if sendOnSignIn is disabled",
-          "goTest": "TestTriageV1_SignInNoResendWhenDisabled"
+          "goTest": "TestCredentialTriage_SignInNoResendWhenDisabled"
         },
         {
           "case": "email format gate 400 INVALID_EMAIL (sign-in.ts validation)",
@@ -781,7 +781,7 @@
         },
         {
           "case": "untrusted callbackURL 403 on sign-in/sign-up (global middleware parity)",
-          "goTest": "TestF7A_SignInUntrustedCallback403 + SignUpUntrustedCallback403"
+          "goTest": "TestUntrustedCallback_SignInUntrustedCallback403 + SignUpUntrustedCallback403"
         }
       ],
       "notes": "Cookie header, resend on/off, format gate, Location header, lowercase storage covered; social-callback legs excluded. Origin/CSRF enforcement now wired (F10); TestOriginMiddleware_NoCookie* realigned to upstream validateFormCsrf."
@@ -810,11 +810,11 @@
       "covered": [
         {
           "case": "should sign out",
-          "goTest": "TestCredsV1_SignOutDeletesSessionAndClearsCookies"
+          "goTest": "TestSignOut_SignOutDeletesSessionAndClearsCookies"
         },
         {
           "case": "should clear local session cookie when reading the session fails",
-          "goTest": "TestCredsV1_SignOutClearsCookiesOnUnreadableSession"
+          "goTest": "TestSignOut_SignOutClearsCookiesOnUnreadableSession"
         },
         {
           "case": "sign-out requireHeaders 401 + optional body parsed (provider excluded)",
@@ -877,75 +877,75 @@
       "covered": [
         {
           "case": "should work with custom fields on account table",
-          "goTest": "TestCredsV1_SignUpAdditionalFields"
+          "goTest": "TestSignUp_SignUpAdditionalFields"
         },
         {
           "case": "should succeed when passing empty name",
-          "goTest": "TestCredsV1_SignUpEmptyName"
+          "goTest": "TestSignUp_SignUpEmptyName"
         },
         {
           "case": "should not allow user to set the field that is set to input: false",
-          "goTest": "TestCredsV1_SignUpInputFalseRejected"
+          "goTest": "TestSignUp_SignUpInputFalseRejected"
         },
         {
           "case": "should return additionalFields in signUpEmail response",
-          "goTest": "TestCredsV1_SignUpAdditionalFields (response shape)"
+          "goTest": "TestSignUp_SignUpAdditionalFields (response shape)"
         },
         {
           "case": "should throw status code 400 when passing invalid body",
-          "goTest": "TestCredsV1_SignUpMissingPasswordIsClientError + TestCredsV1_SignUpShortPasswordWarns"
+          "goTest": "TestSignUp_SignUpMissingPasswordIsClientError + TestSignUp_SignUpShortPasswordWarns"
         },
         {
           "case": "should properly encode callbackURL with query parameters when sending verification email",
-          "goTest": "TestCredsV1_SignUpVerificationURLEncoding"
+          "goTest": "TestSignUp_SignUpVerificationURLEncoding"
         },
         {
           "case": "should not allow duplicate sign-ups with different email casing",
-          "goTest": "TestCredsV1_SignUpDuplicateCaseInsensitive"
+          "goTest": "TestSignUp_SignUpDuplicateCaseInsensitive"
         },
         {
           "case": "should have identical image key presence for real and synthetic user when image is omitted",
-          "goTest": "TestCredsV1_SyntheticResponseParity"
+          "goTest": "TestSignUp_SyntheticResponseParity"
         },
         {
           "case": "should get the ipAddress and userAgent from headers",
-          "goTest": "TestIPUA_SignUpStoresIPAndUserAgent"
+          "goTest": "TestClientIP_SignUpStoresIPAndUserAgent"
         },
         {
           "case": "should rollback when session creation fails",
-          "goTest": "TestOrphanV1_SessionCreateFailureRemovesUser + SecondaryMirror/Cookie variants (compensating delete, no tx needed)"
+          "goTest": "TestSignUpOrphan_SessionCreateFailureRemovesUser + SecondaryMirror/Cookie variants (compensating delete, no tx needed)"
         },
         {
           "case": "should allow email/password sign-up when validateUserInfo returns void",
-          "goTest": "TestTriageV1_SignUpValidateUserInfoAllows"
+          "goTest": "TestCredentialTriage_SignUpValidateUserInfoAllows"
         },
         {
           "case": "should not call onExistingUserSignUp when enumeration protection is inactive",
-          "goTest": "TestTriageV1_SignUpExistingHookSkippedWhenInactive"
+          "goTest": "TestCredentialTriage_SignUpExistingHookSkippedWhenInactive"
         },
         {
           "case": "should not call onExistingUserSignUp for new user sign-ups",
-          "goTest": "TestTriageV1_SignUpExistingHookSkippedForNewUser"
+          "goTest": "TestCredentialTriage_SignUpExistingHookSkippedForNewUser"
         },
         {
           "case": "should return token: null for new sign-up when autoSignIn is disabled",
-          "goTest": "TestTriageV1_SignUpAutoSignInFalseTokenNull"
+          "goTest": "TestCredentialTriage_SignUpAutoSignInFalseTokenNull"
         },
         {
           "case": "should send verification email when sendOnSignUp is true",
-          "goTest": "TestTriageV1_SignUpSendOnSignUpTrue"
+          "goTest": "TestCredentialTriage_SignUpSendOnSignUpTrue"
         },
         {
           "case": "should send verification email when sendOnSignUp is not set but requireEmailVerification is true (default)",
-          "goTest": "TestTriageV1_SignUpSendOnSignUpDefault"
+          "goTest": "TestCredentialTriage_SignUpSendOnSignUpDefault"
         },
         {
           "case": "should return synthetic user for existing email when autoSignIn is disabled without requireEmailVerification",
-          "goTest": "TestGenericV1_AutoSignInFalseDuplicateIsSynthetic (generic-duplicate condition extended to autoSignIn=false)"
+          "goTest": "TestSignUpAutoSignIn_AutoSignInFalseDuplicateIsSynthetic (generic-duplicate condition extended to autoSignIn=false)"
         },
         {
           "case": "should call onExistingUserSignUp when autoSignIn is false without requireEmailVerification",
-          "goTest": "TestGenericV1_AutoSignInFalseDuplicateFiresHook"
+          "goTest": "TestSignUpAutoSignIn_AutoSignInFalseDuplicateFiresHook"
         },
         {
           "case": "should accept form-urlencoded content type",
@@ -1011,91 +1011,91 @@
       "covered": [
         {
           "case": "should unset image",
-          "goTest": "TestCredsV1_UpdateUserUnsetsImage"
+          "goTest": "TestAccount_UpdateUserUnsetsImage"
         },
         {
           "case": "should not allow updating user with additional fields that are input: false",
-          "goTest": "TestCredsV1_UpdateUserInputFalseRejected"
+          "goTest": "TestAccount_UpdateUserInputFalseRejected"
         },
         {
           "case": "should not update password if current password is wrong",
-          "goTest": "TestCredsV1_ChangePasswordWrongCurrent"
+          "goTest": "TestAccount_ChangePasswordWrongCurrent"
         },
         {
           "case": "should revoke other sessions",
-          "goTest": "TestCredsV1_ChangePasswordRevokesOthers"
+          "goTest": "TestAccount_ChangePasswordRevokesOthers"
         },
         {
           "case": "should return 200 when target email already exists",
-          "goTest": "TestCredsV1_ChangeEmailExistingTarget"
+          "goTest": "TestAccount_ChangeEmailExistingTarget"
         },
         {
           "case": "should return the same error for existing and non-existing emails",
-          "goTest": "TestCredsV1_ChangeEmailSameErrorWithoutSender"
+          "goTest": "TestAccount_ChangeEmailSameErrorWithoutSender"
         },
         {
           "case": "preserves a callbackURL that carries its own query string",
-          "goTest": "TestCredsV1_ChangeEmailCallbackEncoding"
+          "goTest": "TestAccount_ChangeEmailCallbackEncoding"
         },
         {
           "case": "returns 400 when sendVerificationEmail is not configured",
-          "goTest": "TestCredsV1_ChangeEmailConfirmationOnlyConfig"
+          "goTest": "TestAccount_ChangeEmailConfirmationOnlyConfig"
         },
         {
           "case": "keeps one credential account when the user changes their sign-in email",
-          "goTest": "TestCredsV1_ChangeEmailKeepsCredentialAccount"
+          "goTest": "TestAccount_ChangeEmailKeepsCredentialAccount"
         },
         {
           "case": "should change email only after confirming both addresses",
-          "goTest": "TestCredsV1_ChangeEmailDoubleConfirm"
+          "goTest": "TestAccount_ChangeEmailDoubleConfirm"
         },
         {
           "case": "should delete the user with a fresh session",
-          "goTest": "TestCredsV1_DeleteUserFreshSession"
+          "goTest": "TestAccount_DeleteUserFreshSession"
         },
         {
           "case": "should require password when session is no longer fresh",
-          "goTest": "TestCredsV1_DeleteUserRequiresPasswordWhenStale"
+          "goTest": "TestAccount_DeleteUserRequiresPasswordWhenStale"
         },
         {
           "case": "should delete with verification flow and password",
-          "goTest": "TestCredsV1_DeleteUserVerificationFlowWithPassword"
+          "goTest": "TestAccount_DeleteUserVerificationFlowWithPassword"
         },
         {
           "case": "rejects /delete-user/callback when the backing session was revoked",
-          "goTest": "TestCredsV1_DeleteUserCallbackRevokedSession"
+          "goTest": "TestAccount_DeleteUserCallbackRevokedSession"
         },
         {
           "case": "sets the password on the existing passwordless credential account",
-          "goTest": "TestCredsV1_SetPasswordOnPasswordlessAccount + CreatesMissingAccount (server-only SetPassword, no HTTP route upstream)"
+          "goTest": "TestSetPassword_SetPasswordOnPasswordlessAccount + CreatesMissingAccount (server-only SetPassword, no HTTP route upstream)"
         },
         {
           "case": "should propagate updates across sessions when secondaryStorage is enabled",
-          "goTest": "TestSecondaryV1_RefreshPropagatesAcrossSessions (helper; route wiring open)"
+          "goTest": "TestSecondaryFanout_RefreshPropagatesAcrossSessions (helper; route wiring open)"
         },
         {
           "case": "should not write to secondary storage multiple times for the same session token during updateUser",
-          "goTest": "TestSecondaryV1_RefreshWritesOncePerToken (helper; route wiring open)"
+          "goTest": "TestSecondaryFanout_RefreshWritesOncePerToken (helper; route wiring open)"
         },
         {
           "case": "should preserve the replacement session in secondary storage",
-          "goTest": "TestSecondaryV1_DeleteAllThenRecreateKeepsOnlyReplacement (helper; ChangePassword wiring open)"
+          "goTest": "TestSecondaryFanout_DeleteAllThenRecreateKeepsOnlyReplacement (helper; ChangePassword wiring open)"
         },
         {
           "case": "should update the user's password",
-          "goTest": "TestTriageV1_ChangePasswordSuccessRotatesCredentials"
+          "goTest": "TestCredentialTriage_ChangePasswordSuccessRotatesCredentials"
         },
         {
           "case": "should update account's updatedAt when changing password",
-          "goTest": "TestTriageV1_ChangePasswordBumpsAccountUpdatedAt"
+          "goTest": "TestCredentialTriage_ChangePasswordBumpsAccountUpdatedAt"
         },
         {
           "case": "should not delete user if deleteUser is disabled",
-          "goTest": "TestTriageV1_DeleteUserDisabledIs404"
+          "goTest": "TestCredentialTriage_DeleteUserDisabledIs404"
         },
         {
           "case": "should ignore cookie cache for sensitive operations like changePassword",
-          "goTest": "TestTriageV1_ChangePasswordIgnoresCookieCache"
+          "goTest": "TestCredentialTriage_ChangePasswordIgnoresCookieCache"
         },
         {
           "case": "should delete every session from deleted user (secondary-storage variant)",
@@ -1366,31 +1366,31 @@
         },
         {
           "case": "should exclude user fields with returned: false from cookie cache",
-          "goTest": "TestFilterV1_ExcludeSingleUserField + TestFilterV1_IssuanceLegFiltersReturnedFalse (issuance legs)"
+          "goTest": "TestOutputFilter_ExcludeSingleUserField + TestIssuanceFilter_IssuanceLegFiltersReturnedFalse (issuance legs)"
         },
         {
           "case": "should correctly filter multiple user fields based on returned config",
-          "goTest": "TestFilterV1_MultipleUserFields"
+          "goTest": "TestOutputFilter_MultipleUserFields"
         },
         {
           "case": "should reduce cookie size when large fields are excluded",
-          "goTest": "TestFilterV1_LargeFieldExcluded"
+          "goTest": "TestOutputFilter_LargeFieldExcluded"
         },
         {
           "case": "should maintain session field filtering (regression check)",
-          "goTest": "TestFilterV1_SessionFieldFiltering"
+          "goTest": "TestOutputFilter_SessionFieldFiltering"
         },
         {
           "case": "should include unknown user fields for backward compatibility",
-          "goTest": "TestFilterV1_UnknownFieldsKept"
+          "goTest": "TestOutputFilter_UnknownFieldsKept"
         },
         {
           "case": "should work with JWT strategy",
-          "goTest": "TestFilterV1_JWTStrategy (superset)"
+          "goTest": "TestOutputFilter_JWTStrategy (superset)"
         },
         {
           "case": "should work with compact strategy",
-          "goTest": "TestFilterV1_CompactStrategy (superset)"
+          "goTest": "TestOutputFilter_CompactStrategy (superset)"
         },
         {
           "case": "should reconstruct chunked cookies correctly",

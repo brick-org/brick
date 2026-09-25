@@ -32,7 +32,7 @@ import (
 // with the new secret verifies under the rotated set, and concurrent
 // refresh/verify traffic across the rotation is race-clean with exact
 // single-winner rotation semantics (no cross-secret confusion).
-func TestWave10_SessionRefreshRaceWithRotation(t *testing.T) {
+func TestSessionStress_SessionRefreshRaceWithRotation(t *testing.T) {
 	oldSecret, newSecret := "w10-old-secret", "w10-new-secret"
 	session := map[string]any{"id": "s1", "token": "tok-w10", "userId": "u1"}
 	user := map[string]any{"id": "u1", "email": "w10@example.com"}
