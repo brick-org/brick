@@ -529,6 +529,19 @@ func ChangeEmail(api huma.API, basePath string, opts types.Options) {
 			return nil, huma.Error400BadRequest("Verification email isn't enabled")
 		}
 
+		// Upstream originCheck guards the body callbackURL
+		// (origin-check.ts): an untrusted value fails with 403
+		// INVALID_CALLBACK_URL instead of being embedded in the mailed link.
+		if input.Body.CallbackURL != nil && *input.Body.CallbackURL != "" {
+			reqForTrust := StoredRequestFromStd(ctx)
+			if reqForTrust == nil {
+				reqForTrust = callbackRequest(ctx)
+			}
+			if !types.IsTrustedRedirect(*input.Body.CallbackURL, opts, reqForTrust) {
+				return nil, huma.NewError(types.StatusForCode(types.ErrInvalidCallbackURL), types.ErrInvalidCallbackURL)
+			}
+		}
+
 		existingUser, err := opts.DB.FindOne(ctx, "user", []types.Where{
 			{Field: "email", Value: newEmail},
 		}, nil)
@@ -699,6 +712,20 @@ func DeleteUser(api huma.API, basePath string, opts types.Options) {
 
 		userID, _ := sessionRow["userId"].(string)
 		currentUser := rowToUser(userRow, opts)
+		// Upstream originCheck guards the body callbackURL
+		// (origin-check.ts): an untrusted value fails with 403
+		// INVALID_CALLBACK_URL instead of being embedded in the mailed link.
+		// Checked before any token issuance or mail dispatch so the
+		// rejection is fail-closed with no side effects.
+		if input.Body.CallbackURL != nil && *input.Body.CallbackURL != "" {
+			reqForTrust := StoredRequestFromStd(ctx)
+			if reqForTrust == nil {
+				reqForTrust = callbackRequest(ctx)
+			}
+			if !types.IsTrustedRedirect(*input.Body.CallbackURL, opts, reqForTrust) {
+				return nil, huma.NewError(types.StatusForCode(types.ErrInvalidCallbackURL), types.ErrInvalidCallbackURL)
+			}
+		}
 		if input.Body.Password != nil {
 			accountRow, err := opts.DB.FindOne(ctx, "account", []types.Where{
 				{Field: "userId", Value: userID},

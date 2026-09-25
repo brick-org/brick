@@ -2,6 +2,7 @@ package routes
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
@@ -101,11 +102,26 @@ func RequestPasswordResetCallback(api huma.API, basePath string, opts types.Opti
 			ctx.SetStatus(http.StatusFound)
 		}
 
-		errorBase := defaultErrorURL
 		reqForTrust := StoredRequestFromStd(ctx.Context())
 		if reqForTrust == nil {
 			reqForTrust = RequestFromHuma(ctx)
 		}
+		// Upstream originCheck guards the query callbackURL
+		// (origin-check.ts, password.ts:162): an untrusted value fails with
+		// 403 INVALID_CALLBACK_URL instead of redirecting with INVALID_TOKEN.
+		if callbackURL != "" && !types.IsTrustedRedirect(callbackURL, opts, reqForTrust) {
+			payload, _ := json.Marshal(map[string]any{
+				"status": http.StatusForbidden,
+				"title":  http.StatusText(http.StatusForbidden),
+				"detail": types.ErrInvalidCallbackURL,
+			})
+			ctx.SetHeader("Content-Type", "application/json")
+			ctx.SetStatus(http.StatusForbidden)
+			_, _ = ctx.BodyWriter().Write(payload)
+			return
+		}
+
+		errorBase := defaultErrorURL
 		if callbackURL != "" && types.IsTrustedRedirect(callbackURL, opts, reqForTrust) {
 			errorBase = callbackURL
 		}
@@ -115,10 +131,6 @@ func RequestPasswordResetCallback(api huma.API, basePath string, opts types.Opti
 
 		if token == "" || callbackURL == "" {
 			redirectInvalid()
-			return
-		}
-		if !types.IsTrustedRedirect(callbackURL, opts, reqForTrust) {
-			redirect(appendRedirectQuery(defaultErrorURL, "error", "INVALID_TOKEN"))
 			return
 		}
 
