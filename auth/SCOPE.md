@@ -56,7 +56,7 @@ upstream Better Auth (TS) directly.
    review diffs on the ~10 core TS route files only.
 3. Parity v2 removed the archived reference docs (`TRANSPILER_PLAN.md`,
    `TRANSPILER_CANDIDATES.md`, `plan.md` Waves 5–10) and the `transpiler/`
-   generator itself. `src/utils/*.gen.go` are checked-in frozen artifacts.
+   generator itself. `src/utils/boolean.go`, `constants.go`, `hide-metadata.go` are checked-in frozen artifacts (renamed from `*.gen.go`; content untouched, do not hand-edit).
 4. `PARITY_V2.md` is the authoritative parity audit (old `PARITY.md`
    removed in v2). Its plugin/oauth-provider/social legs are excluded by
    this file; they describe code that does not exist in this tree.
@@ -96,7 +96,7 @@ into `password.go`, `session-extra.go` + `session-c701.go` merged into
 rate-limiter impl stays in parent `api` package (folding it into
 `api/rate-limiter/` would cycle `api`↔child), `crypto/symmetric.go` keeps its
 descriptive name instead of swapping with the package-doc `index.go`
-(TS barrel convention doesn't map to Go), frozen `*.gen.go` artifacts are kebab-renamed with content untouched.
+(TS barrel convention doesn't map to Go); the frozen utils artifacts are plain `*.go` names with untouched generated content (do not hand-edit).
 
 ## Explicit v1 exclusions within core files
 
