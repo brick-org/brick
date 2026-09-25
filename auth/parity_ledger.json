@@ -151,6 +151,10 @@
         {
           "case": "clears retired session_data when session_token is missing/invalid (incl. on auth failure)",
           "goTest": "TestF4_StaleCleanupOnFailure"
+        },
+        {
+          "case": "expired session_token cleared alongside session_data on failure",
+          "goTest": "TestG4_ExpiredTokenCleanupCookieOnFailure"
         }
       ],
       "notes": "Malformed-expiry fallthrough, disabled-cache cleanup, and retired-cleanup-on-failure covered; cross-subdomain migration, JWT/JWE-strategy fallback, and chunked re-issue legs open/excluded."
@@ -268,6 +272,10 @@
         {
           "case": "should sign after verification (session reuse on email match)",
           "goTest": "TestF6_AutoSignInReusesMatchingSession + TestF6_AutoSignInMintsOnMismatch (supplement)"
+        },
+        {
+          "case": "should sign after verification (updateTo-leg session reuse)",
+          "goTest": "TestG6_ChangeEmailVerificationReusesMatchingSession + MintsOnMismatch + LegacyReuses + MintsOnMismatch (supplement)"
         }
       ],
       "notes": "Auto-sign-in (+session reuse), expiresIn, hooks, encoding (incl. change-email resends), case-insensitivity covered; already-verified null-shape held by existing pin; body-consumption JS semantics excluded."
@@ -419,6 +427,10 @@
         {
           "case": "reset USER_NOT_FOUND is 400 (upstream password.ts:304)",
           "goTest": "TestF5_ResetUserNotFoundIsBadRequest"
+        },
+        {
+          "case": "should revoke other sessions when revokeSessionsOnPasswordReset is enabled (secondary purge)",
+          "goTest": "TestG5_ResetWithRevokePurgesSecondary + WithoutRevokeKeepsSessions (supplement)"
         }
       ],
       "notes": "Reset issuance/validation/expiry/revocation matrices covered; concurrent-reset race same mem-adapter note as delete."
@@ -645,6 +657,10 @@
         {
           "case": "should update the session every time when set to 0",
           "goTest": "TestF4_UpdateAgeTriState + TestF4_ExplicitZeroAlwaysRefresh (UpdateAge *int tri-state)"
+        },
+        {
+          "case": "shouldSkipSessionRefresh gates refresh paths",
+          "goTest": "TestG4_SkipGateSuppressesRefresh + TestG8_SkipGateSuppressesRefresh"
         }
       ],
       "notes": "Full 85-case triage done: 38 cited to pre-existing suites, 16 ported (triage_v1_session), 10 excluded (JWKS x5, plugin authority, returnHeaders, plugin-endpoint freshness, client-concurrency x2), 3 fail-closed deviations (null-shape), 1 accepted divergence (unknown-only update passes through). updateAge:0 closed via *int (F9); VersionFunc-500 held by existing fail-closed pin."
@@ -726,6 +742,10 @@
         {
           "case": "verification email sent when sendOnSignIn is enabled",
           "goTest": "TestF2_SignInSendOnSignInResends"
+        },
+        {
+          "case": "should accept form-urlencoded content type",
+          "goTest": "TestG2_SignInFormURLEncoded + FormValidationParity"
         }
       ],
       "notes": "Cookie header, resend on/off, format gate, Location header, lowercase storage covered; social-callback legs excluded. Origin/CSRF enforcement now wired (F10); TestOriginMiddleware_NoCookie* realigned to upstream validateFormCsrf."
@@ -894,6 +914,10 @@
         {
           "case": "should not send verification email when sendOnSignUp is false, even with requireEmailVerification",
           "goTest": "TestF1_SendOnSignUpExplicitFalse + TestF1_SendOnSignUpTrueSendsWithoutRequire (SendOnSignUp *bool tri-state)"
+        },
+        {
+          "case": "invalid body rejected incl. mistyped known fields (zod parity)",
+          "goTest": "TestG1_SignUpJSONMistypedRememberMeIsClientError + NameIsClientError + UnmarshalMistypedKnownKeysError (supplement)"
         }
       ],
       "notes": "Full triage done: validateUserInfo gates, hook skip legs, autoSignIn-false token-null/synthetic/hook, sendOnSignUp true/default/explicit-false (*bool), form-urlencoded bodies; CSRF/admin-synthetic legs excluded."
@@ -1040,6 +1064,10 @@
         {
           "case": "should revoke other sessions (replacement Set-Cookie)",
           "goTest": "TestF5_ChangePasswordRevokeEmitsSetCookie (supplement)"
+        },
+        {
+          "case": "should delete with verification flow and password (token-before-freshness ordering)",
+          "goTest": "TestG7_DeleteUserStaleSessionValidTokenDeletes + WithoutTokenExpired + InvalidTokenUnauthorized (supplement)"
         }
       ],
       "notes": "Change-password rotation (+replacement Set-Cookie), delete-disabled, cache-bypass, secondary purge on all delete paths covered; concurrent-delete race not deterministically pinnable on the mem adapter (DBs serialize)."
@@ -1351,6 +1379,10 @@
         {
           "case": "Expires=0 Invalid-Date + unknown-attr preservation + Max-Age=0 wire rendering",
           "goTest": "TestF8 ExpiresZeroIsInvalidDate + UnknownAttrsPreservedInParseMap + MaxAgeZeroWireRendering"
+        },
+        {
+          "case": "chunked session-data issuance on live paths (write side wired)",
+          "goTest": "TestG4_ChunkedIssuanceMultiCookieOnOversize + TestG8_OversizeIssuanceYieldsIndexedChunks + ShrinkExpiresStaleChunks"
         }
       ],
       "notes": "Chunked multi-cookie writes now wired (read+write); post-signature payload-schema validation wired (ledger note corrected); remaining deltas are pinned exclusions (JWKS/plugin signer, social legs) or minor wire notes."

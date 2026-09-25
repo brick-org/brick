@@ -17,7 +17,7 @@ or diverged something — the actionable list, consolidated in
 `## Later-work backlog`).
 
 Authoritative counts live in `parity_ledger.json` (ledger `AUTH-R5-01`):
-13 upstream test files, 495 cases, 205 covered entries, pending 0.
+13 upstream test files, 495 cases, 213 covered entries, pending 0.
 Runtime: pending expectation: the v1 closure converted every pending marker
 to an explicit exclusion; `pending.count` in the ledger is 0 and the drift
 gate (`src/parity_ledger_test.go`, `TestParityLedger_*`) enforces it.
@@ -40,19 +40,19 @@ Core route catalog (23, basePath-relative — all registered, see P09):
 | Upstream test file                         | Cases | Covered |
 | ------------------------------------------ | ----- | ------- |
 | `api/routes/account.test.ts`               | 53    | 2       |
-| `api/routes/cookie-cache-fallback.test.ts` | 11    | 3       |
-| `api/routes/email-verification.test.ts`    | 29    | 18      |
+| `api/routes/cookie-cache-fallback.test.ts` | 11    | 4       |
+| `api/routes/email-verification.test.ts`    | 29    | 19      |
 | `api/routes/error.test.ts`                 | 3     | 3       |
-| `api/routes/password.test.ts`              | 21    | 21      |
-| `api/routes/session-api.test.ts`           | 85    | 31      |
-| `api/routes/sign-in.test.ts`               | 30    | 9       |
+| `api/routes/password.test.ts`              | 21    | 22      |
+| `api/routes/session-api.test.ts`           | 85    | 32      |
+| `api/routes/sign-in.test.ts`               | 30    | 10      |
 | `api/routes/sign-out.test.ts`              | 10    | 2       |
-| `api/routes/sign-up.test.ts`               | 40    | 20      |
-| `api/routes/update-user.test.ts`           | 35    | 24      |
-| `cookies/cookies.test.ts`                  | 118   | 44      |
+| `api/routes/sign-up.test.ts`               | 40    | 21      |
+| `api/routes/update-user.test.ts`           | 35    | 25      |
+| `cookies/cookies.test.ts`                  | 118   | 45      |
 | `crypto/password.test.ts`                  | 14    | 13      |
 | `crypto/secret-rotation.test.ts`           | 46    | 15      |
-| Total (13 files)                           | 495   | 205     |
+| Total (13 files)                           | 495   | 213     |
 
 Disposition everywhere is `partial`. Intentional exclusions: all
 `src/plugins/*` (27 total), `packages/oauth-provider/src/*`,
@@ -289,42 +289,37 @@ flipped to closed; `PARITY_V2.md` counts coherent (pin, 23 routes, 13/495/
 
 ## Later-work backlog
 
-Second-pass status (2026-09-25): the 11-fixer batch closed its targets;
-this pass re-verified each closure and found batch-introduced regressions
-plus residual gaps. Pinned deviations (null-shape, 422-vs-400, IP/UA
-direct resolution, strict parsing) are NOT backlog — see `SCOPE.md`.
+Status after the G-fixer round (2026-09-25, one commit per fixer — G1, G2,
+G4–G8, G10, G11 in git log): all 6 second-pass regressions (R1–R6) and all
+10 gaps (G1–G10) are closed and pinned by new `g*_test.go` suites;
+`parity_ledger.json` covered entries went 205 → 213. Remaining work is held
+items and wiring follow-ups only. Pinned deviations (null-shape, 422-vs-400,
+IP/UA direct resolution, strict parsing) are NOT backlog — see `SCOPE.md`.
 Intentional exclusions (plugins/social/JWKS systems) are NOT backlog.
 
-REGRESSIONS to fix (batch-introduced, all have failing-first tests to write):
-- R1 dead `decodeSignUpForm` helper (sign-up.go:160-166, zero callers).
-- R2 reset revoke bypasses secondary storage (password.go:350-354 raw
-  `DeleteMany` vs aware version).
-- R3 delete-user freshness over-gates token path (account.go:721-723 before
-  consume at :725-737; upstream returns early before the freshAge gate).
-- R4 force/CSRF gate global on all 23 routes; upstream per-endpoint
-  (sign-in/sign-up `use:` only). Narrow to the two routes.
-- R5 POST verify synthetic-request shadowing (email-verification.go:259-270;
-  merge like GET at :353-358).
-- R6 two JWE stacks decrypt-policy drift (A256GCM truncation unconditional
-  in crypto/jwe.go:204-209 vs enc-gated in cookies/jwt.go:365-370).
-
-FEATURE-GAPs to fix:
-- G1 sign-up mistyped-field type errors (UnmarshalJSON drops vs 422).
-- G2 sign-in form bodies (no transcode middleware like sign-up).
-- G3 `EMAIL_PASSWORD_DISABLED` typed code.
-- G4 expired `session_token` clear on get-session failure.
-- G5 chunked-issuance wiring (`BuildChunkedCookies` into live paths) +
-  `ExpiredChunks` use + `Serialize` sizing + `shouldSkipSessionRefresh`
-  gating (or remove dead helpers if wiring is deferred).
-- G6 `updateTo` legs session reuse (residual of P07-GAP-3).
-- G7 `UpgradeHashIfNeeded` sign-in wiring (helper exists, zero callers).
-- G8 JWE `typ/cty` header drift (encode-identical to upstream).
-- G9 per-endpoint callbackURL skip adoption (minor).
-- G10 RefreshCache warn+disable wiring (carried over).
+Closed this round:
+- R1 dead helper + G1 mistyped-field errors (G1).
+- G2 sign-in form bodies, G3 disabled code, G7 rehash wiring (G2).
+- G4 expired-token clear, helper dedup, static chunked issuance, session.go
+  skip gates (G4).
+- R2 reset secondary-aware revoke (G5).
+- R5 POST merge + G6 updateTo reuse (G6).
+- R3 token-first freshness ordering (G7).
+- G5 c701 chunked issuance, ExpiredChunks use, Serialize sizing, c701 skip
+  gate (G8).
+- R4 force gate narrowed to login legs (G10).
+- R6 enc-gated keys + G8 header exactness (G11).
 
 Held (owner sign-off): null-shape, unknown-passthrough, already-verified
 shape, VersionFunc-500, race pins, production-bounce pointer,
 mergeErrorParams dup-keys, JWE `jti` shape (opaque, note only).
+
+Still open (unassigned this round):
+- G9 per-endpoint callbackURL/redirectTo skip adoption (handlers stay on
+  `IsTrustedRedirect`; minor).
+- RefreshCache construction wiring: `ResolveCookieRefreshCache` table exists
+  and refresh sites consult the flag, but nothing computes warn+disable from
+  config into `BetterAuth` construction yet.
 
 ## Wave-10 exclusion registry
 
@@ -396,7 +391,7 @@ plugins/social/oauth-provider describe code outside v1 scope (`SCOPE.md`).
 
 Self-contained definition of every `AUTH-*-ID` referenced in this file (the
 drift gate requires each referenced ID to be defined here):
-- `AUTH-R5-01`: the v1 parity ledger (`parity_ledger.json`) — 13 upstream test files, 495 cases, 205 covered, pending 0.
+- `AUTH-R5-01`: the v1 parity ledger (`parity_ledger.json`) — 13 upstream test files, 495 cases, 213 covered, pending 0.
 - `AUTH-R5-04`: testdata fixture provenance registry (`src/testdata/provenance.json`, `src/testdata/README.md`).
 - `AUTH-C7-01`: session/cookie-cache parity wave (cookie-cache issuance, fallback, secondary fan-out).
 - `AUTH-C7-02`: credential-routes parity wave (sign-up, sign-in, password, email-verification, account/update-user triage).
