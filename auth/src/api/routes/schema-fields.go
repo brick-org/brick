@@ -18,10 +18,12 @@ import (
 // extractAdditionalFields/filterSessionUpdateFields (session_extra.go) treat
 // a non-empty declared map as an allow-list over plugin-only fields. The
 // Full-suffixed helpers below process the FULL schema (core + plugin +
-// option additionalFields) with upstream input/output semantics, while
-// unioning — never intersecting — with legacy acceptance: fields unknown to
-// the full schema keep the legacy passthrough so migrating consumers never
-// newly reject previously accepted fields.
+// option additionalFields) with upstream input/output semantics. Output
+// helpers union — never intersect — with legacy acceptance: fields unknown
+// to the full schema keep the passthrough so migrating output consumers
+// never newly strip previously returned fields. The session-update input
+// filter instead drops unknown keys per upstream parseInputData, so
+// unknown-only bodies 400 ("No fields to update").
 
 // FieldParseError carries a Better Auth error code for input parsing
 // failures, mirroring the APIError codes thrown by upstream parseInputData:
@@ -214,12 +216,14 @@ func ExtractAdditionalFieldsFull(row map[string]any, fullFields map[string]types
 // filterSessionUpdateFields (session_extra.go): core session columns stay
 // unwritable; known full-schema fields get upstream update semantics
 // (input:false rejected when truthy via FIELD_NOT_ALLOWED, validator and
-// transform input hooks executed); fields unknown to the full schema keep
-// the legacy passthrough so previously accepted bodies are never newly
-// rejected. The returned map uses the body's original keys, except
-// physical/snake spellings of known fields, which are normalized to logical
-// names. Validators see the raw value; a validator rejection surfaces as
-// *FieldParseError with types.ErrValidationError.
+// transform input hooks executed); fields unknown to the full schema are
+// dropped, mirroring upstream parseInputData (db/schema.ts) which iterates
+// schema fields and never copies unknown data keys. Unknown-only bodies
+// therefore yield an empty map and 400 via sessionUpdateFields ("No fields
+// to update", update-session.ts:64-74). The returned map uses the body's
+// original keys, except physical/snake spellings of known fields, which are
+// normalized to logical names. Validators see the raw value; a validator
+// rejection surfaces as *FieldParseError with types.ErrValidationError.
 func FilterSessionUpdateFieldsFull(body map[string]any, fullFields map[string]types.FieldAttribute) (map[string]any, error) {
 	out := make(map[string]any, len(body))
 	for key, value := range body {
@@ -228,8 +232,9 @@ func FilterSessionUpdateFieldsFull(body map[string]any, fullFields map[string]ty
 		}
 		name, ok := CanonicalInputKey(key, fullFields)
 		if !ok {
-			// Legacy passthrough: never newly reject previously accepted fields.
-			out[key] = value
+			// Upstream parity (parseInputData): unknown data keys are
+			// ignored, never copied. Unknown-only bodies yield an empty
+			// map so sessionUpdateFields 400s ("No fields to update").
 			continue
 		}
 		field := fullFields[name]

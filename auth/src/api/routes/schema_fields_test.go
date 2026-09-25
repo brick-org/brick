@@ -194,13 +194,18 @@ func TestFilterSessionUpdateFieldsFull_SafeMigration(t *testing.T) {
 	if _, ok := got["secret"]; ok {
 		t.Fatalf("input:false must be dropped: %v", got)
 	}
-	// Undeclared fields keep legacy passthrough (never newly rejected).
+	// Undeclared fields are dropped per upstream parseInputData (unknown
+	// keys never copied); known fields still pass (unknown-only bodies 400
+	// at the route layer with "No fields to update").
 	got, err = FilterSessionUpdateFieldsFull(map[string]any{"brand_new_field": "v", "role": "r"}, fields)
 	if err != nil {
-		t.Fatalf("passthrough must succeed: %v", err)
+		t.Fatalf("filter must succeed: %v", err)
 	}
-	if got["brand_new_field"] != "v" || got["role"] != "r" {
-		t.Fatalf("fields must pass through: %v", got)
+	if _, ok := got["brand_new_field"]; ok {
+		t.Fatalf("unknown fields must be dropped (upstream): %v", got)
+	}
+	if got["role"] != "r" {
+		t.Fatalf("known fields must pass: %v", got)
 	}
 	// Core columns are never writable.
 	got, err = FilterSessionUpdateFieldsFull(map[string]any{"token": "x", "userId": "u"}, fields)

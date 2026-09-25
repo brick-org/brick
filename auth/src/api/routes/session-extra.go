@@ -175,22 +175,22 @@ type updateSessionOutput struct {
 }
 
 // sessionUpdateFields validates an update-session body against the full
-// session schema (union semantics), shared by the stateful and stateless
-// (DB-less) update paths below.
+// session schema (upstream update-session.ts:64-74,
+// session-api.test.ts:2509-2518): unknown keys are dropped by
+// FilterSessionUpdateFieldsFull per parseSessionInput, so unknown-only (and
+// empty/core-only) bodies 400 with "No fields to update". Declared
+// additionalFields still pass through.
 //
-// HELD (merge-owner sign-off; upstream update-session.ts:64-74 with test
-// session-api.test.ts:2509-2518 expects 400 for unknown-only bodies while Go
-// keeps the legacy union passthrough per the pinned SCOPE.md deviation):
-// unknown-only-update behavior is unchanged here.
+// B2 (upstream parity): unknown-only-update bodies 400; truly-unknown keys
+// never reach the store.
 func sessionUpdateFields(body map[string]any, opts types.Options) (map[string]any, error) {
 	if body == nil {
 		return nil, huma.NewError(types.StatusForCode(types.ErrBodyMustBeAnObject), types.ErrBodyMustBeAnObject)
 	}
-	// Full-schema update fields (union semantics): known fields get
-	// upstream update semantics (input:false rejection, validator and
-	// transform input hooks); fields unknown to the full schema keep
-	// the legacy passthrough so previously accepted bodies are never
-	// newly rejected.
+	// Full-schema update fields (upstream parseSessionInput): known fields
+	// get upstream update semantics (input:false rejection, validator and
+	// transform input hooks); unknown keys are dropped, so unknown-only
+	// bodies yield no fields and 400 below.
 	additionalFields, ferr := FilterSessionUpdateFieldsFull(body, fullSessionFields(opts))
 	if ferr != nil {
 		var parseErr *FieldParseError

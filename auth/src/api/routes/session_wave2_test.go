@@ -389,10 +389,10 @@ func TestListSessionsFreshness(t *testing.T) {
 }
 
 // TestUpdateSessionFullSchema pins the FullSchema migration for update fields
-// (union semantics, never newly rejecting previously accepted bodies):
-// validators/transforms execute, input:false rejects truthy values with
-// FIELD_NOT_ALLOWED, unknown fields still pass through, and snake spellings
-// normalize to logical names.
+// (upstream parseSessionInput semantics): validators/transforms execute,
+// input:false rejects truthy values with FIELD_NOT_ALLOWED, unknown fields
+// are dropped (unknown-only bodies 400), and snake spellings normalize to
+// logical names.
 func TestUpdateSessionFullSchema(t *testing.T) {
 	ctx := context.Background()
 
@@ -429,7 +429,7 @@ func TestUpdateSessionFullSchema(t *testing.T) {
 		_ = ctx
 	})
 
-	t.Run("transform executes and unknown fields pass through", func(t *testing.T) {
+	t.Run("transform executes and unknown fields are dropped", func(t *testing.T) {
 		db := newParityMemAdapter()
 		opts := sessionTestOptions(db)
 		opts.Session.Model.AdditionalFields = map[string]types.FieldAttribute{
@@ -453,11 +453,11 @@ func TestUpdateSessionFullSchema(t *testing.T) {
 		if stringField(row, "nick") != "BOB" {
 			t.Fatalf("transformed nick not stored: %+v", row)
 		}
-		// The route passes the unknown key through verbatim (union); the
-		// fake adapter normalizes physical spellings on write, so accept
-		// either key here.
-		if stringField(row, "brand_new_field", "brandNewField") != "kept" {
-			t.Fatalf("unknown field must pass through (union): %+v", row)
+		// Upstream parseInputData drops unknown keys: only the declared
+		// field reaches the store; the fake adapter normalizes physical
+		// spellings on write, so check both spellings for absence.
+		if stringField(row, "brand_new_field", "brandNewField") == "kept" {
+			t.Fatalf("unknown field must be dropped (upstream): %+v", row)
 		}
 	})
 

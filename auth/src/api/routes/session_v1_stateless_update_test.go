@@ -61,6 +61,11 @@ func statelessTestOptions() types.Options {
 
 func TestV1_DBlessUpdateSessionFromCookieCache(t *testing.T) {
 	opts := statelessTestOptions()
+	// Declared additional field so the update has a known updatable field
+	// (upstream drops truly-unknown keys; unknown-only bodies 400).
+	opts.Session.Model.AdditionalFields = map[string]types.FieldAttribute{
+		"theme": {},
+	}
 	session, user := statelessSessionFixture("tok-stateless")
 	header := mintStatelessHeader(t, opts, "tok-stateless", session, user)
 
