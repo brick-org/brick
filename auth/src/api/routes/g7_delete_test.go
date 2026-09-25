@@ -96,7 +96,9 @@ func TestG7_DeleteUserStaleSessionWithoutTokenExpired(t *testing.T) {
 	}
 }
 
-// Invalid delete token must still fail with 401 INVALID_TOKEN.
+// Invalid delete token must fail with 404 INVALID_TOKEN (upstream
+// deleteUserCallback throws NOT_FOUND on bad/owner-mismatch tokens,
+// update-user.ts:641-642; realigned from 401 by C5 for POST/GET consistency).
 func TestG7_DeleteUserInvalidTokenUnauthorized(t *testing.T) {
 	db := newParityMemAdapter()
 	opts := emailAuthTestOptions(db)
@@ -111,8 +113,8 @@ func TestG7_DeleteUserInvalidTokenUnauthorized(t *testing.T) {
 	resp := api.Post("/api/auth/delete-user", map[string]any{
 		"token": "g7-invalid-token-xyz",
 	}, "Cookie: "+cookie)
-	if resp.Code != 401 || !strings.Contains(resp.Body.String(), types.ErrInvalidToken) {
-		t.Fatalf("invalid token = %d, want 401 INVALID_TOKEN: %s", resp.Code, resp.Body.String())
+	if resp.Code != 404 || !strings.Contains(resp.Body.String(), types.ErrInvalidToken) {
+		t.Fatalf("invalid token = %d, want 404 INVALID_TOKEN: %s", resp.Code, resp.Body.String())
 	}
 	if row, _ := db.FindOne(context.Background(), "user", []types.Where{{Field: "email", Value: email}}, nil); row == nil {
 		t.Fatal("user must survive an invalid token")

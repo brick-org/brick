@@ -730,12 +730,12 @@ func DeleteUser(api huma.API, basePath string, opts types.Options) {
 			// for a wrong owner), then the account is deleted with hooks.
 			storedUserID, consumeErr := consumeDeleteAccountToken(ctx, opts, *input.Body.Token)
 			if consumeErr != nil || storedUserID != userID {
-				// Upstream INVALID_TOKEN resolves to 401 by majority (e.g. UNAUTHORIZED
-				// in sign-in.ts:293, account.ts:288, email-verification.ts:300). Note
-				// POST /delete-user with a token delegates to deleteUserCallback
-				// upstream, which throws NOT_FOUND (update-user.ts:641-642); Go
-				// validates inline, so the canonical status applies.
-				return nil, huma.NewError(types.StatusForCode(types.ErrInvalidToken), types.ErrInvalidToken)
+				// Upstream POST /delete-user with a token delegates to
+				// deleteUserCallback, which throws NOT_FOUND with INVALID_TOKEN
+				// on a bad or owner-mismatch token (update-user.ts:492-499,
+				// :641-642); the GET callback path already 404s. Mirror that
+				// 404 here even though StatusForCode maps INVALID_TOKEN to 401.
+				return nil, huma.Error404NotFound(types.ErrInvalidToken)
 			}
 			if err := finishDeleteUser(ctx, opts, userID, currentUser); err != nil {
 				// A hook-thrown APIError keeps its own status (upstream
