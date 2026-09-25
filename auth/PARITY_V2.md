@@ -17,7 +17,7 @@ or diverged something — the actionable list, consolidated in
 `## Later-work backlog`).
 
 Authoritative counts live in `parity_ledger.json` (ledger `AUTH-R5-01`):
-13 upstream test files, 495 cases, 213 covered entries, pending 0.
+13 upstream test files, 495 cases, 218 covered entries, pending 0.
 Runtime: pending expectation: the v1 closure converted every pending marker
 to an explicit exclusion; `pending.count` in the ledger is 0 and the drift
 gate (`src/parity_ledger_test.go`, `TestParityLedger_*`) enforces it.
@@ -35,24 +35,24 @@ Core route catalog (23, basePath-relative — all registered, see P09):
 ## Parity ledger (AUTH-R5-01)
 
 `parity_ledger.json` is authoritative for counts. Summary after the
-11-fixer batch (205 covered):
+held-items round (218 covered):
 
 | Upstream test file                         | Cases | Covered |
 | ------------------------------------------ | ----- | ------- |
 | `api/routes/account.test.ts`               | 53    | 2       |
 | `api/routes/cookie-cache-fallback.test.ts` | 11    | 4       |
-| `api/routes/email-verification.test.ts`    | 29    | 19      |
+| `api/routes/email-verification.test.ts`    | 29    | 20      |
 | `api/routes/error.test.ts`                 | 3     | 3       |
-| `api/routes/password.test.ts`              | 21    | 22      |
-| `api/routes/session-api.test.ts`           | 85    | 32      |
+| `api/routes/password.test.ts`              | 21    | 23      |
+| `api/routes/session-api.test.ts`           | 85    | 34      |
 | `api/routes/sign-in.test.ts`               | 30    | 10      |
 | `api/routes/sign-out.test.ts`              | 10    | 2       |
 | `api/routes/sign-up.test.ts`               | 40    | 21      |
-| `api/routes/update-user.test.ts`           | 35    | 25      |
+| `api/routes/update-user.test.ts`           | 35    | 26      |
 | `cookies/cookies.test.ts`                  | 118   | 45      |
 | `crypto/password.test.ts`                  | 14    | 13      |
 | `crypto/secret-rotation.test.ts`           | 46    | 15      |
-| Total (13 files)                           | 495   | 213     |
+| Total (13 files)                           | 495   | 218     |
 
 Disposition everywhere is `partial`. Intentional exclusions: all
 `src/plugins/*` (27 total), `packages/oauth-provider/src/*`,
@@ -310,16 +310,18 @@ Closed this round:
 - R4 force gate narrowed to login legs (G10).
 - R6 enc-gated keys + G8 header exactness (G11).
 
-Held (owner sign-off): null-shape, unknown-passthrough, already-verified
-shape, VersionFunc-500, race pins, production-bounce pointer,
-mergeErrorParams dup-keys, JWE `jti` shape (opaque, note only).
+Held items resolved (owner-directed upstream alignment, this round):
+null-shape 200-null + no-store (B14), unknown-only 400 (B2),
+already-verified null (B3), VersionFunc-500 (B14), race pin stable 26 runs
+(B5), bounce pointer + verbatim params (B67), POST-token 404 (C5).
+Caught by the round: 3 root revoke pins + 1 persistence pin realigned to
+the new behavior (minimal assertion updates, intent preserved).
 
 Still open (unassigned this round):
 - G9 per-endpoint callbackURL/redirectTo skip adoption (handlers stay on
   `IsTrustedRedirect`; minor).
-- RefreshCache construction wiring: `ResolveCookieRefreshCache` table exists
-  and refresh sites consult the flag, but nothing computes warn+disable from
-  config into `BetterAuth` construction yet.
+- RefreshCache construction wiring: RESOLVED by A2 (warn+disable at
+  construction) — pin `TestG10_RefreshCacheConstruction_*`.
 
 ## Wave-10 exclusion registry
 
@@ -391,7 +393,7 @@ plugins/social/oauth-provider describe code outside v1 scope (`SCOPE.md`).
 
 Self-contained definition of every `AUTH-*-ID` referenced in this file (the
 drift gate requires each referenced ID to be defined here):
-- `AUTH-R5-01`: the v1 parity ledger (`parity_ledger.json`) — 13 upstream test files, 495 cases, 213 covered, pending 0.
+- `AUTH-R5-01`: the v1 parity ledger (`parity_ledger.json`) — 13 upstream test files, 495 cases, 218 covered, pending 0.
 - `AUTH-R5-04`: testdata fixture provenance registry (`src/testdata/provenance.json`, `src/testdata/README.md`).
 - `AUTH-C7-01`: session/cookie-cache parity wave (cookie-cache issuance, fallback, secondary fan-out).
 - `AUTH-C7-02`: credential-routes parity wave (sign-up, sign-in, password, email-verification, account/update-user triage).

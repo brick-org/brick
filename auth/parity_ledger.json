@@ -276,6 +276,10 @@
         {
           "case": "should sign after verification (updateTo-leg session reuse)",
           "goTest": "TestG6_ChangeEmailVerificationReusesMatchingSession + MintsOnMismatch + LegacyReuses + MintsOnMismatch (supplement)"
+        },
+        {
+          "case": "already-verified answers {status:true,user:null} (GET+POST, redirect unchanged)",
+          "goTest": "TestB3_AlreadyVerified* (process/post/get/redirect/fresh)"
         }
       ],
       "notes": "Auto-sign-in (+session reuse), expiresIn, hooks, encoding (incl. change-email resends), case-insensitivity covered; already-verified null-shape held by existing pin; body-consumption JS semantics excluded."
@@ -431,6 +435,10 @@
         {
           "case": "should revoke other sessions when revokeSessionsOnPasswordReset is enabled (secondary purge)",
           "goTest": "TestG5_ResetWithRevokePurgesSecondary + WithoutRevokeKeepsSessions (supplement)"
+        },
+        {
+          "case": "should reject a concurrent reset using the same token",
+          "goTest": "TestB5_ConcurrentSameTokenResetPin (8 racers 1x200+7x400, -race green)"
         }
       ],
       "notes": "Reset issuance/validation/expiry/revocation matrices covered; concurrent-reset race same mem-adapter note as delete."
@@ -661,6 +669,14 @@
         {
           "case": "shouldSkipSessionRefresh gates refresh paths",
           "goTest": "TestG4_SkipGateSuppressesRefresh + TestG8_SkipGateSuppressesRefresh"
+        },
+        {
+          "case": "should return null when not authenticated (200 null + no-store)",
+          "goTest": "TestB14_* (missing/unknown/expired/deferred 200-null suite)"
+        },
+        {
+          "case": "updateSession unknown-only bodies 400 (parseSessionInput parity)",
+          "goTest": "TestB2_UpdateSessionUnknownOnly400 + DeclaredAdditionalPasses"
         }
       ],
       "notes": "Full 85-case triage done: 38 cited to pre-existing suites, 16 ported (triage_v1_session), 10 excluded (JWKS x5, plugin authority, returnHeaders, plugin-endpoint freshness, client-concurrency x2), 3 fail-closed deviations (null-shape), 1 accepted divergence (unknown-only update passes through). updateAge:0 closed via *int (F9); VersionFunc-500 held by existing fail-closed pin."
@@ -1068,6 +1084,10 @@
         {
           "case": "should delete with verification flow and password (token-before-freshness ordering)",
           "goTest": "TestG7_DeleteUserStaleSessionValidTokenDeletes + WithoutTokenExpired + InvalidTokenUnauthorized (supplement)"
+        },
+        {
+          "case": "delete-user invalid/wrong-owner token 404 (callback parity on POST path)",
+          "goTest": "TestC5_DeleteUserInvalidTokenNotFound + WrongOwnerBurnsToken"
         }
       ],
       "notes": "Change-password rotation (+replacement Set-Cookie), delete-disabled, cache-bypass, secondary purge on all delete paths covered; concurrent-delete race not deterministically pinnable on the mem adapter (DBs serialize)."
