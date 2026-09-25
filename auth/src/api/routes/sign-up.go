@@ -311,8 +311,19 @@ func SignUpEmail(api huma.API, basePath string, opts types.Options) {
 	// transcodes form bodies to JSON (runtime); the OpenAPI stays JSON-shaped.
 	op.Middlewares = append(op.Middlewares, signUpFormMiddleware(api))
 	registerAuthOperation(api, op, opts, func(ctx context.Context, input *signUpInput) (*signUpOutput, error) {
+		// Upstream global middleware validates callbackURL before the handler
+		// (origin-check.ts:89-151): an untrusted value 403s INVALID_CALLBACK_URL.
+		if input.Body.CallbackURL != nil && *input.Body.CallbackURL != "" {
+			reqForTrust := StoredRequestFromStd(ctx)
+			if reqForTrust == nil {
+				reqForTrust = callbackRequest(ctx)
+			}
+			if !types.IsTrustedRedirect(*input.Body.CallbackURL, opts, reqForTrust) {
+				return nil, huma.NewError(types.StatusForCode(types.ErrInvalidCallbackURL), types.ErrInvalidCallbackURL)
+			}
+		}
 		if !opts.EmailAndPassword.Enabled || opts.EmailAndPassword.DisableSignUp {
-			return nil, huma.Error400BadRequest("email/password sign-up is not enabled")
+			return nil, huma.NewError(http.StatusBadRequest, "EMAIL_PASSWORD_SIGN_UP_DISABLED: Email and password sign up is not enabled")
 		}
 
 		if len(input.Body.Password) < passwordMinLength(opts) {
@@ -408,7 +419,7 @@ func SignUpEmail(api huma.API, basePath string, opts types.Options) {
 							CreatedAt:     now,
 							UpdatedAt:     now,
 						},
-						AdditionalFields: additional,
+						AdditionalFields: filterSyntheticAdditional(opts, additional),
 					})
 				} else {
 					for k, v := range additional {
@@ -459,7 +470,7 @@ func SignUpEmail(api huma.API, basePath string, opts types.Options) {
 							CreatedAt:     now,
 							UpdatedAt:     now,
 						},
-						AdditionalFields: additional,
+						AdditionalFields: filterSyntheticAdditional(opts, additional),
 					})
 				} else {
 					for k, v := range additional {
@@ -544,20 +555,25 @@ func SignUpEmail(api huma.API, basePath string, opts types.Options) {
 		}
 
 		shouldSendVerificationEmail := types.ResolveSendOnSignUp(opts.EmailVerification.SendOnSignUp, opts.EmailAndPassword.RequireEmailVerification)
-		if shouldSendVerificationEmail && (opts.EmailVerification.SendVerificationEmail != nil || opts.EmailVerification.SendVerificationEmailRequest != nil) {
+		if shouldSendVerificationEmail {
 			// Issuance is the upstream HS256 email JWT
 			// (createEmailVerificationToken, email-verification.ts:17-43).
+			// Minted even when no sender is configured (upstream
+			// sign-up.ts:395-407 mints before the sender check); delivery
+			// below is sender-gated.
 			token, err := crypto.CreateEmailVerificationToken(opts.CurrentSecret(), email, "", emailVerificationExpirySeconds(opts), nil)
 			if err != nil {
 				return nil, huma.Error500InternalServerError("failed to generate verification token")
 			}
 			url := fmt.Sprintf("%s/verify-email?token=%s&callbackURL=%s", opts.BasePath, token, url.QueryEscape(verificationCallbackURL(input.Body.CallbackURL)))
-			user := rowToUser(userRow, opts)
-			// Upstream awaits via runInBackgroundOrAwait (sign-up.ts:408-417):
-			// delivery failures are logged and swallowed, the route still
-			// answers success. Prefer the request-aware variant when set.
-			wctx := requestContextForCallbacks(ctx)
-			sendVerificationEmailWithRequest(wctx, opts, types.VerificationEmailData{User: &user, URL: url, Token: token})
+			if opts.EmailVerification.SendVerificationEmail != nil || opts.EmailVerification.SendVerificationEmailRequest != nil {
+				user := rowToUser(userRow, opts)
+				// Upstream awaits via runInBackgroundOrAwait (sign-up.ts:408-417):
+				// delivery failures are logged and swallowed, the route still
+				// answers success. Prefer the request-aware variant when set.
+				wctx := requestContextForCallbacks(ctx)
+				sendVerificationEmailWithRequest(wctx, opts, types.VerificationEmailData{User: &user, URL: url, Token: token})
+			}
 		}
 
 		if shouldSkipAutoSignIn {
@@ -638,6 +654,26 @@ func verificationCallbackURL(callbackURL *string) string {
 		return *callbackURL
 	}
 	return "/"
+}
+
+// filterSyntheticAdditional forwards only user-defined additionalFields keys
+// to customSyntheticUser (upstream sign-up.ts:271-280 extracts
+// `Object.keys(options.user?.additionalFields ?? {})`, excluding plugin
+// fields). The full parsed `additional` map (user + plugin fields) stays for
+// persistence and the default synthetic merge; only the custom-synthesizer
+// input is scoped.
+func filterSyntheticAdditional(opts types.Options, additional map[string]any) map[string]any {
+	allowed := opts.User.Model.AdditionalFields
+	if len(allowed) == 0 {
+		return map[string]any{}
+	}
+	out := make(map[string]any, len(allowed))
+	for key := range allowed {
+		if value, ok := additional[key]; ok {
+			out[key] = value
+		}
+	}
+	return out
 }
 
 // normalizeCreateFields bridges the option-field required default to

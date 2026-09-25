@@ -243,6 +243,18 @@ func SignInEmail(api huma.API, basePath string, opts types.Options) {
 	// JSON-shaped.
 	op.Middlewares = append(op.Middlewares, signInFormMiddleware(api))
 	registerAuthOperation(api, op, opts, func(ctx context.Context, input *signInInput) (*signInOutput, error) {
+		// Upstream global middleware validates callbackURL before the handler
+		// (origin-check.ts:89-151): an untrusted value 403s INVALID_CALLBACK_URL.
+		// The Location-drop below stays as hardening for the trusted decision.
+		if input.Body.CallbackURL != nil && *input.Body.CallbackURL != "" {
+			reqForTrust := StoredRequestFromStd(ctx)
+			if reqForTrust == nil {
+				reqForTrust = callbackRequest(ctx)
+			}
+			if !types.IsTrustedRedirect(*input.Body.CallbackURL, opts, reqForTrust) {
+				return nil, huma.NewError(types.StatusForCode(types.ErrInvalidCallbackURL), types.ErrInvalidCallbackURL)
+			}
+		}
 		if !opts.EmailAndPassword.Enabled {
 			// Upstream sign-in.ts:512-520 throws BAD_REQUEST with code
 			// EMAIL_PASSWORD_DISABLED and message "Email and password is

@@ -91,26 +91,17 @@ func TestF2_SignInCallbackURLSetsLocationHeader(t *testing.T) {
 		t.Fatalf("Location = %q, want /dashboard", loc)
 	}
 
-	// Untrusted absolute URL: body pair kept, no Location header.
+	// Untrusted absolute URL: 403 INVALID_CALLBACK_URL (upstream global
+	// middleware; realigned from embed-and-continue by F7a for 100% parity).
 	bogus := api.Post("/api/auth/sign-in/email", map[string]any{
 		"email": "f2-location@test.com", "password": "password123",
 		"callbackURL": "https://evil.example.com/cb",
 	})
-	if bogus.Code != 200 {
-		t.Fatalf("untrusted sign-in = %d: %s", bogus.Code, bogus.Body.String())
+	if bogus.Code != 403 {
+		t.Fatalf("untrusted sign-in = %d, want 403: %s", bogus.Code, bogus.Body.String())
 	}
-	var bogusBody struct {
-		Redirect bool    `json:"redirect"`
-		URL      *string `json:"url"`
-	}
-	if err := json.Unmarshal(bogus.Body.Bytes(), &bogusBody); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if !bogusBody.Redirect || bogusBody.URL == nil || *bogusBody.URL != "https://evil.example.com/cb" {
-		t.Fatalf("untrusted body pair must survive, got %+v", bogusBody)
-	}
-	if loc := bogus.Header().Get("Location"); loc != "" {
-		t.Fatalf("untrusted Location = %q, want empty (no open redirect)", loc)
+	if !strings.Contains(bogus.Body.String(), types.ErrInvalidCallbackURL) {
+		t.Fatalf("untrusted body must carry INVALID_CALLBACK_URL, got %s", bogus.Body.String())
 	}
 }
 
