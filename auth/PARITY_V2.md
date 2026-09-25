@@ -640,7 +640,7 @@ plugins/social/oauth-provider describe code outside v1 scope (`SCOPE.md`).
 
 Self-contained definition of every `AUTH-*-ID` referenced in this file (the
 drift gate requires each referenced ID to be defined here):
-- `AUTH-R5-01`: the v1 parity ledger (`parity_ledger.json`) — 13 upstream test files, 495 cases, 188 covered, pending 0.
+- `AUTH-R5-01`: the v1 parity ledger (`parity_ledger.json`) — 13 upstream test files, 495 cases, 205 covered, pending 0.
 - `AUTH-C7-01`: session/cookie-cache parity wave (cookie-cache issuance, fallback, secondary fan-out).
 - `AUTH-C7-02`: credential-routes parity wave (sign-up, sign-in, password, email-verification, account/update-user triage).
 - `AUTH-C7-04`: error-page parity wave (XSS sanitization ported, full snapshot open).

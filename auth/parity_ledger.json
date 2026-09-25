@@ -411,6 +411,14 @@
         {
           "case": "should not revoke other sessions by default",
           "goTest": "TestTriageV1_ResetKeepsSessionsByDefault"
+        },
+        {
+          "case": "should reject untrusted redirectTo (RESET_PASSWORD_DISABLED shape)",
+          "goTest": "TestF5_RequestResetDisabledUpstreamCode (supplement)"
+        },
+        {
+          "case": "reset USER_NOT_FOUND is 400 (upstream password.ts:304)",
+          "goTest": "TestF5_ResetUserNotFoundIsBadRequest"
         }
       ],
       "notes": "Reset issuance/validation/expiry/revocation matrices covered; concurrent-reset race same mem-adapter note as delete."
@@ -1424,14 +1432,6 @@
         {
           "case": "should verify old hash with very long password",
           "goTest": "TestV1_PasswordEmptyAndVeryLong (very-long leg)"
-        },
-        {
-          "case": "should reject untrusted redirectTo (RESET_PASSWORD_DISABLED shape)",
-          "goTest": "TestF5_RequestResetDisabledUpstreamCode (supplement)"
-        },
-        {
-          "case": "reset USER_NOT_FOUND is 400 (upstream password.ts:304)",
-          "goTest": "TestF5_ResetUserNotFoundIsBadRequest"
         }
       ],
       "notes": "Reset issuance/validation/expiry/revocation matrices covered; revoke emits replacement Set-Cookie; concurrent-reset race same mem-adapter note as delete."

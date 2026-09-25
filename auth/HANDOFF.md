@@ -49,3 +49,24 @@ Pinned upstream: Better Auth v1.7.5 @ `5468e6bf`. Scope: `SCOPE.md`
 - `go test -race` full module takes ~3 min (routes ~2 min).
 - Commit style: conventional (`feat/fix/docs(auth): …`) — releases are
   automated from it.
+
+## Addendum 2026-09-25 (post-handoff batch)
+
+- Parity recreated as `PARITY_V2.md` (12 read-only parts, Wave-10 registry
+  carried over); drift gate repointed to it with a self-contained ID
+  registry. `PARITY.md`, `plan.md`, `TRANSPILER_*` docs and `transpiler/`
+  removed; `src/utils/*.gen.go` are checked-in frozen artifacts, fixtures
+  relocated to `src/testdata/`.
+- Ledger: **205 covered entries** (was 188). `types/` explicitly UNFROZEN by
+  owner for `SendOnSignUp *bool` / `UpdateAge *int` tri-states.
+- 11 fixers (F1–F11, one commit each, all-at-once off `4a2ffb2` in isolated
+  worktrees, central merge): closed form bodies, sign-in gates, error
+  snapshot, updateAge tri-state, cache cleanup, password/account gaps,
+  verify resends, secondary purge, chunked writes, origin/rate-limit infra,
+  JWE vectors. Held by existing-test pins: null-shape, unknown-passthrough,
+  already-verified shape, VersionFunc-500, race pins. Owner-directed:
+  cookie-less untrusted-Origin now 403 (upstream validateFormCsrf);
+  deviations/exclusions otherwise fixed per directive.
+- Constraint update: read-only reviewers fan out freely; code-writing fixers
+  stay isolated (worktree + disjoint files + central merge) — all-at-once
+  worked under those rules where shared-tree concurrency failed before.
