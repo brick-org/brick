@@ -1336,9 +1336,6 @@ func unsafeBanner(unsafeChanges []string) string {
 // deferred CREATE INDEX units for plain and multi-column unique indexes
 // (single-column unique fields ride inline like upstream col.unique()).
 // idKind selects the id flavor ("string", "uuid", "serial").
-//
-// Upstream references: getMigrations/getSchema/getType (get-migration.ts),
-// resolveDatabaseSchemaIndexes (database-index.ts).
 func BuildMigrationPlan(schema auth.PluginSchema, cfg auth.AdapterConfig, dialect Dialect, idKind string) (*MigrationPlan, error) {
 	if err := auth.ValidateSchemaIndexes(schema, cfg); err != nil {
 		return nil, err

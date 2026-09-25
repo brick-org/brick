@@ -9,20 +9,15 @@ import (
 	"time"
 )
 
-// File boundary: auth/src/db/with-hooks.go, mirroring the upstream
-// src/db/with-hooks.ts boundary.
+// File boundary: auth/src/db/with-hooks.go (upstream src/db/with-hooks.ts).
 //
 // Content note: this file carries the generic transaction-result helper
 // (upstream transaction callback return). The hooked write operations
 // (upstream getWithHooks) live in the auth root hooked_adapter.go and stay
-// with the coordinator's hooked_adapter.go split task;
-// see SOURCE_LAYOUT_MOVE_LIST.md.
+// with the coordinator's hooked_adapter.go split task.
 //
 // TransactionResult runs fn inside adapter.Transaction and returns its value,
 // porting upstream's generic transaction callback
-// (vendor/.../core/src/db/adapter/index.ts:506-509,
-// vendor/.../core/src/db/adapter/factory.ts:46-48:
-// transaction: <R>(callback: (trx) => Promise<R>) => Promise<R>).
 //
 // When the store has no real transaction implementation the adapter runs the
 // callback directly against itself (sequential fallback, mirroring upstream's
@@ -58,10 +53,6 @@ func TransactionResult[R any](ctx context.Context, adapter Adapter, fn func(tx A
 // this deterministic PK: the INSERT is the first-writer-wins gate and a
 // duplicate is detected portably by re-reading the row (see
 // ReserveVerificationValue).
-//
-// Upstream TypeScript name: the reservationId computation inside
-// reserveVerificationValue (base64Url.encode(SHA-256("reserve:"+identifier)),
-// padding false).
 func VerificationReservationID(identifier string) string {
 	sum := sha256.Sum256([]byte("reserve:" + identifier))
 	return base64.RawURLEncoding.EncodeToString(sum[:])
@@ -91,8 +82,6 @@ func VerificationReservationID(identifier string) string {
 // Secondary-storage-only verification cannot enforce the deterministic-PK
 // gate (upstream throws there); callers keep that fail-closed check — this
 // helper is the database path only.
-//
-// Upstream TypeScript name: reserveVerificationValue.
 func ReserveVerificationValue(ctx context.Context, adapter Adapter, identifier, storedIdentifier, value string, expiresAt time.Time) (bool, error) {
 	reservationID := VerificationReservationID(identifier)
 	now := time.Now().UTC()
@@ -131,9 +120,6 @@ var ErrConsumeOneUnsupported = errors.New("db: adapter does not support atomic C
 // delete (the id-only guard, matching the snapshot-guard fallback). Any
 // other ConsumeOne error propagates without a fallback delete. A row without
 // an id fails closed (no delete) since the fallback cannot pin it.
-//
-// Upstream TypeScript name: none (Go-only wiring helper; upstream calls
-// consumeOne directly).
 func ConsumeOneWithFallback(ctx context.Context, adapter Adapter, model string, where []Where) (map[string]any, error) {
 	row, err := adapter.ConsumeOne(ctx, model, where)
 	if err == nil {

@@ -6,21 +6,9 @@ import (
 	"sync"
 )
 
-// File boundary: auth/src/db/get-schema.go, mirroring the upstream
-// src/db/get-schema.ts boundary.
+// File boundary: auth/src/db/get-schema.go (upstream src/db/get-schema.ts).
 //
-// Content note: this file ports the schema-check runtime
-// (vendor/better-auth/packages/core/src/db/schema-check.ts: createSchemaCheck
-// and friends). The table-shape getSchema parity (upstream get-schema.ts)
-// lives in the auth root schema.go and stays with the coordinator's
-// schema.go split task; see SOURCE_LAYOUT_MOVE_LIST.md.
-//
-// Runtime schema-check services, porting
-// vendor/better-auth/packages/core/src/db/schema-check.ts (Better Auth
-// v1.7.5, commit 5468e6bf).
-//
-// Upstream TypeScript names are noted per symbol; Go-only adaptations (channel
-// promises instead of JS promises) are marked as such.
+// Runtime schema-check services (upstream schema-check.ts).
 
 // SchemaSource names the store a schema comparison ran against.
 type SchemaSource string
@@ -81,16 +69,12 @@ var (
 // ChecksSchema reports whether the adapter validates its schema, mirroring
 // upstream checksSchema: enabled in every environment unless explicitly
 // disabled.
-//
-// Upstream TypeScript name: checksSchema.
 func ChecksSchema(validate *bool) bool {
 	return validate == nil || *validate
 }
 
 // InvalidateSchemaChecks bumps the schema revision for database so its checks
 // re-run, mirroring upstream invalidateSchemaChecks.
-//
-// Upstream TypeScript name: invalidateSchemaChecks.
 func InvalidateSchemaChecks(database any) {
 	if database == nil {
 		return
@@ -104,8 +88,6 @@ func InvalidateSchemaChecks(database any) {
 
 // RegisterSchemaCheck attaches a check to the adapter it verifies, mirroring
 // upstream registerSchemaCheck (the adapter object itself is left untouched).
-//
-// Upstream TypeScript name: registerSchemaCheck.
 func RegisterSchemaCheck(adapter any, check SchemaCheck) {
 	if adapter == nil || check == nil {
 		return
@@ -117,8 +99,6 @@ func RegisterSchemaCheck(adapter any, check SchemaCheck) {
 
 // SchemaCheckFor returns the check registered for adapter, if its store is
 // checked at all.
-//
-// Upstream TypeScript name: schemaCheckFor.
 func SchemaCheckFor(adapter any) SchemaCheck {
 	if adapter == nil {
 		return nil
@@ -135,8 +115,6 @@ func SchemaCheckFor(adapter any) SchemaCheck {
 // rethrown on every later call without asking the store again; pending
 // callers follow the new check if their revision is invalidated; a failure to
 // reach the store (error or panic) is not kept, so the next call asks again.
-//
-// Upstream TypeScript name: createSchemaCheck.
 func CreateSchemaCheck(find func() ([]SchemaFinding, error), source SchemaSource, database ...any) SchemaCheck {
 	var rev *int
 	if len(database) > 0 && database[0] != nil {

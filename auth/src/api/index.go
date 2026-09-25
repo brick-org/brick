@@ -28,7 +28,7 @@ import (
 // and the named-endpoint map form).
 func Router(adapter huma.Adapter, basePath string, opts types.Options) huma.API {
 	// Trailing-slash variants mirror upstream's skipTrailingSlashes router
-	// normalization (vendor/.../src/api/index.ts:296): when set, every
+	// normalization (upstream/src/api/index.ts:296): when set, every
 	// registered route also serves its slash suffixed spelling. The
 	// duplicating adapter below keeps this central so core routes (owned by
 	// sibling packages), custom OAuth callback mounts, and plugin endpoints
@@ -47,14 +47,14 @@ func Router(adapter huma.Adapter, basePath string, opts types.Options) huma.API 
 	}
 
 	// Endpoint-conflict parity (mirrors checkEndpointConflicts in
-	// vendor/.../src/api/index.ts:58-171): plugin endpoint paths sharing a
+	// upstream/src/api/index.ts:58-171): plugin endpoint paths sharing a
 	// method log an error diagnostic (level-gated, quiet by default).
 	// BetterAuth-constructed instances reach this through their Router call;
 	// direct Router callers are covered too.
 	checkEndpointConflicts(opts)
 
 	// Origin-check middleware — mirrors better-auth's CSRF/origin protection
-	// (vendor/.../src/api/middlewares/origin-check.ts: validateOrigin +
+	// (upstream/src/api/middlewares/origin-check.ts: validateOrigin +
 	// validateFormCsrf). Mutating requests (everything but GET/OPTIONS/HEAD
 	// per upstream origin-check.ts:69-76) that carry browser evidence — an
 	// Origin (or Referer fallback) AND a Cookie header — must come from a
@@ -172,12 +172,11 @@ func Router(adapter huma.Adapter, basePath string, opts types.Options) huma.API 
 	}
 
 	// Schema-check gate (mirrors the checkSchema await at the top of
-	// upstream's router onRequest, vendor/.../src/api/index.ts:305-306, and
+	// upstream's router onRequest, upstream/src/api/index.ts:305-306, and
 	// toAuthEndpoints, to-auth-endpoints.ts:94-95). BetterAuth attaches the
 	// validator as opts.SchemaCheck (nil when Advanced.Database.ValidateSchema
 	// is explicitly false or for direct Router callers); when present it runs
 	// before rate limiting and request hooks, failing closed with a 500.
-	// Upstream TypeScript name: checkSchema.
 	if opts.SchemaCheck != nil {
 		check := opts.SchemaCheck
 		api.UseMiddleware(func(ctx huma.Context, next func(huma.Context)) {
@@ -680,7 +679,7 @@ func (c *capturedContext) ApplyHTTPResponse(resp *http.Response) {
 
 func (c *capturedContext) Flush() {
 	// Header merge semantics mirror upstream mergeResponseHeaders
-	// (vendor/.../src/api/dispatch.ts:86-100): `set-cookie` appends
+	// (upstream/src/api/dispatch.ts:86-100): `set-cookie` appends
 	// (multiple cookies are legal) while every other header replaces.
 	// Flushing with Append for all names would duplicate a header the
 	// handler (or an OnResponse hook) intentionally overwrote.
@@ -1023,7 +1022,7 @@ func normalizeDisabledPath(path string) string {
 // apiLogf reports a framework parity note via Options.Logger when logging is
 // configured, enabled, and the level passes the configured minimum
 // (types.ShouldPublishLog, default "warn" — mirroring upstream createLogger
-// level filtering in vendor/.../core/src/env/logger.ts:106-112). It stays
+// level filtering in upstream/core/src/env/logger.ts:106-112). It stays
 // quiet otherwise, preserving the historical quiet default (mirrors
 // secretWarnf/loggerFromOptions gating in package auth). Level follows the
 // upstream logger levels ("debug", "info", "warn", "error"); "success" is
@@ -1046,7 +1045,7 @@ func apiLogf(opts types.Options, level, format string, args ...any) {
 
 // ExpandDynamicBaseURLOrigins expands a DynamicBaseURLConfig into the static
 // trusted-origin patterns upstream derives from it in getTrustedOrigins
-// (vendor/.../src/context/helpers.ts:108-160):
+// (upstream/src/context/helpers.ts:108-160):
 //
 //   - every allowedHosts entry that already contains "://" is kept as-is;
 //   - a bare hostname gains "https://<host>" unless Protocol is "http", and
@@ -1063,9 +1062,6 @@ func apiLogf(opts types.Options, level, format string, args ...any) {
 // allowed hosts; originTrustedForRequest re-derives it per request so direct
 // Router callers are covered too. Static BaseURL behavior is unchanged when
 // DynamicBaseURL is nil (returns nil).
-//
-// Upstream TypeScript names: getTrustedOrigins (dynamic branch),
-// matchesHostPattern (allowlist check), getOrigin (fallback origin).
 func ExpandDynamicBaseURLOrigins(cfg *types.DynamicBaseURLConfig) []string {
 	if cfg == nil {
 		return nil
@@ -1149,8 +1145,8 @@ func originTrustedForRequest(origin string, opts types.Options, r *http.Request)
 
 // skipOriginCheckPathsProvider is an optional plugin capability mirroring
 // upstream's ctx.skipOriginCheck string[] branch
-// (vendor/.../src/api/middlewares/origin-check.ts:26-50, populated upstream
-// by SSO plugin init at vendor/.../packages/sso/src/index.ts:315): plugins
+// (upstream/src/api/middlewares/origin-check.ts:26-50, populated upstream
+// by SSO plugin init at upstream/packages/sso/src/index.ts:315): plugins
 // that need unauthenticated cross-site callbacks (SAML/OIDC reply URLs)
 // contribute the base-path-relative paths exempted from origin + CSRF
 // validation. It is discovered via type assertion alongside the legacy
@@ -1180,7 +1176,7 @@ func collectSkipOriginCheckPaths(opts types.Options) []string {
 
 // requestSchemeForOrigin derives the request-target scheme for null-Origin
 // inference (upstream getBaseURL/getOrigin over the request URL,
-// vendor/.../src/utils/url.ts:142-205): the trusted X-Forwarded-Proto value
+// upstream/src/utils/url.ts:142-205): the trusted X-Forwarded-Proto value
 // when TrustedProxyHeaders opts in (upstream only honors forwarded headers
 // then), https for TLS requests, http otherwise.
 func requestSchemeForOrigin(ctx huma.Context, opts types.Options) string {
@@ -1214,7 +1210,7 @@ func writeOriginRejection(ctx huma.Context, detail string) {
 
 // isLoopbackHost reports whether hostport is a loopback host for developer
 // ergonomics, mirroring upstream isLoopbackHost
-// (vendor/.../core/src/utils/host.ts:390-393): IPv4 127.0.0.0/8, IPv6 ::1
+// (upstream/core/src/utils/host.ts:390-393): IPv4 127.0.0.0/8, IPv6 ::1
 // (including IPv4-mapped forms), the literal "localhost", and RFC 6761
 // ".localhost" subdomains. Accepts bare hosts, hosts with ports, and
 // bracketed IPv6.
@@ -1289,7 +1285,7 @@ func middlewareRateLimitPath(requestPath, basePath string, opts types.Options) s
 
 // RequestClientIP resolves the client IP for a huma request with
 // trusted-proxy awareness, mirroring upstream getIP/getIPFromHeader
-// (vendor/.../core/src/utils/ip.ts:293-385):
+// (upstream/core/src/utils/ip.ts:293-385):
 //
 //   - Advanced.IPAddress.DisableIPTracking returns "" (caller skips
 //     limiting), mirroring upstream's null.
@@ -1316,8 +1312,6 @@ func middlewareRateLimitPath(requestPath, basePath string, opts types.Options) s
 // NOTE: plugin rate-limit rule matching (resolvePluginRateLimit in
 // rate_limiter.go) still resolves via requestIP; proxy-aware IP applies to
 // the global rate-limit middleware selected here.
-//
-// Upstream TypeScript names: getIP, getIPFromHeader, normalizeIP.
 func RequestClientIP(ctx huma.Context, opts types.Options) string {
 	if len(opts.Advanced.IPAddress.TrustedProxies) == 0 && opts.Advanced.IPAddress.IPv6Subnet == 0 {
 		return requestIP(ctx, opts)
@@ -1448,7 +1442,7 @@ func parseTrustedProxies(entries []string) []netip.Prefix {
 // FindInvalidTrustedProxies reports entries that are neither a valid IP
 // address nor a valid IP/prefix CIDR range (IPv4 or IPv6), mirroring
 // upstream findInvalidTrustedProxies
-// (vendor/.../core/src/utils/ip.ts:283-285). BetterAuth warns about the
+// (upstream/core/src/utils/ip.ts:283-285). BetterAuth warns about the
 // returned entries at construction and the resolver ignores them. Empty
 // entries are invalid (mirroring upstream, which only filters falsy values
 // downstream, not here).
@@ -1624,7 +1618,7 @@ func rateLimitNeedsCustomMiddleware(opts types.Options) bool {
 // enforcement primitive differ.
 //
 // Enforcement per backend, mirroring upstream onRequestRateLimit's
-// single-step consume (vendor/.../src/api/rate-limiter/index.ts:418-437):
+// single-step consume (upstream/src/api/rate-limiter/index.ts:418-437):
 //
 //   - custom: one CustomStorage.Consume call in the request phase (no
 //     response-phase write-back, so concurrent requests cannot pass a stale
@@ -1791,7 +1785,7 @@ func retryAfterOrWindow(retryAfter *int, window time.Duration) int {
 // --- Request state (upstream request-state.ts) ---
 //
 // Upstream keeps per-request state in an AsyncLocalStorage WeakMap
-// (vendor/.../core/src/context/request-state.ts) so endpoint code can share
+// (upstream/core/src/context/request-state.ts) so endpoint code can share
 // values across the hook/handler pipeline without threading arguments. Go
 // has no goroutine-local storage; the faithful equivalent here is explicit
 // context propagation: the lifecycle middleware installs a fresh map per
@@ -1799,9 +1793,6 @@ func retryAfterOrWindow(retryAfter *int, window time.Duration) int {
 // handlers reach it via GetRequestState. The map itself is not synchronized:
 // handlers must not share it across goroutines without their own locking,
 // mirroring the single-request ownership upstream.
-//
-// Upstream TypeScript names: requestStateAsyncStorage (storage),
-// runWithRequestState (installation), getCurrentRequestState (lookup).
 
 // RequestBaseURLKey stores the per-request resolved dynamic baseURL (when
 // Options.DynamicBaseURL is configured) in the request-state map. Route URL
@@ -1858,7 +1849,7 @@ func isSetCookieHeader(name string) bool {
 
 // applyTSResponseHeaders copies TypeScript-faithful route-hook response
 // headers onto the Huma context with upstream mergeResponseHeaders semantics
-// (vendor/.../src/api/dispatch.ts:86-100): `set-cookie` appends (multiple
+// (upstream/src/api/dispatch.ts:86-100): `set-cookie` appends (multiple
 // cookies are legal) while every other header replaces. Nil contexts and
 // empty maps are no-ops.
 func applyTSResponseHeaders(ctx huma.Context, headers http.Header) {
@@ -1887,7 +1878,7 @@ func applyTSResponseHeaders(ctx huma.Context, headers http.Header) {
 // slashVariantAdapter wraps a huma.Adapter so every Handle registration also
 // serves its trailing-slash spelling when Advanced.SkipTrailingSlashes is
 // set, mirroring upstream's skipTrailingSlashes router normalization
-// (vendor/.../src/api/index.ts:296). better-call normalizes the pathname
+// (upstream/src/api/index.ts:296). better-call normalizes the pathname
 // before routing so one endpoint serves both spellings; Huma matches
 // registered paths exactly, so the Go port registers both spellings with the
 // same handler. Variant operations get a suffixed OperationID so OpenAPI
@@ -1931,7 +1922,7 @@ func (a *slashVariantAdapter) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 // EndpointConflict describes one path shared by multiple plugin endpoints
 // with overlapping HTTP methods, mirroring the conflict entries upstream
 // collects in checkEndpointConflicts
-// (vendor/.../src/api/index.ts:58-171).
+// (upstream/src/api/index.ts:58-171).
 type EndpointConflict struct {
 	// Path is the conflicting full endpoint path (basePath-joined).
 	Path string
@@ -2079,7 +2070,7 @@ func endpointMethods(method string) []string {
 // ResolveDynamicBaseURLForRequest resolves the full baseURL
 // (origin + basePath) for the incoming request under a dynamic
 // (allowedHosts) configuration, mirroring upstream resolveDynamicBaseURL
-// (vendor/.../src/utils/url.ts:398-438):
+// (upstream/src/utils/url.ts:398-438):
 //
 //   - the host comes from x-forwarded-host only when
 //     Advanced.TrustedProxyHeaders opts in, else the Host header, else the
@@ -2097,9 +2088,6 @@ func endpointMethods(method string) []string {
 // resolve. Static configurations never call this (the middleware only calls
 // it to stash the value for future handler adoption; trust decisions keep
 // using the ExpandDynamicBaseURLOrigins expansion).
-//
-// Upstream TypeScript names: resolveDynamicBaseURL, getHostFromSource,
-// getProtocolFromSource.
 func ResolveDynamicBaseURLForRequest(r *http.Request, opts types.Options) (string, error) {
 	cfg := opts.DynamicBaseURL
 	if cfg == nil {

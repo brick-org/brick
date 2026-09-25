@@ -16,9 +16,6 @@ import (
 )
 
 // Update-user family (upstream api/routes/update-user.ts: UpdateUser,
-// ChangeEmail, DeleteUser; DeleteUserCallback lives in
-// delete-user-callback.go, ChangePassword in password.go). Split out of
-// account.go for 1:1 file structure (B8). Same package, no behavior change.
 
 type updateUserBody struct {
 	Name  *string        `json:"name,omitempty"`
@@ -27,15 +24,11 @@ type updateUserBody struct {
 	// it is declared only to detect and reject the field.
 	Email *string `json:"email,omitempty"`
 	// Extra carries additional user fields (upstream parseUserInput
-	// "update"): unknown top-level keys are parsed against the full user
 	// schema instead of being dropped. See UnmarshalJSON/MarshalJSON.
 	Extra map[string]any `json:"-"`
 }
 
 // UnmarshalJSON captures known fields plus any additional user fields into
-// Extra, mirroring upstream's `{name, image, ...rest}` split
-// (update-user.ts:104-110). Unknown keys are preserved verbatim for
-// ParseUserInputFull.
 func (b *updateUserBody) UnmarshalJSON(data []byte) error {
 	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -71,7 +64,6 @@ func (b *updateUserBody) UnmarshalJSON(data []byte) error {
 		delete(raw, "email")
 	}
 	// callbackURL-style and other known non-user keys are never user fields;
-	// everything else is a candidate additional field.
 	if len(raw) > 0 {
 		b.Extra = raw
 	}
@@ -79,7 +71,6 @@ func (b *updateUserBody) UnmarshalJSON(data []byte) error {
 }
 
 // MarshalJSON round-trips known fields plus Extra so test clients encoding
-// this body preserve additional fields.
 func (b updateUserBody) MarshalJSON() ([]byte, error) {
 	out := map[string]any{}
 	if b.Extra != nil {
@@ -100,9 +91,6 @@ func (b updateUserBody) MarshalJSON() ([]byte, error) {
 }
 
 // TransformSchema permits additional properties on the update-user body,
-// mirroring upstream's `{name, image, ...rest}` split (update-user.ts:104-110):
-// unknown top-level keys are additional user fields for parseUserInput, not
-// validation failures. Without it huma rejects additional-field updates with
 // 422 before the handler runs.
 func (b updateUserBody) TransformSchema(r huma.Registry, s *huma.Schema) *huma.Schema {
 	s.AdditionalProperties = true
@@ -166,8 +154,6 @@ func UpdateUser(api huma.API, basePath string, opts types.Options) {
 			return nil, huma.NewError(types.StatusForCode(types.ErrFailedToGetSession), types.ErrFailedToGetSession)
 		}
 
-		// Upstream rejects email updates here (update-user.ts:98-103); the
-		// dedicated change-email flow owns address changes.
 		if input.Body.Email != nil {
 			return nil, huma.NewError(types.StatusForCode(types.ErrEmailCanNotBeUpdated), types.ErrEmailCanNotBeUpdated)
 		}
@@ -177,7 +163,6 @@ func UpdateUser(api huma.API, basePath string, opts types.Options) {
 			update["name"] = *input.Body.Name
 		}
 		// Explicit null unsets the image (upstream update-user.test.ts
-		// "should unset image"); an absent field keeps it.
 		if input.Body.Image.Set {
 			if input.Body.Image.Value != nil {
 				update["image"] = *input.Body.Image.Value
@@ -186,15 +171,11 @@ func UpdateUser(api huma.API, basePath string, opts types.Options) {
 			}
 		}
 		// Additional user fields (upstream parseUserInput "update",
-		// update-user.ts:106-110): validated/transformed against the full
-		// schema; unknown keys pass through via the Full union.
 		if len(input.Body.Extra) > 0 {
 			additional, perr := ParseUserInputFull(input.Body.Extra, FullUserFields(opts), "update")
 			if perr != nil {
 				if fp, ok := perr.(*FieldParseError); ok {
 					// The message carries the upstream detail (e.g.
-					// "newField is not allowed to be set"), mirroring the
-					// APIError message the TS client surfaces.
 					return nil, huma.NewError(types.StatusForCode(fp.Code), fp.Message)
 				}
 				return nil, huma.Error400BadRequest(perr.Error())
@@ -215,11 +196,8 @@ func UpdateUser(api huma.API, basePath string, opts types.Options) {
 		}
 
 		// Secondary-storage fan-out (upstream refreshUserSessions,
-		// internal-adapter.ts:108-137): rewrite the cached user on every
 		// live session after the commit. A failing mirror fails loudly
-		// with the surrounding update convention, mirroring the
 		// writeSecondarySession failures on the issuance paths (never
-		// swallowed).
 		if err := refreshSecondaryUserSessions(opts, rowToUser(updatedUserRow, opts)); err != nil {
 			return nil, huma.NewError(types.StatusForCode(types.ErrFailedToUpdateUser), types.ErrFailedToUpdateUser)
 		}
@@ -274,7 +252,6 @@ func ChangeEmail(api huma.API, basePath string, opts types.Options) {
 
 		canUpdateWithoutVerification := !currentUser.EmailVerified && opts.User.ChangeEmail.UpdateEmailWithoutVerification
 		canSendVerification := opts.EmailVerification.SendVerificationEmail != nil || opts.EmailVerification.SendVerificationEmailRequest != nil
-		// The confirmation leg depends on the verification leg (confirming
 		// mints a change-email-verification send), so it additionally
 		// requires the verification sender (upstream update-user.ts:750-752).
 		canSendConfirmation := canSendVerification && currentUser.EmailVerified && (opts.User.ChangeEmail.SendChangeEmailConfirmation != nil || opts.User.ChangeEmail.SendChangeEmailConfirmationRequest != nil)
@@ -301,9 +278,7 @@ func ChangeEmail(api huma.API, basePath string, opts types.Options) {
 		if existingUser != nil {
 			// Simulate token generation to prevent timing attacks
 			// (upstream update-user.ts:769-774 signs a verification JWT
-			// for the existing address before answering success).
 			_, _ = crypto.CreateEmailVerificationToken(opts.CurrentSecret(), currentUser.Email, newEmail, emailVerificationExpirySeconds(opts), nil)
-			// Upstream update-user.ts:776 logs the existing-email attempt at
 			// info while still answering success below.
 			Logf(opts, "info", "Change email attempt for existing email")
 			out := &changeEmailOutput{}
@@ -341,21 +316,16 @@ func ChangeEmail(api huma.API, basePath string, opts types.Options) {
 				return nil, huma.NewError(types.StatusForCode(types.ErrFailedToUpdateUser), types.ErrFailedToUpdateUser)
 			}
 			currentUser.Email = newEmail
-			// Upstream refreshes the session cookie with the new email
-			// (update-user.ts:789-795).
 			if updatedRow != nil {
 				if cookiesOut, cookieErr := newSessionCookies(opts, input.CookieRequestHeaders, token, rowToSession(sessionRow, opts), rowToUser(updatedRow, opts), opts.Session, time.Now().UTC()); cookieErr == nil {
 					out.SetCookie = cookiesOut
 				}
-				// Fan out to secondary sessions like UpdateUser post-commit
-				// (upstream updateUser -> refreshUserSessions).
 				if serr := refreshSecondaryUserSessions(opts, rowToUser(updatedRow, opts)); serr != nil {
 					return nil, huma.NewError(types.StatusForCode(types.ErrFailedToUpdateUser), types.ErrFailedToUpdateUser)
 				}
 			}
 			if canSendVerification {
 				// Issuance is the upstream HS256 email JWT
-				// (createEmailVerificationToken, email-verification.ts:17-43).
 				verificationToken, tokenErr := crypto.CreateEmailVerificationToken(opts.CurrentSecret(), newEmail, "", emailVerificationExpirySeconds(opts), nil)
 				if tokenErr != nil {
 					return nil, huma.NewError(types.StatusForCode(types.ErrFailedToCreateVerification), types.ErrFailedToCreateVerification)
@@ -372,15 +342,11 @@ func ChangeEmail(api huma.API, basePath string, opts types.Options) {
 
 		if canSendConfirmation {
 			// Stateless upstream issuance: HS256 JWT with updateTo=newEmail
-			// plus requestType=change-email-confirmation
-			// (update-user.ts:832-840). Stateful rows remain readable in
-			// verify-email as a bounded legacy bridge.
 			confirmationToken, createErr := crypto.CreateEmailVerificationToken(opts.CurrentSecret(), currentUser.Email, newEmail, emailVerificationExpirySeconds(opts), map[string]any{"requestType": "change-email-confirmation"})
 			if createErr != nil {
 				return nil, huma.NewError(types.StatusForCode(types.ErrFailedToCreateVerification), types.ErrFailedToCreateVerification)
 			}
 			// Delivery failures never fail the route: upstream awaits via
-			// runInBackgroundOrAwait, which logs and continues.
 			sendChangeEmailConfirmationMail(requestContextForCallbacks(ctx), opts, types.ChangeEmailData{
 				User:     &currentUser,
 				NewEmail: newEmail,
@@ -392,7 +358,6 @@ func ChangeEmail(api huma.API, basePath string, opts types.Options) {
 		}
 
 		// Stateless upstream issuance with
-		// requestType=change-email-verification (update-user.ts:869-877).
 		verificationToken, createErr := crypto.CreateEmailVerificationToken(opts.CurrentSecret(), currentUser.Email, newEmail, emailVerificationExpirySeconds(opts), map[string]any{"requestType": "change-email-verification"})
 		if createErr != nil {
 			return nil, huma.NewError(types.StatusForCode(types.ErrFailedToCreateVerification), types.ErrFailedToCreateVerification)
@@ -480,7 +445,6 @@ func DeleteUser(api huma.API, basePath string, opts types.Options) {
 			}, nil)
 			if err != nil || accountRow == nil {
 				// Upstream throws BAD_REQUEST for a missing credential account
-				// (update-user.ts:271-274 set-password, :478-481 delete-user);
 				// StatusForCode pins 400.
 				return nil, huma.NewError(types.StatusForCode(types.ErrCredentialAccountNotFound), types.ErrCredentialAccountNotFound)
 			}
@@ -495,16 +459,10 @@ func DeleteUser(api huma.API, basePath string, opts types.Options) {
 		}
 
 		if input.Body.Token != nil {
-			// Upstream token path returns early (update-user.ts:492-504)
-			// before the freshAge gate (:539-545): a valid token deletes
 			// even on a stale session, so no freshness check applies here.
-			// The non-token path enforces freshness via the gate below.
-			// Upstream delegates to deleteUserCallback (update-user.ts:492-503):
 			// the single-use token is consumed atomically first (burned even
-			// for a wrong owner), then the account is deleted with hooks.
 			storedUserID, consumeErr := consumeDeleteAccountToken(ctx, opts, *input.Body.Token)
 			if consumeErr != nil || storedUserID != userID {
-				// Upstream POST /delete-user with a token delegates to
 				// deleteUserCallback, which throws NOT_FOUND with INVALID_TOKEN
 				// on a bad or owner-mismatch token (update-user.ts:492-499,
 				// :641-642); the GET callback path already 404s. Mirror that
@@ -514,8 +472,6 @@ func DeleteUser(api huma.API, basePath string, opts types.Options) {
 			if err := finishDeleteUser(ctx, opts, userID, currentUser); err != nil {
 				// A hook-thrown APIError keeps its own status (upstream
 				// beforeDelete/afterDelete are awaited directly, so a thrown
-				// status propagates); hook errors arrive unwrapped through
-				// runBeforeDeleteHook/runAfterDeleteHook/finishDeleteUser.
 				var httpErr types.HttpError
 				if errors.As(err, &httpErr) {
 					return nil, huma.NewError(httpErr.Status, httpErr.Code)
@@ -541,7 +497,6 @@ func DeleteUser(api huma.API, basePath string, opts types.Options) {
 				callbackURL = *input.Body.CallbackURL
 			}
 			// Delivery failures never fail the route: upstream awaits via
-			// runInBackgroundOrAwait, which logs and continues.
 			sendDeleteAccountVerificationMail(ctx, opts, types.DeleteAccountVerificationData{
 				User:  &currentUser,
 				URL:   basePath + "/delete-user/callback?token=" + deleteToken + "&callbackURL=" + url.QueryEscape(callbackURL),
@@ -562,7 +517,6 @@ func DeleteUser(api huma.API, basePath string, opts types.Options) {
 		}
 
 		if err := finishDeleteUser(ctx, opts, userID, currentUser); err != nil {
-			// A hook-thrown APIError keeps its own status (see the token
 			// path above); non-APIError delete failures stay 500.
 			var httpErr types.HttpError
 			if errors.As(err, &httpErr) {
@@ -590,9 +544,7 @@ type changeEmailVerificationPayload struct {
 func createChangeEmailVerification(ctx context.Context, opts types.Options, currentEmail, newEmail, requestType string, ttl time.Duration) (string, error) {
 	now := time.Now().UTC()
 	// The token is randomness (upstream change-email tokens are stateless
-	// JWTs; the Go stateful row keeps a random token too); only the row ID
 	// honors the context generator (upstream createVerificationValue flows
-	// through the adapter defaultValue honoring generateId).
 	token := crypto.GenerateID()
 	payload, err := json.Marshal(changeEmailVerificationPayload{
 		CurrentEmail: strings.ToLower(currentEmail),
@@ -617,9 +569,7 @@ func createChangeEmailVerification(ctx context.Context, opts types.Options, curr
 	}
 	setRowID(row, verificationID, verificationHasID)
 	// Mirror upstream createVerificationValue (executeMainFn:
-	// storeInDatabase): secondary storage leads and the database row is
 	// written only with Verification.StoreInDatabase (or when no secondary
-	// backend exists).
 	if opts.SecondaryStorage != nil {
 		if err := writeSecondaryVerification(opts, identifier, row); err != nil {
 			return "", err
@@ -655,9 +605,7 @@ func createDeleteAccountVerification(ctx context.Context, opts types.Options, us
 	}
 	setRowID(row, verificationID, verificationHasID)
 	// Mirror upstream createVerificationValue (executeMainFn:
-	// storeInDatabase): secondary storage leads and the database row is
 	// written only with Verification.StoreInDatabase (or when no secondary
-	// backend exists).
 	if opts.SecondaryStorage != nil {
 		if err := writeSecondaryVerification(opts, identifier, row); err != nil {
 			return "", err
@@ -676,7 +624,6 @@ var errDeleteTokenNotFound = errors.New("delete token not found")
 // consumeDeleteAccountToken atomically consumes the single-use delete-account
 // verification row for token across both stores, mirroring upstream
 // consumeVerificationValue: the first concurrent caller wins and every racer
-// gets an error; a wrong-owner token is still burned. It returns the stored
 // userID on success (callers still check ownership).
 func consumeDeleteAccountToken(ctx context.Context, opts types.Options, token string) (string, error) {
 	identifier := deleteAccountIdentifier(token)
@@ -710,8 +657,6 @@ func consumeDeleteAccountToken(ctx context.Context, opts types.Options, token st
 		}
 		// Atomic consume via the adapter race gate
 		// (db.ConsumeOneWithFallback): the first concurrent caller wins and
-		// every racer gets an error; a wrong-owner token is still burned
-		// (ownership is checked by the caller after this returns).
 		candidates := verificationCandidates(option, identifier, stored)
 		var row map[string]any
 		for _, candidate := range candidates {
@@ -729,8 +674,6 @@ func consumeDeleteAccountToken(ctx context.Context, opts types.Options, token st
 		if row == nil {
 			return "", errDeleteTokenNotFound
 		}
-		// Defensively remove the sibling key (at most one location ever
-		// holds the row; the consumed row is already burned).
 		for _, candidate := range candidates {
 			_ = opts.DB.Delete(ctx, "verification", []types.Where{
 				{Field: "identifier", Value: candidate},
@@ -754,13 +697,7 @@ func consumeDeleteAccountToken(ctx context.Context, opts types.Options, token st
 	return userID, nil
 }
 
-// finishDeleteUser runs the shared delete-user tail used by POST /delete-user
-// (direct and token paths) and GET /delete-user/callback: beforeDelete hooks
-// (request-aware), the transactional record delete, the secondary-storage
-// session purge, then afterDelete hooks (request-aware). Cleanup ordering
-// mirrors upstream deleteUserCallback (update-user.ts:644-657): hooks bracket
 // the user/session/account deletes. Upstream runs those deletes as sequential
-// awaits with no rollback; Go keeps the historical transactional delete as
 // intentional hardening (all-or-nothing instead of partial state on mid-flow
 // failure).
 func finishDeleteUser(ctx context.Context, opts types.Options, userID string, user types.User) error {
@@ -770,12 +707,7 @@ func finishDeleteUser(ctx context.Context, opts types.Options, userID string, us
 	if err := deleteUserRecords(ctx, opts.DB, userID); err != nil {
 		return err
 	}
-	// Secondary-storage fan-out (P08-G2; upstream deleteUserSessions):
 	// the transactional delete above purges only DB rows, so without this
-	// the active-sessions-* index + per-token entries survive deletion.
-	// Mirrors the deleteSecondaryAwareUserSessions call in ChangePassword
-	// (password.go); guarded on a configured backend so the DB-only path is
-	// a single transaction with no extra round-trip.
 	if opts.SecondaryStorage != nil {
 		if err := deleteSecondaryAwareUserSessions(ctx, opts, userID); err != nil {
 			return err
@@ -818,13 +750,11 @@ func changeEmailIdentifier(token string) string {
 	return "change-email:" + token
 }
 
-// deleteAccountIdentifier names the delete-account verification identifier.
 // Upstream TypeScript value: `delete-account-${token}` (update-user.ts).
 func deleteAccountIdentifier(token string) string {
 	return "delete-account-" + token
 }
 
-// --- change-password ---
 
 type changePasswordInput struct {
 	Authorization string `header:"Authorization"`
@@ -834,8 +764,6 @@ type changePasswordInput struct {
 		CurrentPassword string `json:"currentPassword" required:"true"`
 		NewPassword     string `json:"newPassword" required:"true"`
 		// RevokeOtherSessions mirrors upstream's revokeOtherSessions
-		// (update-user.ts:169-175): when true, all sessions for the user are
-		// deleted and a fresh session is minted, its token returned.
 		RevokeOtherSessions *bool `json:"revokeOtherSessions,omitempty"`
 	}
 }
@@ -877,7 +805,6 @@ func ChangePassword(api huma.API, basePath string, opts types.Options) {
 		userID, _ := sessionRow["userId"].(string)
 
 		// Upstream validates the new password length before touching the
-		// credential account (update-user.ts:254-264).
 		if len(input.Body.NewPassword) < passwordMinLength(opts) {
 			return nil, huma.NewError(types.StatusForCode(types.ErrPasswordTooShort), types.ErrPasswordTooShort)
 		}
@@ -891,14 +818,11 @@ func ChangePassword(api huma.API, basePath string, opts types.Options) {
 		}, nil)
 		if err != nil || accountRow == nil {
 			// Upstream throws BAD_REQUEST for a missing credential account
-			// (update-user.ts:271-274 set-password, :478-481 delete-user);
 			// StatusForCode pins 400.
 			return nil, huma.NewError(types.StatusForCode(types.ErrCredentialAccountNotFound), types.ErrCredentialAccountNotFound)
 		}
 
-		// Upstream hashes the new password before verifying the current one
 		// (update-user.ts:276-283): a hashing failure breaks before any
-		// comparison.
 		hash, err := hashPassword(opts, input.Body.NewPassword)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("failed to hash password")
@@ -927,16 +851,8 @@ func ChangePassword(api huma.API, basePath string, opts types.Options) {
 
 		out := &changePasswordOutput{}
 		out.Body.Status = true
-		// revokeOtherSessions (update-user.ts:288-305): delete all sessions,
-		// mint a fresh one, and return its token plus the user. The Status
 		// field stays true so existing clients keep working.
-		// Non-revoke (update-user.ts:287,304,307-310): token null plus the
-		// user; Status stays true as a compat field.
 		if input.Body.RevokeOtherSessions != nil && *input.Body.RevokeOtherSessions {
-			// Secondary-aware bulk revoke (upstream deleteUserSessions,
-			// update-user.ts:289): cache entries go first per the flag
-			// matrix so secondary copies don't survive; without a
-			// secondary backend this is exactly the DeleteMany below.
 			if err := deleteSecondaryAwareUserSessions(ctx, opts, userID); err != nil {
 				return nil, huma.Error500InternalServerError("failed to revoke sessions")
 			}
@@ -956,12 +872,10 @@ func ChangePassword(api huma.API, basePath string, opts types.Options) {
 			if serr := writeSecondarySession(opts, session, user); serr != nil {
 				return nil, huma.NewError(types.StatusForCode(types.ErrFailedToCreateSession), types.ErrFailedToCreateSession)
 			}
-			// Upstream setSessionCookie(newSession) (update-user.ts:300-303):
 			// cookie-only clients need the replacement session cookie, not
 			// just the in-body token. A mint failure fails the route 500
 			// (FAILED_TO_CREATE_SESSION, canonical 500); the already-minted
 			// session row is kept (upstream create-then-cookie order, no
-			// rollback).
 			cookiesOut, cookieErr := newSessionCookies(opts, input.CookieRequestHeaders, newToken, session, user, opts.Session, now)
 			if cookieErr != nil {
 				return nil, huma.NewError(types.StatusForCode(types.ErrFailedToCreateSession), types.ErrFailedToCreateSession)

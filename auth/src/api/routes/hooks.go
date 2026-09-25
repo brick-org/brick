@@ -29,15 +29,7 @@ func APIErrorHandled(ctx huma.Context) bool {
 }
 
 // NewPluginHookContext builds a TypeScript-faithful route-hook context
-// (types.PluginHookContext, mirroring upstream's HookEndpointContext in
-// vendor/better-auth/packages/core/src/types/plugin.ts) from an HTTP
-// request and the resolved auth context. Method and Path default to the
-// request's values when empty; Headers aliases the request headers.
 // ResponseHeaders must be non-nil when after-hooks mutate response headers
-// (a nil map is replaced with an empty one); Returned carries the
-// endpoint's returned value for after hooks (upstream context.returned).
-// A nil request leaves Request/Headers unset, mirroring upstream hooks
-// invoked without one.
 func NewPluginHookContext(r *http.Request, authCtx types.AuthContext, returned any, responseHeaders http.Header) types.PluginHookContext {
 	out := types.PluginHookContext{
 		Request:         r,
@@ -61,11 +53,6 @@ func NewPluginHookContext(r *http.Request, authCtx types.AuthContext, returned a
 }
 
 // PluginHookContextFromHuma builds a TypeScript-faithful route-hook context
-// from a Huma request context. Method, path, and headers come from the
-// wire; Request is nil (huma.Context does not expose the underlying
-// *http.Request — call sites with one should use NewPluginHookContext);
-// ResponseHeaders is a fresh mutable map for after-hook mutation (apply it
-// with ApplyPluginResponseHeaders); Returned is unset (before-hook shape).
 func PluginHookContextFromHuma(ctx huma.Context, authCtx types.AuthContext) types.PluginHookContext {
 	out := types.PluginHookContext{
 		AuthContext:     authCtx,
@@ -87,7 +74,6 @@ func PluginHookContextFromHuma(ctx huma.Context, authCtx types.AuthContext) type
 }
 
 // ApplyPluginResponseHeaders copies mutated plugin response headers onto
-// the Huma context (upstream responseHeaders). Nil values are skipped.
 func ApplyPluginResponseHeaders(ctx huma.Context, headers http.Header) {
 	if ctx == nil {
 		return
@@ -100,9 +86,6 @@ func ApplyPluginResponseHeaders(ctx huma.Context, headers http.Header) {
 }
 
 // RunTSRouteBeforeHooks runs TypeScript-faithful route before hooks
-// (upstream `hooks.before`: { matcher, handler }) in order over hctx. A nil
-// matcher always runs; a nil handler is a no-op. The first handler error
-// aborts the chain and the route (returned as-is for errors.Is/As).
 func RunTSRouteBeforeHooks(hctx types.PluginHookContext, before []types.PluginTSRouteBeforeHook) error {
 	for _, hook := range before {
 		if hook.Matcher != nil && !hook.Matcher(hctx) {
@@ -119,9 +102,7 @@ func RunTSRouteBeforeHooks(hctx types.PluginHookContext, before []types.PluginTS
 }
 
 // RunTSRouteAfterHooks runs TypeScript-faithful route after hooks
-// (upstream `hooks.after`) in order over hctx. All matching hooks run;
 // handler errors never fail the route — each is passed to report (nil
-// report discards, mirroring the quiet default elsewhere).
 func RunTSRouteAfterHooks(hctx types.PluginHookContext, after []types.PluginTSRouteAfterHook, report func(error)) {
 	for _, hook := range after {
 		if hook.Matcher != nil && !hook.Matcher(hctx) {
@@ -176,19 +157,9 @@ func callRouteAPIErrorHandler(ctx context.Context, opts types.Options, err error
 	opts.OnAPIError.OnError(statusErr, humaCtx)
 }
 
-// --- AUTH-F6-01 request context and dynamic BaseURL ---
-//
 // Upstream resolves the per-request BaseURL from the incoming request under a
 // dynamic (allowedHosts) configuration and makes it authoritative for
-// downstream handlers (vendor/.../src/utils/url.ts resolveDynamicBaseURL,
-// context/helpers.ts resolveRequestContext, api/to-auth-endpoints.ts
-// resolveDynamicContext). Static configurations keep the configured BaseURL.
-//
-// Go has no AsyncLocalStorage; the faithful equivalent is explicit context
-// propagation through huma.WithValue (which layers onto the underlying
 // context.Context, so std handlers see the same values). The api middleware
-// stores the resolved full baseURL (origin + basePath) under these keys;
-// route handlers read it via EffectiveBaseURL/EffectiveFullBaseURL with a
 // static fallback, so concurrent hosts never leak into each other (the shared
 // Options stay untouched, mirroring upstream's per-call clone).
 
@@ -198,9 +169,6 @@ type endpointMetadataKey struct{}
 type storedRequestKey struct{}
 
 // EndpointMetadata carries the matched endpoint identity through the
-// middleware pipeline (upstream dispatch.ts operationId/route/method used for
-// spans and hook matchers). The middleware stores it; handlers and plugin
-// endpoints read it via EndpointMetadataFromStd.
 type EndpointMetadata struct {
 	Method      string
 	Path        string
@@ -208,7 +176,6 @@ type EndpointMetadata struct {
 }
 
 // WithRequestFullBaseURL stores the resolved full baseURL (origin + basePath)
-// on a huma request context.
 func WithRequestFullBaseURL(ctx huma.Context, full string) huma.Context {
 	if ctx == nil || full == "" {
 		return ctx
@@ -217,7 +184,6 @@ func WithRequestFullBaseURL(ctx huma.Context, full string) huma.Context {
 }
 
 // WithRequestFullBaseURLValue stores the resolved full baseURL on a std
-// context (tests and non-huma producers).
 func WithRequestFullBaseURLValue(ctx context.Context, full string) context.Context {
 	if ctx == nil || full == "" {
 		return ctx
@@ -226,7 +192,6 @@ func WithRequestFullBaseURLValue(ctx context.Context, full string) context.Conte
 }
 
 // RequestFullBaseURLFromHuma returns the request-scoped full baseURL, or ""
-// when none was installed.
 func RequestFullBaseURLFromHuma(ctx huma.Context) string {
 	if ctx == nil {
 		return ""
@@ -235,7 +200,6 @@ func RequestFullBaseURLFromHuma(ctx huma.Context) string {
 }
 
 // RequestFullBaseURLFromStd returns the request-scoped full baseURL, or ""
-// when none was installed.
 func RequestFullBaseURLFromStd(ctx context.Context) string {
 	if ctx == nil {
 		return ""
@@ -245,8 +209,6 @@ func RequestFullBaseURLFromStd(ctx context.Context) string {
 }
 
 // WithRequestStateStore shares the per-request state map under the routes
-// readable key. The api middleware calls this with the same map pointer it
-// installs under its own key, so huma and std readers see one store.
 func WithRequestStateStore(ctx huma.Context, state map[any]any) huma.Context {
 	if ctx == nil {
 		return ctx
@@ -258,7 +220,6 @@ func WithRequestStateStore(ctx huma.Context, state map[any]any) huma.Context {
 }
 
 // RequestStateFromStd returns the per-request state store, or nil when none
-// was installed (outside the middleware pipeline).
 func RequestStateFromStd(ctx context.Context) map[any]any {
 	if ctx == nil {
 		return nil
@@ -268,7 +229,6 @@ func RequestStateFromStd(ctx context.Context) map[any]any {
 }
 
 // RequestStateFromHuma returns the per-request state store for a huma
-// context, or nil when none was installed.
 func RequestStateFromHuma(ctx huma.Context) map[any]any {
 	if ctx == nil {
 		return nil
@@ -277,7 +237,6 @@ func RequestStateFromHuma(ctx huma.Context) map[any]any {
 }
 
 // WithEndpointMetadata stores the matched endpoint identity on a huma
-// context.
 func WithEndpointMetadata(ctx huma.Context, md EndpointMetadata) huma.Context {
 	if ctx == nil {
 		return ctx
@@ -286,7 +245,6 @@ func WithEndpointMetadata(ctx huma.Context, md EndpointMetadata) huma.Context {
 }
 
 // EndpointMetadataFromStd returns the endpoint identity carried by the
-// middleware, or the zero value when none was installed.
 func EndpointMetadataFromStd(ctx context.Context) EndpointMetadata {
 	if ctx == nil {
 		return EndpointMetadata{}
@@ -304,8 +262,6 @@ func EndpointMetadataFromHuma(ctx huma.Context) EndpointMetadata {
 }
 
 // WithStoredRequest stores the reconstructed *http.Request for request-aware
-// trust callbacks (TrustedOriginsFunc, IsTrustedRedirect) so std handlers
-// without wire access still validate against the real request.
 func WithStoredRequest(ctx huma.Context, r *http.Request) huma.Context {
 	if ctx == nil || r == nil {
 		return ctx
@@ -316,7 +272,6 @@ func WithStoredRequest(ctx huma.Context, r *http.Request) huma.Context {
 // trustRequest resolves the *http.Request used for redirect-trust decisions
 // (upstream origin-check.ts): the stored middleware request when present,
 // else a best-effort rebuild. It collapses the 4-line resolve-fallback
-// repeated at every trust call site; the trust verdict itself stays with
 // types.IsTrustedRedirect at each site (error shapes differ per route).
 func trustRequest(ctx context.Context) *http.Request {
 	if req := StoredRequestFromStd(ctx); req != nil {
@@ -326,7 +281,6 @@ func trustRequest(ctx context.Context) *http.Request {
 }
 
 // trustRequestFromHuma is trustRequest for raw (non-typed) handlers whose
-// context is a huma.Context rather than context.Context.
 func trustRequestFromHuma(ctx huma.Context) *http.Request {
 	if req := StoredRequestFromStd(ctx.Context()); req != nil {
 		return req
@@ -334,10 +288,7 @@ func trustRequestFromHuma(ctx huma.Context) *http.Request {
 	return RequestFromHuma(ctx)
 }
 
-// verificationCandidates lists the verification-row keys to try in order:
-// the store-identifier form first, then the plain identifier when the
 // option keeps a plain fallback. It collapses the 4-line candidate build
-// repeated at every consume/read site.
 func verificationCandidates(option types.VerificationStoreIdentifier, identifier, stored string) []string {
 	candidates := []string{stored}
 	if verificationStoreUsesPlainFallback(option) && stored != identifier {
@@ -356,8 +307,6 @@ func StoredRequestFromStd(ctx context.Context) *http.Request {
 }
 
 // RequestFromHuma rebuilds a best-effort *http.Request from a huma context
-// for request-aware trust callbacks. It carries method, URL, Host,
-// RemoteAddr, and headers; the body is referenced, not cloned.
 func RequestFromHuma(ctx huma.Context) *http.Request {
 	if ctx == nil {
 		return nil
@@ -377,7 +326,6 @@ func RequestFromHuma(ctx huma.Context) *http.Request {
 
 // joinBasePathWithCheck appends basePath to an origin unless the origin
 // already carries a non-root path, mirroring upstream withPath
-// (utils/url.ts:73-89).
 func joinBasePathWithCheck(origin, basePath string) string {
 	trimmed := strings.TrimRight(strings.TrimSpace(origin), "/")
 	if trimmed == "" {
@@ -397,8 +345,6 @@ func joinBasePathWithCheck(origin, basePath string) string {
 	return trimmed + basePath
 }
 
-// staticFullBaseURL returns the static full baseURL (origin + basePath), or
-// "" when no static BaseURL is configured.
 func staticFullBaseURL(opts types.Options) string {
 	if strings.TrimSpace(opts.BaseURL) == "" {
 		return ""
@@ -411,8 +357,6 @@ func staticFullBaseURL(opts types.Options) string {
 }
 
 // EffectiveFullBaseURL returns the authoritative full baseURL for a request:
-// the middleware-resolved per-request value wins; otherwise the static
-// origin + basePath; otherwise the dynamic fallback + basePath; otherwise "".
 // It never mutates shared state, so concurrent hosts stay isolated.
 func EffectiveFullBaseURL(ctx context.Context, opts types.Options) string {
 	if full := RequestFullBaseURLFromStd(ctx); full != "" {
@@ -439,7 +383,6 @@ func EffectiveFullBaseURLFromHuma(ctx huma.Context, opts types.Options) string {
 	return EffectiveFullBaseURL(ctx.Context(), opts)
 }
 
-// originOfFull returns the scheme://host origin of a full baseURL.
 func originOfFull(full string) (string, bool) {
 	u, err := url.Parse(strings.TrimSpace(full))
 	if err != nil || u.Host == "" {
@@ -453,10 +396,6 @@ func originOfFull(full string) (string, bool) {
 }
 
 // EffectiveBaseURL returns the authoritative origin for a request (upstream
-// c.context.options.baseURL after resolveRequestContext: the origin of the
-// resolved full baseURL). Static fallback is opts.BaseURL; dynamic fallback
-// is the fallback origin. Callbacks and cookie domains use this; redirect
-// URIs and error URLs use EffectiveFullBaseURL.
 func EffectiveBaseURL(ctx context.Context, opts types.Options) string {
 	if full := RequestFullBaseURLFromStd(ctx); full != "" {
 		if origin, ok := originOfFull(full); ok {
@@ -485,8 +424,6 @@ func EffectiveBaseURLFromHuma(ctx huma.Context, opts types.Options) string {
 }
 
 // DefaultErrorURLWithContext returns the OAuth error base URL using the
-// authoritative per-request baseURL (upstream parseState:
-// options.onAPIError?.errorURL || `${c.context.baseURL}/error`).
 func DefaultErrorURLWithContext(ctx context.Context, opts types.Options) string {
 	if opts.OnAPIError.ErrorURL != "" {
 		return opts.OnAPIError.ErrorURL
@@ -509,8 +446,6 @@ func DefaultErrorURLWithHuma(ctx huma.Context, opts types.Options) string {
 }
 
 // AddOAuthServerContextValue accumulates server-trusted flow values onto a
-// std context. Multiple calls merge with later keys winning. A nil or empty
-// values map leaves ctx unchanged.
 func AddOAuthServerContextValue(ctx context.Context, values map[string]any) context.Context {
 	if len(values) == 0 {
 		return ctx
@@ -526,7 +461,6 @@ func AddOAuthServerContextValue(ctx context.Context, values map[string]any) cont
 }
 
 // AddOAuthServerContextToHuma accumulates server-trusted flow values onto a
-// huma request context so they reach std handlers via context propagation.
 func AddOAuthServerContextToHuma(ctx huma.Context, values map[string]any) huma.Context {
 	if ctx == nil || len(values) == 0 {
 		return ctx
@@ -535,7 +469,6 @@ func AddOAuthServerContextToHuma(ctx huma.Context, values map[string]any) huma.C
 }
 
 // ServerContextFromHooks returns server-trusted flow values accumulated on
-// ctx, or nil when none were added.
 func ServerContextFromHooks(ctx context.Context) map[string]any {
 	if v, _ := ctx.Value(oauthServerContextKey{}).(map[string]any); len(v) > 0 {
 		return v
@@ -544,8 +477,6 @@ func ServerContextFromHooks(ctx context.Context) map[string]any {
 }
 
 // ResolveOAuthServerContext merges the context-carried accumulation with the
-// explicit trusted argument winning. It returns nil when every layer is
-// empty so the stored payload omits the key.
 func ResolveOAuthServerContext(ctx context.Context, explicit map[string]any) map[string]any {
 	base := ServerContextFromHooks(ctx)
 	if len(base) == 0 && len(explicit) == 0 {
@@ -562,9 +493,6 @@ func ResolveOAuthServerContext(ctx context.Context, explicit map[string]any) map
 }
 
 // ResolveSecureCookiesWithContext reports whether cookies must carry Secure
-// using the authoritative request origin (upstream: https baseURL). Explicit
-// UseSecureCookies wins, then trusted-proxy proto, then the effective origin
-// scheme; static behavior is unchanged when no request value is present.
 func ResolveSecureCookiesWithContext(ctx context.Context, opts types.Options, headers CookieRequestHeaders) bool {
 	if opts.Advanced.UseSecureCookies != nil {
 		return *opts.Advanced.UseSecureCookies
@@ -581,9 +509,6 @@ func ResolveSecureCookiesWithContext(ctx context.Context, opts types.Options, he
 }
 
 // ResolveCrossSubDomainCookieDomainWithContext returns the cross-subdomain
-// cookie domain using the authoritative request origin: explicit Domain wins,
-// then trusted-proxy host, then the effective origin hostname, then the Host
-// header. Static behavior is unchanged when no request value is present.
 func ResolveCrossSubDomainCookieDomainWithContext(ctx context.Context, opts types.Options, headers CookieRequestHeaders) string {
 	if opts.Advanced.CrossSubDomainCookies.Domain != "" {
 		return opts.Advanced.CrossSubDomainCookies.Domain
@@ -607,10 +532,6 @@ func ResolveCrossSubDomainCookieDomainWithContext(ctx context.Context, opts type
 }
 
 // RunInBackground dispatches deferred work after the response, mirroring
-// upstream ctx.runInBackground: the configured Handler receives the thunk,
-// otherwise the task runs fire-and-forget with panics contained. A nil task
-// is a no-op. Routes call this instead of importing the root package (which
-// would cycle); behavior matches auth.RunInBackground.
 func RunInBackground(opts types.Options, task func()) {
 	if task == nil {
 		return
@@ -626,8 +547,6 @@ func RunInBackground(opts types.Options, task func()) {
 }
 
 // Logf reports a route-level diagnostic via Options.Logger when logging is
-// configured and the level passes (types.ShouldPublishLog, default "warn").
-// It stays quiet otherwise, preserving the historical quiet default.
 func Logf(opts types.Options, level, format string, args ...any) {
 	if opts.Logger.Disabled || opts.Logger.Log == nil {
 		return
@@ -643,8 +562,6 @@ func Logf(opts types.Options, level, format string, args ...any) {
 }
 
 // WithSpan executes fn directly while preserving upstream span name/attribute
-// plumbing (upstream createWithSpan; instrumentation is enabled by default).
-// The Go runtime has no tracer, so both paths execute inline.
 func WithSpan[T any](opts types.Options, name string, attrs map[string]string, fn func() (T, error)) (T, error) {
 	_ = opts
 	_ = name
@@ -652,14 +569,8 @@ func WithSpan[T any](opts types.Options, name string, attrs map[string]string, f
 	return fn()
 }
 
-// isLoopbackHostPort reports whether a Host-header value is a loopback host
-// for cookie-secure inference (localhost, *.localhost, 127.0.0.0/8, ::1),
-// tolerating ports and brackets. It mirrors the api-layer classifier without
-// importing it (routes cannot import api).
 func isLoopbackHostPort(hostport string) bool {
 	h := strings.TrimSpace(hostport)
-	// Strip a single trailing :port for IPv4/FQDN hosts; bare IPv6 literals
-	// carry no port.
 	name := h
 	if strings.HasPrefix(h, "[") {
 		if end := strings.Index(h, "]"); end != -1 {

@@ -30,11 +30,8 @@ type signInInput struct {
 		Email    string `json:"email" required:"true"`
 		Password string `json:"password" required:"true"`
 		// CallbackURL drives the redirect/url response pair (upstream
-		// sign-in.ts:625-632).
 		CallbackURL *string `json:"callbackURL,omitempty"`
 		// RememberMe mirrors upstream's rememberMe (sign-in.ts:436-443):
-		// explicit false creates a non-persistent session (1-day expiry
-		// plus the dont_remember marker); absent or true remembers.
 		RememberMe *bool `json:"rememberMe,omitempty"`
 	}
 }
@@ -95,17 +92,11 @@ func isValidSignInEmail(email string) bool {
 }
 
 // signInFormMediaType is the additional request media type upstream accepts
-// on POST /sign-in/email (sign-in.ts:406-407,446-449 allowedMediaTypes
-// json+form).
 const signInFormMediaType = "application/x-www-form-urlencoded"
 
-// parseSignInForm decodes an application/x-www-form-urlencoded body into the
 // JSON-equivalent object the sign-in schema validates: every present key
-// lands verbatim (single value → string, repeated key → string array) with
-// rememberMe "true"/"false" coerced to bool (case-insensitive; anything else
 // stays a string so schema validation rejects it exactly like the JSON
 // path). Absent keys stay absent so required-field validation matches the
-// JSON path.
 func parseSignInForm(values url.Values) map[string]any {
 	obj := make(map[string]any, len(values))
 	for key, vals := range values {
@@ -133,7 +124,6 @@ func parseSignInForm(values url.Values) map[string]any {
 	return obj
 }
 
-// isSignInFormRequest reports whether ctx carries a form-urlencoded body.
 func isSignInFormRequest(ctx huma.Context) bool {
 	ct := ctx.Header("Content-Type")
 	if ct == "" {
@@ -145,9 +135,6 @@ func isSignInFormRequest(ctx huma.Context) bool {
 	return strings.EqualFold(strings.TrimSpace(ct), signInFormMediaType)
 }
 
-// signInFormContext presents the transcoded JSON body to huma's pipeline,
-// delegating everything else to the wrapped context (same pattern as the
-// api-layer capturedContext and signUpFormContext).
 type signInFormContext struct {
 	inner huma.Context
 	body  []byte
@@ -192,10 +179,7 @@ func (c *signInFormContext) BodyReader() io.Reader {
 	return bytes.NewReader(c.body)
 }
 
-// signInFormMiddleware transcodes application/x-www-form-urlencoded bodies to
 // JSON before huma's JSON-only body pipeline runs (same pattern as
-// signUpFormMiddleware: huma ships no form format; registering one would
-// require touching the shared Router). Non-form requests pass through
 // untouched. Malformed form bodies short-circuit 400; empty form bodies fall
 // through to the required body check like empty JSON bodies.
 func signInFormMiddleware(api huma.API) func(huma.Context, func(huma.Context)) {
@@ -238,12 +222,8 @@ func SignInEmail(api huma.API, basePath string, opts types.Options) {
 		OperationID: "signInEmail",
 		Summary:     "Sign in with email and password",
 	}
-	// Upstream allowedMediaTypes json+form (sign-in.ts:406-407,446-449): the
-	// middleware transcodes form bodies to JSON (runtime); the OpenAPI stays
-	// JSON-shaped.
 	op.Middlewares = append(op.Middlewares, signInFormMiddleware(api))
 	registerAuthOperation(api, op, opts, func(ctx context.Context, input *signInInput) (*signInOutput, error) {
-		// Upstream global middleware validates callbackURL before the handler
 		// (origin-check.ts:89-151): an untrusted value 403s INVALID_CALLBACK_URL.
 		// The Location-drop below stays as hardening for the trusted decision.
 		if input.Body.CallbackURL != nil && *input.Body.CallbackURL != "" {
@@ -262,7 +242,6 @@ func SignInEmail(api huma.API, basePath string, opts types.Options) {
 			return nil, huma.NewError(http.StatusBadRequest, "EMAIL_PASSWORD_DISABLED: Email and password is not enabled")
 		}
 
-		// Upstream sign-in.ts:522-525 rejects a malformed email format with
 		// 400 INVALID_EMAIL before any user lookup, so malformed input
 		// never reaches the credential checks and cannot leak existence.
 		if !isValidSignInEmail(input.Body.Email) {
@@ -276,8 +255,6 @@ func SignInEmail(api huma.API, basePath string, opts types.Options) {
 		}, nil)
 		if err != nil || userRow == nil {
 			crypto.VerifyPassword(dummyPasswordHash, input.Body.Password) // timing guard
-			// Upstream sign-in.ts:540 logs "User not found" for a missing
-			// user or credential account alike.
 			Logf(opts, "warn", "User not found")
 			return nil, huma.NewError(types.StatusForCode(types.ErrInvalidEmailOrPassword), types.ErrInvalidEmailOrPassword)
 		}
@@ -296,8 +273,6 @@ func SignInEmail(api huma.API, basePath string, opts types.Options) {
 
 		storedHash, _ := accountRow["password"].(string)
 		if storedHash == "" {
-			// Upstream sign-in.ts:551 logs "Password not found" when the
-			// credential account carries no password.
 			crypto.VerifyPassword(dummyPasswordHash, input.Body.Password)
 			Logf(opts, "warn", "Password not found")
 			return nil, huma.NewError(types.StatusForCode(types.ErrInvalidEmailOrPassword), types.ErrInvalidEmailOrPassword)
@@ -311,14 +286,9 @@ func SignInEmail(api huma.API, basePath string, opts types.Options) {
 			Logf(opts, "warn", "Invalid password")
 			return nil, huma.NewError(types.StatusForCode(types.ErrInvalidEmailOrPassword), types.ErrInvalidEmailOrPassword)
 		}
-		// Hash rotation (crypto.UpgradeHashIfNeeded, P11): a legacy bcrypt
-		// bridge hash that verified rotates to a fresh scrypt hash,
 		// persisted to the credential account row. Only the default backend
-		// rotates — a custom Password.Verify hook owns its own hash format,
 		// so the helper (which re-verifies with the default backend) already
-		// returns false there; the explicit Verify==nil guard keeps that
 		// contract obvious. Best-effort: a persist failure never fails the
-		// verified sign-in.
 		if opts.EmailAndPassword.Password.Verify == nil {
 			if newHash, upgraded := crypto.UpgradeHashIfNeeded(storedHash, input.Body.Password); upgraded {
 				_, _ = opts.DB.Update(ctx, "account", []types.Where{
@@ -335,9 +305,7 @@ func SignInEmail(api huma.API, basePath string, opts types.Options) {
 			if !emailVerified {
 				if opts.EmailVerification.SendOnSignIn && (opts.EmailVerification.SendVerificationEmail != nil || opts.EmailVerification.SendVerificationEmailRequest != nil) {
 					// Issuance is the upstream HS256 email JWT
-					// (createEmailVerificationToken); delivery awaits via
 					// runInBackgroundOrAwait so failures never fail sign-in
-					// (sign-in.ts:588-597). Prefer the request-aware variant.
 					token, tokenErr := crypto.CreateEmailVerificationToken(opts.CurrentSecret(), email, "", emailVerificationExpirySeconds(opts), nil)
 					if tokenErr != nil {
 						return nil, huma.Error500InternalServerError("failed to generate verification token")
@@ -352,9 +320,7 @@ func SignInEmail(api huma.API, basePath string, opts types.Options) {
 		}
 
 		// ValidateUserInfo sign-in seam (upstream internalAdapter sign-in path,
-		// method email-password, action sign-in). Programmatic flow: rejection
 		// surfaces its 403 code verbatim. The upstream email leg
-		// (sign-in.ts:505-637) has no equivalent call — this Go-only
 		// fail-closed extension is kept intentionally.
 		if err := assertValidUserInfoLocal(ctx, opts, map[string]any{
 			"email": email, "id": userID,
@@ -369,13 +335,10 @@ func SignInEmail(api huma.API, basePath string, opts types.Options) {
 		}
 
 		now := time.Now().UTC()
-		// Explicit rememberMe=false creates a non-persistent session
 		// (upstream createSession dontRememberMe, sign-in.ts:603-605 and
-		// internal-adapter.ts:509).
 		dontRememberMe := input.Body.RememberMe != nil && !*input.Body.RememberMe
 		expiresAt := creationSessionExpiry(opts, dontRememberMe, now)
 		// The session token is caller-minted randomness (upstream token:
-		// generateId(32) direct); the row goes through the shared issuance
 		// seam so secondary-only deployments skip the primary DB.
 		token := crypto.GenerateID()
 
@@ -398,7 +361,6 @@ func SignInEmail(api huma.API, basePath string, opts types.Options) {
 		// mirror fails issuance loudly, like the database create above. The
 		// upstream email leg has no equivalent failure mode here — this
 		// fail-closed 500 (canonical status for FAILED_TO_CREATE_SESSION)
-		// is kept intentionally.
 		if err := writeSecondarySession(opts, session, user); err != nil {
 			return nil, huma.NewError(types.StatusForCode(types.ErrFailedToCreateSession), types.ErrFailedToCreateSession)
 		}
@@ -409,9 +371,7 @@ func SignInEmail(api huma.API, basePath string, opts types.Options) {
 		out.SetCookie = cookiesOut
 		out.Body.Token = token
 		// callbackURL drives the redirect/url pair (upstream
-		// sign-in.ts:625-637): redirect is set and url echoes the
 		// callbackURL only when one was supplied. A present, trusted
-		// callbackURL additionally sets the Location response header
 		// (upstream sign-in.ts:625-627); an untrusted absolute URL keeps
 		// the body pair but emits no header (no open redirect). The stored
 		// request (when present) is authoritative for the trust decision.

@@ -97,7 +97,7 @@ func (MemoryRateLimitStorage) Consume(key string, window time.Duration, max int)
 
 // DatabaseRateLimitStorage is the atomic database rate-limit backend,
 // mirroring upstream's createDatabaseStorageWrapper
-// (vendor/.../src/api/rate-limiter/index.ts:115-245). Rows live in the
+// (upstream/src/api/rate-limiter/index.ts:115-245). Rows live in the
 // rate-limit table (Model, default "rateLimit") as {key, count,
 // lastRequest} with lastRequest in milliseconds since the epoch, matching
 // the RateLimitSchema column contract.
@@ -196,7 +196,7 @@ func (s DatabaseRateLimitStorage) Consume(key string, window time.Duration, max 
 
 // databaseLongestObserved persists the longest window seen per rate-limit
 // model, mirroring upstream's longestObservedWindow closure
-// (vendor/.../src/api/rate-limiter/index.ts:125,133-135): consume grows it
+// (upstream/src/api/rate-limiter/index.ts:125,133-135): consume grows it
 // when rule.window exceeds it, so later short-window consumes still prune
 // with the long cutoff and active long-window rows survive. Static config
 // (longestConfiguredRateLimitWindow, which excludes function resolvers like
@@ -236,7 +236,7 @@ func observeDatabaseWindow(model string, windowSec, staticLongest int) int {
 // ConsumeResolvedRateLimit enforces one resolved bucket (global or plugin) in
 // a single atomic step through the selected backend, mirroring upstream
 // onRequestRateLimit's single-step consume
-// (vendor/.../src/api/rate-limiter/index.ts:418-437): the whole
+// (upstream/src/api/rate-limiter/index.ts:418-437): the whole
 // check-and-increment happens here in the request phase; there is no separate
 // response-phase write-back, so concurrent requests cannot all pass a stale
 // read before any increment lands.
@@ -249,8 +249,6 @@ func observeDatabaseWindow(model string, windowSec, staticLongest int) int {
 // request) instead of silently limiting or passing. Plugin buckets use the
 // same backend as global buckets; the memory-only two-phase
 // isRateLimited/recordRateLimit pair must not be used for enforcement.
-//
-// Upstream TypeScript name: onRequestRateLimit (consume part).
 func ConsumeResolvedRateLimit(ctx context.Context, config resolvedRateLimit, opts types.Options) (allowed bool, retryAfter int, err error) {
 	windowSec := int(config.Window / time.Second)
 	if windowSec <= 0 {
@@ -304,7 +302,7 @@ func ConsumeResolvedRateLimit(ctx context.Context, config resolvedRateLimit, opt
 
 // consumeDatabaseRateLimit is the error-returning core behind
 // DatabaseRateLimitStorage.Consume, mirroring upstream's database consume
-// (vendor/.../src/api/rate-limiter/index.ts:133-224). now is the observation
+// (upstream/src/api/rate-limiter/index.ts:133-224). now is the observation
 // instant for the whole step; longestWindowSec seeds the prune cutoff (values
 // below windowSec are raised to it).
 func consumeDatabaseRateLimit(ctx context.Context, db types.Adapter, model, key string, windowSec, max, longestWindowSec int, now time.Time, background func(func()), onPruneError func(error)) (allowed bool, retryAfter int, err error) {
@@ -410,7 +408,7 @@ func consumeDatabaseRateLimit(ctx context.Context, db types.Adapter, model, key 
 }
 
 // databaseRetryAfterMs mirrors upstream getRetryAfter
-// (vendor/.../src/api/rate-limiter/index.ts:109-113): ceiling seconds from
+// (upstream/src/api/rate-limiter/index.ts:109-113): ceiling seconds from
 // now until the window slides, minimum 1.
 func databaseRetryAfterMs(lastRequestMs, windowMs, nowMs int64) int {
 	retryAfter := int((lastRequestMs + windowMs - nowMs + 999) / 1000)
@@ -473,7 +471,7 @@ func rateLimitLastRequestMs(v any) (int64, bool) {
 // longestConfiguredRateLimitWindow returns the longest rate-limit window in
 // seconds across the global default, the default special rules, plugin rules,
 // and static custom rules, mirroring upstream getConfiguredRateLimitWindows
-// (vendor/.../src/api/rate-limiter/index.ts:247-268). Function-valued custom
+// (upstream/src/api/rate-limiter/index.ts:247-268). Function-valued custom
 // rules (CustomRuleResolvers) are excluded like upstream excludes function
 // entries: their windows are unknowable without a request. The result seeds
 // database prune cutoffs so long-window rows survive short consumes.
@@ -537,7 +535,7 @@ func useRateLimitMiddleware(api huma.API, basePath string, opts types.Options) {
 
 		// Single-step atomic consume through the selected backend (memory by
 		// default), mirroring upstream onRequestRateLimit's single-step
-		// consume (vendor/.../src/api/rate-limiter/index.ts:418-437): the
+		// consume (upstream/src/api/rate-limiter/index.ts:418-437): the
 		// check-and-increment happens here in the request phase with no
 		// response-phase write-back, so a concurrent burst can never pass a
 		// stale read before any increment lands. The legacy two-phase
@@ -554,7 +552,7 @@ func useRateLimitMiddleware(api huma.API, basePath string, opts types.Options) {
 
 // rateLimitEnabled reports whether rate limiting applies, mirroring upstream
 // `enabled ?? isProduction`
-// (vendor/.../src/context/create-context.ts:356): an explicit Enabled wins;
+// (upstream/src/context/create-context.ts:356): an explicit Enabled wins;
 // otherwise limiting is on only when NODE_ENV is "production". This lives
 // here (not in types.EnabledValue, which is frozen read-only) so the
 // production default is honored without changing the types surface.
@@ -568,7 +566,7 @@ func rateLimitEnabled(opts types.Options) bool {
 // noTrustedIPKey is the sentinel IP segment for the shared rate-limit bucket
 // used when no trusted client IP can be derived. It is not a valid IP, so it
 // never collides with a real client IP key. Mirrors upstream NO_TRUSTED_IP_KEY
-// (vendor/.../src/api/rate-limiter/index.ts:335).
+// (upstream/src/api/rate-limiter/index.ts:335).
 const noTrustedIPKey = "no-trusted-ip"
 
 var (
@@ -585,7 +583,7 @@ func resetRateLimitIPWarning() {
 
 // logRateLimitNoIPWarning warns once that rate limiting fell back to the
 // shared per-path bucket, mirroring upstream's ipWarningLogged branch
-// (vendor/.../src/api/rate-limiter/index.ts:347-355).
+// (upstream/src/api/rate-limiter/index.ts:347-355).
 func logRateLimitNoIPWarning(opts types.Options) {
 	rateLimitIPWarnMu.Lock()
 	warned := rateLimitIPWarned
@@ -700,7 +698,7 @@ func normalizeRateLimitPath(requestPath, basePath string) string {
 // applyRateLimitRules folds the global default, the default special rules,
 // static custom rules, and function-valued custom resolvers into one
 // window/max pair for path, mirroring upstream resolveRateLimitConfig
-// (vendor/.../src/api/rate-limiter/index.ts:337-410): special rules first,
+// (upstream/src/api/rate-limiter/index.ts:337-410): special rules first,
 // then plugin rules (enforced separately here — see resolvePluginRateLimit),
 // then custom rules where a function entry receives the request plus the
 // current rule and may replace it or return false to disable limiting for
@@ -747,7 +745,7 @@ func applyRateLimitRules(ctx huma.Context, path string, opts types.Options) (win
 }
 
 // specialRateLimitRule is one entry of the upstream default special-rule
-// table (vendor/.../src/api/rate-limiter/index.ts:439-467).
+// table (upstream/src/api/rate-limiter/index.ts:439-467).
 type specialRateLimitRule struct {
 	match       func(path string) bool
 	window, max int
@@ -790,7 +788,7 @@ func defaultRateLimitRule(path string) (types.RateLimitRule, bool) {
 
 // customRuleResolver finds the function-valued custom rule for path,
 // mirroring the wildcard/exact lookup upstream applies to customRules
-// (vendor/.../src/api/rate-limiter/index.ts:382-389). Exact keys win;
+// (upstream/src/api/rate-limiter/index.ts:382-389). Exact keys win;
 // wildcard keys (upstream wildcardMatch semantics, see wildcardMatchPath)
 // apply in sorted order for determinism (upstream uses JS insertion order,
 // which has no Go equivalent).
@@ -821,7 +819,7 @@ func customRuleResolver(path string, resolvers map[string]types.RateLimitRuleRes
 
 // wildcardMatchPath reports whether path matches a custom-rule glob pattern
 // with upstream wildcardMatch semantics
-// (vendor/.../src/utils/wildcard.ts, default separator "/"):
+// (upstream/src/utils/wildcard.ts, default separator "/"):
 //   - `*` matches any run of characters inside one `/` segment (never `/`);
 //   - `?` matches one in-segment character;
 //   - `**` crosses `/` boundaries (zero or more whole segments);

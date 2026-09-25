@@ -10,9 +10,6 @@ import (
 )
 
 // DeleteUserCallback registers GET /delete-user/callback.
-// With a valid session and a single-use delete-account token it deletes the
-// user, expires the session cookies, and either redirects to callbackURL or
-// returns a JSON confirmation. Invalid tokens and missing sessions return
 // 404, mirroring upstream.
 func DeleteUserCallback(api huma.API, basePath string, opts types.Options) {
 	op := &huma.Operation{
@@ -30,7 +27,6 @@ func DeleteUserCallback(api huma.API, basePath string, opts types.Options) {
 			ctx.SetStatus(status)
 			_, _ = ctx.BodyWriter().Write(payload)
 		}
-		// writeNotFound mirrors upstream deleteUserCallback, which throws
 		// NOT_FOUND for a disabled handler, a missing session, and an invalid
 		// token alike (update-user.ts:617-620,629-632,641-642). 404 is kept for
 		// all of these even though FAILED_TO_GET_USER_INFO and INVALID_TOKEN
@@ -104,8 +100,6 @@ func DeleteUserCallback(api huma.API, basePath string, opts types.Options) {
 		// Wrap the request context so request-aware delete hooks receive the
 		// live request even when the API middleware wrap is not installed.
 		if err := finishDeleteUser(humaRequestContext(ctx.Context(), ctx), opts, userID, currentUser); err != nil {
-			// Hook-thrown APIErrors keep their status (same errors.As
-			// pattern as the verify-email/change-email hook sites).
 			var httpErr types.HttpError
 			if errors.As(err, &httpErr) {
 				writeJSON(httpErr.Status, map[string]any{

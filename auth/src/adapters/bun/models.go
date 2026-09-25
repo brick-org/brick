@@ -8,30 +8,9 @@ import (
 
 // Default core table models for the Bun adapter.
 //
-// Scope: these structs cover the default Better Auth core tables and columns
-// only (see vendor/better-auth/packages/core/src/db/get-tables.ts). They do
-// not model plugin tables/fields, additionalFields, custom ModelNames /
-// FieldNames, secondary-storage inclusion rules, or optional schema changes;
-// see auth/PARITY_V2.md ("adapters/bun/models.go") for the tracked gaps. The
-// live row-key contract (logical camelCase <-> physical snake_case mapping
-// and the stable snake_case shape returned to callers) is owned by the
-// Adapter in bun.go (encodeRow/decodeRow), not by these tags.
-//
-// Table identity: each struct embeds bun.BaseModel with an explicit
-// table:<name> tag so schema/migration use does not depend on Bun's implicit
-// inflection. The defaults (users/sessions/accounts/verifications) match the
-// Adapter.table fallback (model + "s"); custom ModelNames are resolved at
-// query time by Adapter.table and are out of scope here.
-//
-// Out of scope for these structs (owned by app code and cmd/generate-schema,
-// which emits index comments): standalone indexes (e.g.
-// verification.identifier, session.userId, account.userId), foreign-key
-// relations and onDelete:cascade rules, and createdAt/updatedAt
-// default/onUpdate population (callers set timestamps in route code).
-//
-// Note: Go field names here use UserID/URL-style initialisms, matching
-// cmd/generate-schema's goFieldName helper, which emits the same identifiers
-// for the same columns. Column tags are identical either way.
+// Scope: default core tables/columns only (upstream get-tables.ts).
+// Row-key mapping is owned by Adapter in bun.go, not these tags.
+// Table tags use explicit table:<name>; indexes/FKs/defaults are out of scope.
 
 type User struct {
 	bun.BaseModel `bun:"table:users"`

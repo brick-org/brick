@@ -10,9 +10,6 @@ package main
 // required column with no default to a populated table is refused as an
 // unsafe change (data, or an error with ThrowOnUnsafe), mirroring the
 // upstream UnsafeMigrationError guard.
-//
-// Upstream references: getMigrations/getType (get-migration.ts),
-// diffSchema (schema-diff.ts).
 
 import (
 	"encoding/json"
@@ -36,8 +33,6 @@ import (
 // assumes every existing table is populated (conservative offline
 // default). Index-definition conflicts (same name, different definition)
 // are an error mirroring the upstream BetterAuthError refusal.
-//
-// Upstream references: getMigrations (get-migration.ts).
 func DiffMigrationPlan(current, desired auth.PluginSchema, cfg auth.AdapterConfig, dialect Dialect, idKind string, populated map[string]bool) (*MigrationPlan, error) {
 	if err := auth.ValidateSchemaIndexes(desired, cfg); err != nil {
 		return nil, err

@@ -18,9 +18,7 @@ import (
 )
 
 // verificationAntiEnumerationFloorMs mirrors upstream's MINIMUM_MS floor on
-// the unauthenticated send-verification-email path: the handler always takes
 // at least this long so response timing does not reveal whether the email
-// belongs to an unverified user.
 const verificationAntiEnumerationFloorMs = 500
 
 type sendVerificationEmailInput struct {
@@ -39,14 +37,9 @@ type sendVerificationEmailOutput struct {
 }
 
 // SendVerificationEmail registers POST /send-verification-email.
-//
 // Upstream contract notes: an authenticated caller must verify the session's
 // own email (EMAIL_MISMATCH / EMAIL_ALREADY_VERIFIED otherwise); the
 // unauthenticated path always returns {status:true} after a 500ms timing
-// floor so callers cannot enumerate accounts. The Go
-// VerificationEmailData callback is single-argument, so unlike upstream's
-// sendVerificationEmail(data, request) the reconstructed *http.Request is not
-// forwarded; see the request-cloning limits documented on requestFromContext.
 func SendVerificationEmail(api huma.API, basePath string, opts types.Options) {
 	registerAuthOperation(api, huma.Operation{
 		Tags:        []string{"Auth"},
@@ -77,8 +70,6 @@ func SendVerificationEmail(api huma.API, basePath string, opts types.Options) {
 				out.Body.Status = true
 				return out, nil
 			}
-			// Invalid/expired session falls through to the unauthenticated
-			// path, mirroring upstream's getSessionFromCtx returning null.
 		}
 
 		start := time.Now()
@@ -92,7 +83,6 @@ func SendVerificationEmail(api huma.API, basePath string, opts types.Options) {
 			// Equalize work for unknown or already-verified emails so the
 			// fast local path is indistinguishable from a real send: sign a
 			// dummy HS256 token, mirroring upstream's
-			// createEmailVerificationToken dummy-sign branch.
 			_, _ = crypto.CreateEmailVerificationToken(opts.CurrentSecret(), input.Body.Email, "", emailVerificationExpirySeconds(opts), nil)
 		}
 		enforceAntiEnumerationFloor(start)
@@ -105,9 +95,7 @@ func SendVerificationEmail(api huma.API, basePath string, opts types.Options) {
 	})
 }
 
-// emailVerificationExpirySeconds resolves the verification token TTL in
 // seconds, mirroring the upstream default (3600s) of
-// createEmailVerificationToken.
 func emailVerificationExpirySeconds(opts types.Options) int {
 	if opts.EmailVerification.ExpiresIn > 0 {
 		return opts.EmailVerification.ExpiresIn
@@ -115,8 +103,6 @@ func emailVerificationExpirySeconds(opts types.Options) int {
 	return crypto.DefaultEmailVerificationExpirySeconds
 }
 
-// sendVerificationEmailWithRequest dispatches SendVerificationEmail via
-// runBackgroundOrAwait, preferring the request-aware variant when set
 // (upstream sendVerificationEmail(data, request)). Delivery failures never
 // fail the route: upstream logs and continues.
 func sendVerificationEmailWithRequest(ctx context.Context, opts types.Options, data types.VerificationEmailData) {
@@ -134,8 +120,6 @@ func sendVerificationEmailWithRequest(ctx context.Context, opts types.Options, d
 	}
 }
 
-// deliverVerificationEmail invokes SendVerificationEmail directly (awaited),
-// preferring the request-aware variant when set, and propagates delivery
 // errors. Upstream sendVerificationEmailFn awaits directly instead of using
 // runInBackgroundOrAwait (email-verification.ts:69-70, see #8757), so a
 // failing send fails the send-verification-email route.
@@ -149,9 +133,7 @@ func deliverVerificationEmail(ctx context.Context, opts types.Options, data type
 	return nil
 }
 
-// runBeforeEmailVerificationHook runs beforeEmailVerification, preferring the
 // request-aware variant when set (upstream
-// beforeEmailVerification(user, request)).
 func runBeforeEmailVerificationHook(ctx context.Context, opts types.Options, user *types.User) error {
 	if opts.EmailVerification.BeforeEmailVerificationRequest != nil {
 		return opts.EmailVerification.BeforeEmailVerificationRequest(user, callbackRequest(ctx))
@@ -162,9 +144,7 @@ func runBeforeEmailVerificationHook(ctx context.Context, opts types.Options, use
 	return nil
 }
 
-// runAfterEmailVerificationHook runs afterEmailVerification, preferring the
 // request-aware variant when set (upstream
-// afterEmailVerification(user, request)).
 func runAfterEmailVerificationHook(ctx context.Context, opts types.Options, user *types.User) error {
 	if opts.EmailVerification.AfterEmailVerificationRequest != nil {
 		return opts.EmailVerification.AfterEmailVerificationRequest(user, callbackRequest(ctx))
@@ -184,11 +164,8 @@ func enforceAntiEnumerationFloor(start time.Time) {
 	}
 }
 
-// sendVerificationEmailForUser builds the verification URL for the given user
-// row and delivers it via the configured SendVerificationEmail callback,
 // awaited directly (upstream sendVerificationEmailFn awaits instead of using
 // runInBackgroundOrAwait). Issuance is the upstream HS256 email JWT
-// (createEmailVerificationToken); legacy HMAC tokens remain readable as a
 // migration bridge but are never issued here.
 func sendVerificationEmailForUser(ctx context.Context, opts types.Options, userRow map[string]any, callbackURL *string) error {
 	user := rowToUser(userRow, opts)
@@ -210,7 +187,6 @@ func sendVerificationEmailForUser(ctx context.Context, opts types.Options, userR
 	verificationURL := fmt.Sprintf("%s/verify-email?token=%s&callbackURL=%s", opts.BasePath, url.QueryEscape(token), url.QueryEscape(target))
 	if err := deliverVerificationEmail(ctx, opts, types.VerificationEmailData{User: &user, URL: verificationURL, Token: token}); err != nil {
 		// Upstream sendVerificationEmailFn awaits the sender directly
-		// (email-verification.ts:69-70, see #8757): a sender-thrown APIError
 		// (e.g. rate-limit TOO_MANY_REQUESTS) keeps its own status instead
 		// of collapsing to 500. Non-APIError delivery failures stay 500.
 		var httpErr types.HttpError
@@ -239,18 +215,9 @@ type verifyEmailOutput struct {
 	}
 }
 
-// VerifyEmail registers the verify-email endpoints. Upstream serves GET
-// /verify-email with query token+callbackURL, redirect-on-error/success
-// semantics, and a user response; the pre-existing POST /verify-email JSON
-// contract is kept as an alias and now also returns the verified user. One
 // registrar handles both methods so DisabledPaths gating stays a single
-// "/verify-email" entry.
-// mergeVerifyPostStoredRequest merges POST verify auth headers onto the real
 // request for downstream hooks (upstream safeCloneRequest semantics): the
 // middleware-reconstructed StoredRequestFromStd is authoritative for URL,
-// Host, RemoteAddr, and headers; Cookie/Authorization are only overwritten
-// when the typed input carries them (huma parses them from the same wire
-// headers). When no stored request exists the huma-rebuilt one is used; with
 // neither, a bare POST / fallback is built only if auth headers are present
 // (otherwise ctx passes through). Cloning preserves the real URL so hooks
 // observe the verify-email route instead of POST /.
@@ -329,10 +296,7 @@ func VerifyEmail(api huma.API, basePath string, opts types.Options) {
 }
 
 // VerifyEmailGet registers GET /verify-email with the upstream query
-// contract (?token=&callbackURL=). With a callbackURL, success and failure
-// both redirect (failure appends ?error=CODE); without one, JSON is
 // returned. An untrusted callbackURL is a 403 INVALID_CALLBACK_URL,
-// mirroring upstream's originCheck for the query value.
 func VerifyEmailGet(api huma.API, basePath string, opts types.Options) {
 	op := &huma.Operation{
 		Tags:        []string{"Auth"},
@@ -390,7 +354,6 @@ func VerifyEmailGet(api huma.API, basePath string, opts types.Options) {
 		// Wrap the request context so request-aware verification hooks and
 		// resends receive the live request even when the API middleware wrap
 		// is not installed. The stored request (when present) is authoritative
-		// for trust decisions; the huma rebuild is the fallback.
 		rctx := humaRequestContext(ctx.Context(), ctx)
 		if StoredRequestFromStd(ctx.Context()) == nil {
 			if req := RequestFromHuma(ctx); req != nil {
@@ -418,26 +381,16 @@ func VerifyEmailGet(api huma.API, basePath string, opts types.Options) {
 	})
 }
 
-// processVerifyEmail verifies a token and marks the email verified,
-// returning the resulting user plus any session cookies minted for
-// AutoSignInAfterVerification. errCode is a BASE_ERROR_CODES string with its
 // HTTP status; fatal transport errors surface as 500 INVALID paths. It backs
-// both the POST alias and GET /verify-email.
 func processVerifyEmail(ctx context.Context, opts types.Options, token string, headers CookieRequestHeaders) (user *types.User, cookies []http.Cookie, errCode string, status int) {
 	return processVerifyEmailWithSession(ctx, opts, token, headers, "", "")
 }
 
 // processVerifyEmailWithSession is processVerifyEmail plus the upstream
-// stateless change-email legs (email-verification.ts:330-478): HS256 JWTs
 // carrying updateTo are handled without any verification row. callbackURL
-// selects the verification-link callback for resends ("/" when empty);
-// sessionEmail is the current session's email when a session is present
 // ("" when unknown, in which case the INVALID_USER mismatch check is
-// skipped). Stateful change-email rows and legacy HMAC tokens remain as a
-// bounded legacy bridge via processLegacyVerifyToken.
 func processVerifyEmailWithSession(ctx context.Context, opts types.Options, token string, headers CookieRequestHeaders, callbackURL, sessionEmail string) (user *types.User, cookies []http.Cookie, errCode string, status int) {
 	// Issuance is the upstream HS256 email JWT; verify it first across all
-	// retained secrets (rotation-aware). Legacy HMAC tokens issued before
 	// migration remain readable as a fallback below.
 	if payload, jwtErr := crypto.VerifyEmailVerificationTokenAny(opts.AllSecrets(), token); jwtErr == nil {
 		if payload.UpdateTo == "" {
@@ -450,10 +403,7 @@ func processVerifyEmailWithSession(ctx context.Context, opts types.Options, toke
 	return processLegacyVerifyToken(ctx, opts, token, false, headers)
 }
 
-// sessionEmailForVerify best-effort resolves the current session's email for
 // the verify-email INVALID_USER mismatch check (upstream
-// email-verification.ts:331-334). Unknown/expired sessions return "" and the
-// check is skipped; the change-email legs otherwise proceed sessionlessly
 // (a fresh session is minted where upstream requires one).
 func sessionEmailForVerify(ctx context.Context, opts types.Options, cookie, authorization string) string {
 	token := sessionTokenFromRequest(cookie, authorization, opts)
@@ -468,7 +418,6 @@ func sessionEmailForVerify(ctx context.Context, opts types.Options, cookie, auth
 }
 
 // processStatelessUpdateTo runs the three upstream updateTo branches
-// (email-verification.ts:335-478) for a verified HS256 JWT.
 func processStatelessUpdateTo(ctx context.Context, opts types.Options, payload *crypto.EmailVerificationPayload, headers CookieRequestHeaders, callbackURL, sessionEmail string) (*types.User, []http.Cookie, string, int) {
 	if callbackURL == "" {
 		callbackURL = "/"
@@ -487,8 +436,6 @@ func processStatelessUpdateTo(ctx context.Context, opts types.Options, payload *
 
 	switch payload.RequestType {
 	case "change-email-confirmation":
-		// User clicked confirmation -> send verification to the new email
-		// (email-verification.ts:339-367). No user update, no session change.
 		nextToken, tokenErr := crypto.CreateEmailVerificationToken(opts.CurrentSecret(), payload.Email, payload.UpdateTo, emailVerificationExpirySeconds(opts), map[string]any{"requestType": "change-email-verification"})
 		if tokenErr != nil {
 			return nil, nil, types.ErrFailedToCreateVerification, types.StatusForCode(types.ErrFailedToCreateVerification)
@@ -505,10 +452,7 @@ func processStatelessUpdateTo(ctx context.Context, opts types.Options, payload *
 		})
 		return nil, nil, "", http.StatusOK
 	case "change-email-verification":
-		// User clicked verification -> update email, mark verified
-		// (email-verification.ts:371-414). Reuse the pre-update activeSession
 		// token when present (matched against the OLD email before the
-		// update, with the cookie email swapped to the new identity);
 		// mint only when absent/mismatched.
 		preToken, preSession, hasPre := capturePreUpdateVerificationSession(ctx, opts, payload.Email)
 		updatedRow, err := opts.DB.Update(ctx, "user", []types.Where{
@@ -523,7 +467,6 @@ func processStatelessUpdateTo(ctx context.Context, opts types.Options, payload *
 		}
 		updated := rowToUser(updatedRow, opts)
 		// Secondary-storage fan-out (upstream refreshUserSessions, queued by
-		// updateUserByEmail via queueAfterTransactionHook): post-commit
 		// log-only, never fails the route.
 		if err := refreshSecondaryUserSessions(opts, updated); err != nil {
 			Logf(opts, "error", "failed to refresh secondary sessions: %v", err)
@@ -548,10 +491,7 @@ func processStatelessUpdateTo(ctx context.Context, opts types.Options, payload *
 		}
 		return &updated, sessionCookies, "", http.StatusOK
 	default:
-		// Legacy flow: update email immediately as unverified, send a fresh
-		// verification to the new address, reuse the pre-update activeSession
 		// token when present (upstream email-verification.ts:421-478 reuses
-		// activeSession matched against the OLD email, cookie email swapped);
 		// mint only on mismatch.
 		preToken, preSession, hasPre := capturePreUpdateVerificationSession(ctx, opts, payload.Email)
 		updatedRow, err := opts.DB.Update(ctx, "user", []types.Where{
@@ -566,7 +506,6 @@ func processStatelessUpdateTo(ctx context.Context, opts types.Options, payload *
 		}
 		updated := rowToUser(updatedRow, opts)
 		// Secondary-storage fan-out (upstream refreshUserSessions, queued by
-		// updateUserByEmail via queueAfterTransactionHook): post-commit
 		// log-only, never fails the route.
 		if err := refreshSecondaryUserSessions(opts, updated); err != nil {
 			Logf(opts, "error", "failed to refresh secondary sessions: %v", err)
@@ -595,8 +534,6 @@ func processStatelessUpdateTo(ctx context.Context, opts types.Options, payload *
 	}
 }
 
-// processLegacyVerifyToken resolves pre-migration tokens: legacy HMAC-signed
-// email tokens, then stateful change-email verification rows. jwtExpired
 // reports an already-observed expired HS256 JWT so a token that matches no
 // row still reports TOKEN_EXPIRED (mirroring upstream's JWTExpired branch).
 func processLegacyVerifyToken(ctx context.Context, opts types.Options, token string, jwtExpired bool, headers CookieRequestHeaders) (*types.User, []http.Cookie, string, int) {
@@ -606,7 +543,6 @@ func processLegacyVerifyToken(ctx context.Context, opts types.Options, token str
 	}
 	// HMAC verification failed. Change-email tokens are random
 	// verification rows rather than signed tokens, so resolve those
-	// next; a genuinely expired signed token with no matching row reports
 	// TOKEN_EXPIRED to mirror upstream's JWTExpired branch.
 	expired := jwtExpired || isTokenExpiredError(err)
 	verificationRow, storedIdentifier, findErr := findChangeEmailVerificationRow(ctx, opts, token)
@@ -624,13 +560,8 @@ func processLegacyVerifyToken(ctx context.Context, opts types.Options, token str
 	return processChangeEmailVerification(ctx, opts, token, storedIdentifier, verificationRow)
 }
 
-// processChangeEmailVerification runs the change-email confirmation and
-// verification steps for a live verification row. storedIdentifier is the
-// storage-form identifier the row was found under (plain or hashed per
-// Verification.StoreIdentifier); it selects the secondary keys consumed on
 // success. A nil user with no error code means the confirmation email was
 // sent and there is no user to return (upstream answers {status:true} or
-// redirects in that case).
 func processChangeEmailVerification(ctx context.Context, opts types.Options, token, storedIdentifier string, verificationRow map[string]any) (user *types.User, cookies []http.Cookie, errCode string, status int) {
 	expiresAt, _ := verificationRow["expiresAt"].(time.Time)
 	if expiresAt.IsZero() || time.Now().UTC().After(expiresAt) {
@@ -654,9 +585,7 @@ func processChangeEmailVerification(ctx context.Context, opts types.Options, tok
 		}, nil)
 		if userErr != nil || userRow == nil {
 			// Upstream USER_NOT_FOUND resolves to 404 by majority (e.g. NOT_FOUND
-			// in admin/routes.ts:161); the verify-email route itself surfaces it via
 			// the 401 redirectOnError (email-verification.ts:300,328) but the
-			// canonical status wins here.
 			return nil, nil, types.ErrUserNotFound, types.StatusForCode(types.ErrUserNotFound)
 		}
 		verificationUser := rowToUser(userRow, opts)
@@ -665,7 +594,6 @@ func processChangeEmailVerification(ctx context.Context, opts types.Options, tok
 			return nil, nil, types.ErrVerificationEmailNotEnabled, types.StatusForCode(types.ErrVerificationEmailNotEnabled)
 		}
 		// Delivery failures never fail the route: upstream awaits via
-		// runInBackgroundOrAwait, which logs and continues.
 		sendVerificationEmailWithRequest(ctx, opts, types.VerificationEmailData{
 			User:  &verificationUser,
 			URL:   fmt.Sprintf("%s/verify-email?token=%s", opts.BasePath, nextToken),
@@ -692,7 +620,6 @@ func processChangeEmailVerification(ctx context.Context, opts types.Options, tok
 		}
 		updated := rowToUser(updatedRow, opts)
 		// Secondary-storage fan-out (upstream refreshUserSessions, queued by
-		// the email update via queueAfterTransactionHook): post-commit
 		// log-only, never fails the route.
 		if err := refreshSecondaryUserSessions(opts, updated); err != nil {
 			Logf(opts, "error", "failed to refresh secondary sessions: %v", err)
@@ -712,25 +639,18 @@ func processChangeEmailVerification(ctx context.Context, opts types.Options, tok
 	}
 }
 
-// verifyEmailForAddress marks the user's email verified for a signed-token
-// email (HS256 JWT or legacy HMAC), running the before/after verification
-// hooks and minting a session when AutoSignInAfterVerification is set.
 func verifyEmailForAddress(ctx context.Context, opts types.Options, email string, headers CookieRequestHeaders) (*types.User, []http.Cookie, string, int) {
 	userRow, err := opts.DB.FindOne(ctx, "user", []types.Where{
 		{Field: "email", Value: strings.ToLower(email)},
 	}, nil)
 	if err != nil || userRow == nil {
 		// Upstream USER_NOT_FOUND resolves to 404 by majority (e.g. NOT_FOUND
-		// in admin/routes.ts:161); the verify-email route itself surfaces it via
 		// the 401 redirectOnError (email-verification.ts:300,328) but the
-		// canonical status wins here.
 		return nil, nil, types.ErrUserNotFound, types.StatusForCode(types.ErrUserNotFound)
 	}
 	user := rowToUser(userRow, opts)
 	if user.EmailVerified {
 		// Upstream already-verified without callbackURL answers
-		// {status:true,user:null} (email-verification.ts:480-488,540-543):
-		// no user object. The redirect-with-callbackURL path stays as-is
 		// (the GET handler still 302s on success when callbackURL is set).
 		return nil, nil, "", http.StatusOK
 	}
@@ -755,7 +675,6 @@ func verifyEmailForAddress(ctx context.Context, opts types.Options, email string
 	}
 	updated := rowToUser(updatedRow, opts)
 	// Secondary-storage fan-out (upstream refreshUserSessions, queued by
-	// updateUserByEmail via queueAfterTransactionHook): post-commit log-only,
 	// never fails the route.
 	if err := refreshSecondaryUserSessions(opts, updated); err != nil {
 		Logf(opts, "error", "failed to refresh secondary sessions: %v", err)
@@ -781,17 +700,11 @@ func verifyEmailForAddress(ctx context.Context, opts types.Options, email string
 			cookies = sessionCookies
 		}
 	}
-	// Upstream fresh plain verify answers {status:true,user:null}
-	// (email-verification.ts:540-543): no user object even on first verify.
-	// Already-verified null above stays; updateTo legs still return the user.
 	return nil, cookies, "", http.StatusOK
 }
 
-// tryReuseVerificationSession reuses the current session for
-// autoSignInAfterVerification when it is present, live, and email-matches
 // (upstream email-verification.ts:527-534). It returns (nil,false) when there
 // is no reusable session so the caller mints a new row. Email comparison is
-// case-insensitive; expiry/revocation is enforced by loadSessionAndUser.
 func tryReuseVerificationSession(ctx context.Context, opts types.Options, headers CookieRequestHeaders, updated types.User, now time.Time) ([]http.Cookie, bool) {
 	req := StoredRequestFromStd(ctx)
 	if req == nil {
@@ -822,14 +735,10 @@ func tryReuseVerificationSession(ctx context.Context, opts types.Options, header
 	return reused, true
 }
 
-// capturePreUpdateVerificationSession snapshots the live session matching
 // oldEmail before the email update (upstream activeSession in
 // email-verification.ts:372-387,422-437). The INVALID_USER gate already
-// ensures a present session matches oldEmail; this helper re-resolves it for
 // cookie reuse so the post-update reload (which would see the new email,
 // especially with a lagging/log-only secondary fan-out) is not used for the
-// match decision. It returns the token and session row to reuse with the
-// swapped (updated) user identity.
 func capturePreUpdateVerificationSession(ctx context.Context, opts types.Options, oldEmail string) (string, types.Session, bool) {
 	req := StoredRequestFromStd(ctx)
 	if req == nil {
@@ -856,12 +765,9 @@ func capturePreUpdateVerificationSession(ctx context.Context, opts types.Options
 	return session.Token, session, true
 }
 
-// createVerificationSession mints a session for a freshly verified user,
 // mirroring upstream's autoSignInAfterVerification cookie handling. The row
 // goes through the shared issuance seam (upstream createSession): with
-// secondary storage configured the pair is mirrored there and the database
 // row is written only with StoreSessionInDatabase, since secondary-only
-// deployments may not migrate the session table at all.
 func createVerificationSession(ctx context.Context, opts types.Options, headers CookieRequestHeaders, user types.User, now time.Time) ([]http.Cookie, error) {
 	token := crypto.GenerateID()
 	session, err := createIssuedSession(ctx, opts, user.ID, token, now.Add(opts.Session.ExpiresInDuration()), now)
@@ -880,32 +786,16 @@ func isTokenExpiredError(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "expired")
 }
 
-// --- Secondary verification storage ---
-//
 // Mirrors the verification branches of upstream db/internal-adapter.ts
-// (createVerificationValue mirroring, findVerificationValue,
-// deleteVerificationByIdentifier, consumeVerificationValue) for the
-// change-email, delete-account, and reset-password verification rows owned by
-// these routes. Values are stored under `verification:<identifier>` keys as
-// JSON row maps, TTL'd to the row expiration.
-//
 // Storage-convention differences from upstream are intentional and loud:
 // upstream change-email tokens are stateless HS256 JWTs with no rows at all,
-// while Go keeps stateful single-use rows (dual-store consumed) for the
-// confirmation/verification handshake. New plain verification email issuance
-// is HS256 JWTs (see sendVerificationEmailForUser); row tokens are legacy
-// for outstanding handshakes only.
 
-// verificationSecondaryKey names the secondary key for a stored identifier.
 // Upstream TypeScript value: `verification:${identifier}`.
 func verificationSecondaryKey(storedIdentifier string) string {
 	return "verification:" + storedIdentifier
 }
 
-// resolveVerificationStoreOption selects the effective store-identifier
 // option for identifier, mirroring upstream getStorageOption
-// (db/verification-token-storage.ts:28-54): per-prefix overrides win, then
-// the configured default. A zero Mode/Hash/Overrides config means "plain".
 func resolveVerificationStoreOption(identifier string, config types.VerificationStoreIdentifier) types.VerificationStoreIdentifier {
 	for prefix, override := range config.Overrides {
 		if prefix != "" && strings.HasPrefix(identifier, prefix) {
@@ -915,12 +805,7 @@ func resolveVerificationStoreOption(identifier string, config types.Verification
 	return types.VerificationStoreIdentifier{Mode: config.Mode, Hash: config.Hash}
 }
 
-// processVerificationIdentifier maps an identifier to its stored form,
 // mirroring upstream processIdentifier
-// (db/verification-token-storage.ts:12-26): "plain" (or unset) passes
-// through, "hashed" applies SHA-256 + unpadded base64url, and a custom Hash
-// function applies instead. Unknown modes pass through like upstream's final
-// fallthrough.
 func processVerificationIdentifier(identifier string, option types.VerificationStoreIdentifier) (string, error) {
 	switch option.Mode {
 	case "", types.StoreIdentifierPlain:
@@ -944,7 +829,6 @@ func processVerificationIdentifier(identifier string, option types.VerificationS
 
 // verificationStoreUsesPlainFallback reports whether lookups must also try
 // the plain identifier, mirroring upstream's `storageOption !== "plain"`
-// branches: any non-plain effective option (hashed mode or custom hash)
 // keeps the plain fallback for rows written before hashing was enabled.
 func verificationStoreUsesPlainFallback(option types.VerificationStoreIdentifier) bool {
 	if option.Hash != nil {
@@ -953,8 +837,6 @@ func verificationStoreUsesPlainFallback(option types.VerificationStoreIdentifier
 	return option.Mode != "" && option.Mode != types.StoreIdentifierPlain
 }
 
-// reviveVerificationRowDates coerces RFC3339 date strings back to time.Time
-// for the known verification date columns after a secondary JSON round-trip
 // (upstream safeJSONParse revives ISO dates the same way).
 func reviveVerificationRowDates(row map[string]any) {
 	for _, key := range []string{"expiresAt", "createdAt", "updatedAt"} {
@@ -968,11 +850,8 @@ func reviveVerificationRowDates(row map[string]any) {
 	}
 }
 
-// writeSecondaryVerification stores a verification row under its stored
-// identifier with a TTL derived from the row expiration. Rows already past
 // expiry are not stored (TTL<=0), mirroring upstream's `if (ttl > 0)` guard
 // in createVerificationValue. Upstream TypeScript name: the secondaryStorage
-// fn inside createVerificationValue.
 func writeSecondaryVerification(opts types.Options, identifier string, row map[string]any) error {
 	if opts.SecondaryStorage == nil {
 		return nil
@@ -993,8 +872,6 @@ func writeSecondaryVerification(opts types.Options, identifier string, row map[s
 	return opts.SecondaryStorage.Set(verificationSecondaryKey(stored), string(encoded), &ttl)
 }
 
-// findSecondaryVerificationByStored returns the row stored under one exact
-// stored identifier, or (nil, nil) on a miss. Corrupt values read as a miss,
 // mirroring upstream's `safeJSONParse(...)` null path.
 func findSecondaryVerificationByStored(opts types.Options, stored string) (map[string]any, error) {
 	raw, err := opts.SecondaryStorage.Get(verificationSecondaryKey(stored))
@@ -1004,10 +881,8 @@ func findSecondaryVerificationByStored(opts types.Options, stored string) (map[s
 	return reviveSecondaryVerificationValue(raw), nil
 }
 
-// findSecondaryVerification returns the row for identifier honoring the
 // store-identifier option, including the plain fallback for non-plain
 // options (upstream findVerificationValue secondary branch). It returns
-// (nil, nil) on a miss.
 func findSecondaryVerification(opts types.Options, identifier string) (map[string]any, error) {
 	if opts.SecondaryStorage == nil {
 		return nil, nil
@@ -1027,7 +902,6 @@ func findSecondaryVerification(opts types.Options, identifier string) (map[strin
 	return nil, nil
 }
 
-// deleteSecondaryVerification removes the secondary entries for identifier
 // (stored plus the plain fallback when applicable), mirroring the secondary
 // half of upstream deleteVerificationByIdentifier.
 func deleteSecondaryVerification(opts types.Options, identifier string) error {
@@ -1048,14 +922,9 @@ func deleteSecondaryVerification(opts types.Options, identifier string) error {
 	return nil
 }
 
-// findChangeEmailVerificationRow resolves the live verification row for a
-// change-email token across both stores, returning the row plus the stored
 // identifier it was found under. It mirrors upstream findVerificationValue:
-// secondary storage leads (with the plain fallback for non-plain options);
 // the database is consulted only when there is no secondary backend or
-// Verification.StoreInDatabase keeps rows there, with a best-effort backfill
 // on a database hit. Expired database rows are swept unless
-// Verification.DisableCleanup.
 func findChangeEmailVerificationRow(ctx context.Context, opts types.Options, token string) (map[string]any, string, error) {
 	identifier := changeEmailIdentifier(token)
 	option := resolveVerificationStoreOption(identifier, opts.Verification.StoreIdentifier)
@@ -1074,12 +943,10 @@ func findChangeEmailVerificationRow(ctx context.Context, opts types.Options, tok
 		if !opts.Verification.StoreInDatabase {
 			return nil, stored, nil
 		}
-		// StoreInDatabase: fall through to the database and backfill the
 		// secondary entry on a hit so later reads stay cache-warm.
 	}
 	if opts.DB == nil {
 		// Secondary-only deployment without a database: nothing else to
-		// consult.
 		return nil, stored, nil
 	}
 	row, derr := findVerificationRowByStored(ctx, opts, stored, option, identifier)
@@ -1095,9 +962,7 @@ func findChangeEmailVerificationRow(ctx context.Context, opts types.Options, tok
 	return row, stored, nil
 }
 
-// findVerificationRowByStored reads the database by stored identifier with
 // the plain fallback for non-plain options (upstream findVerificationValue
-// database branch).
 func findVerificationRowByStored(ctx context.Context, opts types.Options, stored string, option types.VerificationStoreIdentifier, identifier string) (map[string]any, error) {
 	rows, err := opts.DB.FindMany(ctx, "verification", []types.Where{
 		{Field: "identifier", Value: stored},
@@ -1135,12 +1000,8 @@ func sweepExpiredVerificationRows(ctx context.Context, opts types.Options) {
 	})
 }
 
-// deleteChangeEmailVerification consumes a change-email verification value
 // across both stores, mirroring upstream deleteVerificationByIdentifier: the
-// secondary entries always go; the database row goes when there is no
-// secondary backend or StoreInDatabase keeps rows there. Both secondary keys
 // (stored plus the plain fallback) are removed, matching the consume path's
-// dual-key invalidation.
 func deleteChangeEmailVerification(ctx context.Context, opts types.Options, token, stored string) error {
 	identifier := changeEmailIdentifier(token)
 	if opts.SecondaryStorage != nil {
@@ -1169,9 +1030,6 @@ func deleteChangeEmailVerification(ctx context.Context, opts types.Options, toke
 // verification value for identifier, mirroring the secondary-only branch of
 // upstream consumeVerificationValue: GetAndDelete is the race gate (the
 // interface requires it so single-use values are never read and deleted as
-// separate operations), the sibling key is invalidated on a hit, and date
-// strings are revived after the JSON round-trip. It returns (nil, nil) on a
-// miss; expiry is checked by the caller, which treats an expired row as
 // already invalid (the row is gone and cannot be replayed).
 func consumeSecondaryVerification(opts types.Options, identifier string) (map[string]any, error) {
 	if opts.SecondaryStorage == nil {
@@ -1194,8 +1052,6 @@ func consumeSecondaryVerification(opts types.Options, identifier string) (map[st
 		}
 		for _, sibling := range candidates {
 			if sibling != candidate {
-				// Best-effort sibling cleanup; the authoritative delete
-				// above already consumed the token.
 				_ = opts.SecondaryStorage.Delete(verificationSecondaryKey(sibling))
 			}
 		}
@@ -1204,9 +1060,7 @@ func consumeSecondaryVerification(opts types.Options, identifier string) (map[st
 	return nil, nil
 }
 
-// reviveSecondaryVerificationValue decodes a secondary verification value
 // into a row map, or nil on a miss/corrupt value (mirroring upstream's
-// safeJSONParse null path plus the expiresAt Date hydration).
 func reviveSecondaryVerificationValue(raw any) map[string]any {
 	if raw == nil {
 		return nil

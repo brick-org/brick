@@ -15,12 +15,10 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 )
 
-// --- request-password-reset ---
 
 type requestPasswordResetInput struct {
 	Body struct {
 		Email string `json:"email" format:"email" required:"true"`
-		// RedirectTo is the URL the reset-password callback redirects to
 		// with ?token= on success or ?error=INVALID_TOKEN on failure.
 		RedirectTo *string `json:"redirectTo,omitempty"`
 	}
@@ -34,15 +32,7 @@ type requestPasswordResetOutput struct {
 }
 
 // RequestPasswordReset registers POST /request-password-reset.
-//
 // Upstream stores a random single-use verification row
-// (identifier "reset-password:<token>", value userID) and emails a
-// /reset-password/<token>?callbackURL=<redirectTo> link. Unknown emails get
-// a generic success after timing-equalizing work (random ID plus a dummy
-// verification lookup) so enumeration via timing fails. Delivery runs via
-// runInBackgroundOrAwait (failures logged, generic success kept); the
-// request-aware SendResetPassword variant is preferred when set (upstream
-// sendResetPassword(data, request)).
 func RequestPasswordReset(api huma.API, basePath string, opts types.Options) {
 	registerAuthOperation(api, huma.Operation{
 		Tags:        []string{"Auth"},
@@ -58,7 +48,6 @@ func RequestPasswordReset(api huma.API, basePath string, opts types.Options) {
 		if opts.EmailAndPassword.SendResetPassword == nil && opts.EmailAndPassword.SendResetPasswordRequest == nil {
 			// Upstream password.ts:90-98 throws BAD_REQUEST with code
 			// RESET_PASSWORD_DISABLED and message "Reset password isn't
-			// enabled". Global config flag only: checked before any email
 			// lookup so existing and unknown emails answer identically
 			// (no per-email oracle).
 			Logf(opts, "error", "Reset password isn't enabled. Please pass an emailAndPassword.sendResetPassword function in your auth config!")
@@ -83,12 +72,9 @@ func RequestPasswordReset(api huma.API, basePath string, opts types.Options) {
 		if err != nil || userRow == nil {
 			// Mitigate timing attacks: simulate token generation and the
 			// verification lookup a real user would trigger (upstream
-			// generateId + findVerificationValue("dummy-verification-token")).
-			// The dummy lookup runs through the same secondary-aware path so
 			// timing stays comparable under every storage configuration.
 			_ = crypto.GenerateRandomString(24)
 			_, _ = findResetVerification(ctx, opts, "dummy-verification-token")
-			// Upstream password.ts:113 logs "Reset Password: User not found"
 			// while still answering the generic success below.
 			Logf(opts, "warn", "Reset Password: User not found")
 			return genericOK, nil // avoid leaking whether email exists
@@ -108,7 +94,6 @@ func RequestPasswordReset(api huma.API, basePath string, opts types.Options) {
 		user := rowToUser(userRow, opts)
 		resetURL := opts.BasePath + "/reset-password/" + verificationToken + "?callbackURL=" + url.QueryEscape(redirectTo)
 		// Delivery failures never fail the route: upstream awaits via
-		// runInBackgroundOrAwait, which logs and continues (password.test.ts
 		// "should not reveal failure of email sending").
 		sendResetPasswordMail(ctx, opts, types.ResetPasswordData{User: &user, URL: resetURL, Token: verificationToken})
 
@@ -116,8 +101,6 @@ func RequestPasswordReset(api huma.API, basePath string, opts types.Options) {
 	})
 }
 
-// sendResetPasswordMail dispatches SendResetPassword via
-// runBackgroundOrAwait, preferring the request-aware variant when set
 // (upstream sendResetPassword(data, request)).
 func sendResetPasswordMail(ctx context.Context, opts types.Options, data types.ResetPasswordData) {
 	if opts.EmailAndPassword.SendResetPasswordRequest != nil {
@@ -134,8 +117,6 @@ func sendResetPasswordMail(ctx context.Context, opts types.Options, data types.R
 	}
 }
 
-// runOnPasswordResetHook runs onPasswordReset, preferring the request-aware
-// variant when set (upstream onPasswordReset(data, request)); errors fail the
 // route, mirroring upstream's direct await.
 func runOnPasswordResetHook(ctx context.Context, opts types.Options, data types.PasswordResetData) error {
 	if opts.EmailAndPassword.OnPasswordResetRequest != nil {
@@ -147,11 +128,8 @@ func runOnPasswordResetHook(ctx context.Context, opts types.Options, data types.
 	return nil
 }
 
-// createResetVerification stores the single-use reset-password verification
 // row for token across both stores, mirroring upstream
-// createVerificationValue: secondary storage leads and the database row is
 // written only with Verification.StoreInDatabase (or when no secondary
-// backend exists). The stored identifier honors the store-identifier option.
 func createResetVerification(ctx context.Context, opts types.Options, token, userID string, expiresAt time.Time) error {
 	now := time.Now().UTC()
 	identifier := resetPasswordIdentifier(token)
@@ -181,11 +159,8 @@ func createResetVerification(ctx context.Context, opts types.Options, token, use
 	return nil
 }
 
-// findResetVerification returns the live reset-password verification row for
 // token without consuming it (for the redirect callback check), or
 // (nil, nil) when missing/expired. It mirrors upstream findVerificationValue:
-// secondary storage leads; the database is consulted only when there is no
-// secondary backend or Verification.StoreInDatabase keeps rows there.
 func findResetVerification(ctx context.Context, opts types.Options, token string) (map[string]any, error) {
 	identifier := resetPasswordIdentifier(token)
 	if opts.SecondaryStorage != nil {
@@ -215,7 +190,6 @@ func findResetVerification(ctx context.Context, opts types.Options, token string
 	if err != nil {
 		return nil, err
 	}
-	// Best-effort expired-row cleanup on every database read (mirroring
 	// upstream findVerificationValue), gated by DisableCleanup.
 	sweepExpiredVerificationRows(ctx, opts)
 	if row == nil {
@@ -227,12 +201,9 @@ func findResetVerification(ctx context.Context, opts types.Options, token string
 	return row, nil
 }
 
-// --- reset-password ---
 
 type resetPasswordInput struct {
 	// Token mirrors upstream's ?token= query support; the body token takes
-	// precedence when both are present. Legacy clients keep sending the body
-	// token unchanged.
 	Token string `query:"token"`
 	Body  struct {
 		Token       *string `json:"token,omitempty"`
@@ -247,12 +218,7 @@ type resetPasswordOutput struct {
 }
 
 // ResetPassword registers POST /reset-password.
-//
-// The token is consumed atomically from the single-use verification rows
-// written by RequestPasswordReset (first caller wins; racers and expired
 // tokens get INVALID_TOKEN). Legacy reusable HMAC email tokens issued by
-// older deployments are still accepted as a fallback so rotation-era links
-// keep working. A missing credential account is created, mirroring upstream.
 func ResetPassword(api huma.API, basePath string, opts types.Options) {
 	registerAuthOperation(api, huma.Operation{
 		Tags:        []string{"Auth"},
@@ -347,10 +313,6 @@ func ResetPassword(api huma.API, basePath string, opts types.Options) {
 		}
 
 		if opts.EmailAndPassword.RevokeSessionsOnPasswordReset {
-			// Secondary-aware bulk revoke (upstream deleteUserSessions,
-			// password.ts:328-330): cache entries go first per the flag
-			// matrix so secondary copies don't survive; without a
-			// secondary backend this is exactly the DeleteMany below.
 			if err := deleteSecondaryAwareUserSessions(ctx, opts, userID); err != nil {
 				return nil, huma.Error500InternalServerError("failed to revoke sessions")
 			}
@@ -365,20 +327,15 @@ func ResetPassword(api huma.API, basePath string, opts types.Options) {
 var errResetTokenNotFound = errors.New("reset token not found")
 
 // consumeResetPasswordToken atomically consumes the single-use verification
-// row for token across both stores (first caller wins; racers and expired
 // tokens get INVALID_TOKEN), mirroring upstream consumeVerificationValue:
 // secondary-only deployments consume via GetAndDelete (the required atomic
-// primitive); database deployments consume inside a transaction, honoring
 // the store-identifier option with the plain fallback for non-plain modes.
-// It returns the stored userID on success. When no row exists it falls back
-// to verifying legacy reusable HMAC email tokens, returning the embedded
 // email instead (migration bridge for rotation-era links).
 func consumeResetPasswordToken(ctx context.Context, opts types.Options, token string) (userID, legacyEmail, errCode string, status int) {
 	identifier := resetPasswordIdentifier(token)
 	if opts.SecondaryStorage != nil && !opts.Verification.StoreInDatabase {
 		row, err := consumeSecondaryVerification(opts, identifier)
 		if err == nil && row != nil {
-			// The row is already deleted (burned); an expired or empty
 			// value still reports INVALID_TOKEN and can never replay.
 			if expiresAt, _ := row["expiresAt"].(time.Time); isVerificationLive(expiresAt) {
 				if v, _ := row["value"].(string); v != "" {
@@ -387,7 +344,6 @@ func consumeResetPasswordToken(ctx context.Context, opts types.Options, token st
 			}
 			// Kept 400 (differs from StatusForCode 401): upstream
 			// reset-password throws BAD_REQUEST for a consumed/empty token
-			// (password.ts:299).
 			return "", "", types.ErrInvalidToken, http.StatusBadRequest
 		}
 	} else if opts.DB != nil {
@@ -406,9 +362,6 @@ func consumeResetPasswordToken(ctx context.Context, opts types.Options, token st
 				})
 				if cerr != nil {
 					// Fail-safe: a consume error behaves like a miss and
-					// falls through to the legacy check below, which rejects
-					// the random single-use token format (matches the old
-					// FindOne-error behavior exactly).
 					row = nil
 					break
 				}
@@ -427,17 +380,12 @@ func consumeResetPasswordToken(ctx context.Context, opts types.Options, token st
 					}
 					consumed = true
 				}
-				// Expired-row cleanup: the consumed row is already burned by
-				// the helper; defensively remove the sibling key (at most one
-				// location ever holds the row).
 				for _, candidate := range candidates {
 					_ = opts.DB.Delete(ctx, "verification", []types.Where{
 						{Field: "identifier", Value: candidate},
 					})
 				}
 				if !consumed {
-					// Expired or empty: the caller falls through to the legacy
-					// check below, which rejects the random single-use token.
 					row = nil
 				}
 			}
@@ -448,7 +396,6 @@ func consumeResetPasswordToken(ctx context.Context, opts types.Options, token st
 				if value == "" {
 					// Kept 400 (differs from StatusForCode 401): upstream
 					// reset-password throws BAD_REQUEST for a consumed/empty token
-					// (password.ts:299).
 					return "", "", types.ErrInvalidToken, http.StatusBadRequest
 				}
 				return value, "", "", http.StatusOK
@@ -457,7 +404,6 @@ func consumeResetPasswordToken(ctx context.Context, opts types.Options, token st
 	}
 	// Legacy fallback: reusable HMAC-signed email tokens from deployments
 	// predating single-use DB rows. Any secret rotation still applies via
-	// AllSecrets, preserving the cross-rotation guarantee.
 	email, err := crypto.VerifyTokenAny(opts.AllSecrets(), token)
 	if err != nil {
 		// Kept 400 (differs from StatusForCode 401): upstream reset-password
@@ -468,8 +414,6 @@ func consumeResetPasswordToken(ctx context.Context, opts types.Options, token st
 }
 
 // Merged from password-extra.go (upstream password.ts: VerifyPassword,
-// reset-password callback, SetPassword server-only). Same package, no
-// behavior change (B8 file-structure alignment).
 
 type verifyPasswordInput struct {
 	Authorization string `header:"Authorization"`
@@ -503,7 +447,6 @@ func VerifyPassword(api huma.API, basePath string, opts types.Options) {
 		if err != nil {
 			if errors.Is(err, errSessionExpired) {
 				// Kept 401 (differs from StatusForCode 400): expired-session
-				// auth guard; see the note in ChangePassword.
 				return nil, huma.Error401Unauthorized(types.ErrSessionExpired)
 			}
 			return nil, huma.NewError(types.StatusForCode(types.ErrFailedToGetSession), types.ErrFailedToGetSession)
@@ -536,7 +479,6 @@ func VerifyPassword(api huma.API, basePath string, opts types.Options) {
 // RequestPasswordResetCallback registers GET /reset-password/{token}.
 // Upstream redirects the user to the callback URL with the token appended, or
 // to an error URL with ?error=INVALID_TOKEN when the token is missing,
-// expired, or unknown.
 func RequestPasswordResetCallback(api huma.API, basePath string, opts types.Options) {
 	op := &huma.Operation{
 		Tags:        []string{"Auth"},
@@ -597,12 +539,7 @@ func RequestPasswordResetCallback(api huma.API, basePath string, opts types.Opti
 	})
 }
 
-// resetTokenValid reports whether token is a live password-reset token.
 // It accepts upstream-style single-use verification rows
-// (identifier "reset-password:<token>", resolved across both stores with the
-// store-identifier option) as well as the legacy signed email
-// tokens issued by POST /request-password-reset. The token is not consumed
-// here; consumption happens in POST /reset-password.
 func resetTokenValid(ctx context.Context, opts types.Options, token string) bool {
 	if row, err := findResetVerification(ctx, opts, token); err == nil && row != nil {
 		return true
@@ -628,20 +565,9 @@ func appendRedirectQuery(rawURL, key, value string) string {
 	return rawURL + sep + url.QueryEscape(key) + "=" + url.QueryEscape(value)
 }
 
-// --- set-password (server-only) ---
 
 // SetPassword is the server-only counterpart of upstream `setPassword`
-// (update-user.ts:314-368, `createAuthEndpoint.serverOnly`): it sets the
-// password on the caller's existing passwordless credential account and
-// reports `{status: true}`. There is intentionally no HTTP route — upstream
-// exposes it only as `auth.api.setPassword`, so Go callers invoke this
-// function with the already-authenticated user ID (the sensitive-session
-// gate lives at the HTTP layer and has no server-only equivalent).
-//
-// Behavior mirrors upstream exactly: length gates with warn logs, link a new
-// credential account when none exists, fill a null password, and reject an
 // already-set password with PASSWORD_ALREADY_SET. Errors are
-// types.HttpError values carrying the canonical status.
 func SetPassword(ctx context.Context, opts types.Options, userID, newPassword string) (bool, error) {
 	if len(newPassword) < passwordMinLength(opts) {
 		Logf(opts, "warn", "Password is too short")

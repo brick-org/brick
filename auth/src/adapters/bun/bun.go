@@ -1490,7 +1490,6 @@ func (a *Adapter) DeleteMany(ctx context.Context, model string, where []authdb.W
 // Other dialects use a snapshot-guarded delete (read + id-guarded
 // DeleteMany, returning the snapshot only when exactly one row was removed).
 // Empty where returns (nil, nil) without touching the database.
-// Upstream TypeScript name: consumeOne.
 // consumeOneReturningQuery builds the single-row DELETE...RETURNING query:
 // ctid-guarded on PostgreSQL, rowid-guarded on other RETURNING-capable
 // dialects (SQLite). Extracted so SQL-generation tests can assert the
@@ -1641,7 +1640,7 @@ func quoteIdent(s string) string {
 // (nil, nil) from contention. Other dialects use bounded compare-and-swap retries
 // (read, compute, id+snapshot-guarded UpdateMany, retry on contention, up to
 // 5 attempts). Empty increment+set is an error. Empty where matches nothing
-// (nil, nil). Upstream TypeScript name: incrementOne.
+// (nil, nil).
 func (a *Adapter) IncrementOne(ctx context.Context, model string, where []authdb.Where, increment map[string]int, set map[string]any) (map[string]any, error) {
 	if len(increment) == 0 && len(set) == 0 {
 		return nil, fmt.Errorf("bun IncrementOne %s: incrementOne requires a non-empty `increment` or `set`; both were empty", model)
@@ -2502,7 +2501,6 @@ func (a *Adapter) encodeRow(model string, data map[string]any) (map[string]any, 
 // strings parse; 0/1 revive to bools when the store lacks native support).
 // Unknown columns pass through unchanged (an intentional deviation from the
 // factory, which drops off-schema keys, so extra selected columns survive).
-// Upstream TypeScript name: transformOutput (key part).
 func (a *Adapter) decodeRow(model string, row map[string]any) (map[string]any, error) {
 	if len(row) == 0 {
 		return row, nil

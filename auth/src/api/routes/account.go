@@ -23,10 +23,7 @@ type accountRecord struct {
 	Scopes     []string  `json:"scopes"`
 }
 
-// nullableString tracks presence for update-user's image field: upstream
-// distinguishes absent (undefined, keep) from explicit null (unset), while
-// Go's *string cannot. It unmarshals any JSON value as set, with null
-// recorded as a set-but-nil value that clears the column.
+// nullableString tracks presence: absent keeps, explicit null clears (upstream).
 type nullableString struct {
 	Set   bool
 	Value *string
@@ -48,33 +45,18 @@ func (n *nullableString) UnmarshalJSON(data []byte) error {
 }
 
 // TransformSchema implements huma.SchemaTransformer so request validation
-// accepts the wire forms UnmarshalJSON handles (JSON string or null).
-// Without it huma generates an object schema from the struct shape and
 // rejects plain `"image":"..."` payloads with 422 before the handler runs.
 func (n *nullableString) TransformSchema(r huma.Registry, s *huma.Schema) *huma.Schema {
 	return &huma.Schema{Type: huma.TypeString, Nullable: true}
 }
 
-// callbackRequest rebuilds a best-effort *http.Request from the huma.Context
-// carried in ctx values (stored by WithAuthRouteContext in the API
-// middleware, or by humaRequestContext in direct-handle GET routes) for
-// request-aware callbacks (upstream ctx.request via safeCloneRequest).
-// Limits mirror api.requestFromContext: only method, URL, host, remote
-// address, and headers are carried; the body is referenced, not cloned. It
-// returns nil when no huma context is present (e.g. direct unit calls, or
-// POST routes running without the API middleware wrap); *Request callbacks
-// must tolerate a nil request, matching upstream invocations with request
-// undefined.
+// Rebuilds *http.Request for request-aware callbacks; nil when absent (upstream).
 func callbackRequest(ctx context.Context) *http.Request {
 	hc, _ := ctx.Value(humaContextKey{}).(huma.Context)
 	return requestFromHuma(hc)
 }
 
-// humaRequestContext returns a context carrying hc under the auth-route
-// context key so callbackRequest can rebuild the *http.Request for
-// request-aware hooks. Direct-handle GET routes (which own their
-// huma.Context) wrap their context with this instead of depending on the API
-// middleware wrap.
+// Wraps context so request-aware hooks see the live request.
 func humaRequestContext(parent context.Context, hc huma.Context) context.Context {
 	if hc == nil {
 		return parent
@@ -82,10 +64,7 @@ func humaRequestContext(parent context.Context, hc huma.Context) context.Context
 	return context.WithValue(parent, humaContextKey{}, hc)
 }
 
-// requestFromHuma rebuilds a best-effort *http.Request from hc. It returns
-// nil when hc is nil (e.g. direct unit calls); *Request callbacks must
-// tolerate a nil request, matching upstream invocations with request
-// undefined.
+// Nil when absent; callers must tolerate nil (upstream).
 func requestFromHuma(hc huma.Context) *http.Request {
 	if hc == nil {
 		return nil
@@ -114,15 +93,8 @@ func logBackgroundError(opts types.Options, msg string, err error) {
 	opts.Logger.Log("error", msg+": "+err.Error())
 }
 
-// runBackgroundOrAwait mirrors upstream runInBackgroundOrAwait
-// (context/create-context.ts): with Advanced.BackgroundTasks.Handler the work
-// is deferred to the handler (task panics and errors contained, never failing
-// the route); without a handler it runs synchronously and failures are logged
-// and swallowed so routes still answer success (upstream logs "Failed to run
-// background task" and continues — e.g. password.test.ts "should not reveal
-// failure of email sending"). Callers that must fail the route on error
-// (direct-await sites like sendVerificationEmailFn) invoke callbacks directly
-// instead.
+// runBackgroundOrAwait mirrors upstream runInBackgroundOrAwait.
+// Failures never fail the route; callers that must fail invoke directly.
 func runBackgroundOrAwait(opts types.Options, task func() error) {
 	if handler := opts.Advanced.BackgroundTasks.Handler; handler != nil {
 		handler(func() {
@@ -138,9 +110,7 @@ func runBackgroundOrAwait(opts types.Options, task func() error) {
 	}
 }
 
-// sendChangeEmailConfirmationMail dispatches SendChangeEmailConfirmation,
-// preferring the request-aware variant when set (upstream
-// sendChangeEmailConfirmation(data, request)).
+// Prefers request-aware variant when set (upstream).
 func sendChangeEmailConfirmationMail(ctx context.Context, opts types.Options, data types.ChangeEmailData) {
 	if opts.User.ChangeEmail.SendChangeEmailConfirmationRequest != nil {
 		req := callbackRequest(ctx)
@@ -156,9 +126,7 @@ func sendChangeEmailConfirmationMail(ctx context.Context, opts types.Options, da
 	}
 }
 
-// sendDeleteAccountVerificationMail dispatches SendDeleteAccountVerification,
-// preferring the request-aware variant when set (upstream
-// sendDeleteAccountVerification(data, request)).
+// Prefers request-aware variant when set (upstream).
 func sendDeleteAccountVerificationMail(ctx context.Context, opts types.Options, data types.DeleteAccountVerificationData) {
 	if opts.User.DeleteUser.SendDeleteAccountVerificationRequest != nil {
 		req := callbackRequest(ctx)
@@ -174,8 +142,7 @@ func sendDeleteAccountVerificationMail(ctx context.Context, opts types.Options, 
 	}
 }
 
-// runBeforeDeleteHook runs beforeDelete, preferring the request-aware variant
-// when set (upstream beforeDelete(user, request)); errors abort deletion.
+// Prefers request-aware variant; errors abort deletion (upstream).
 func runBeforeDeleteHook(ctx context.Context, opts *types.DeleteUserOptions, user *types.User) error {
 	if opts == nil {
 		return nil
@@ -189,9 +156,7 @@ func runBeforeDeleteHook(ctx context.Context, opts *types.DeleteUserOptions, use
 	return nil
 }
 
-// runAfterDeleteHook runs afterDelete, preferring the request-aware variant
-// when set (upstream afterDelete(user, request)); errors fail the route,
-// mirroring upstream's direct await.
+// Prefers request-aware variant; errors fail the route (upstream).
 func runAfterDeleteHook(ctx context.Context, opts *types.DeleteUserOptions, user *types.User) error {
 	if opts == nil {
 		return nil

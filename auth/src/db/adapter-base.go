@@ -2,10 +2,7 @@
 // Concrete adapters live under auth/adapters and auth itself has no Brick
 // dependency, so it can be mounted on any Huma-compatible HTTP stack.
 //
-// File boundary: this file is auth/src/db/adapter-base.go, mirroring the
-// upstream src/db/adapter-base.ts boundary. It additionally carries the full
-// Adapter contract (upstream @better-auth/core db/adapter), which has no
-// narrower Go file yet.
+// File boundary: auth/src/db/adapter-base.go (upstream src/db/adapter-base.ts).
 //
 // Row-key contract: rows exchanged with callers use logical camelCase keys
 // (for example "userId", "emailVerified") with type revival per contract
@@ -14,7 +11,7 @@
 // Create/Update data keys, select entries, SortBy.Field) and maps them to
 // physical columns via Config.FieldNames (explicit overrides) with a
 // camelToSnake fallback. Custom FieldNames reverse to logical on reads
-// (transformOutput key part). See PARITY_V2.md.
+// (transformOutput key part).
 //
 // Upstream-divergence summary (see Adapter for per-method detail):
 //   - No join parameter on FindOne/FindMany (upstream JoinOption/JoinConfig).
@@ -76,7 +73,7 @@ const (
 //
 // Upstream resolves the effective limit as
 // `unsafeLimit ?? options.advanced.database.defaultFindManyLimit ?? 100`
-// (see vendor/better-auth/packages/core/src/db/adapter/factory.ts), and join
+// (see upstream adapter factory), and join
 // fallback queries default to the same 100 when no per-join limit applies.
 //
 // This contract does NOT apply the default automatically: Adapter.FindMany
@@ -352,7 +349,7 @@ type Adapter interface {
 	// Under concurrent invocation against the same row, exactly one caller
 	// receives the row; racers receive (nil, nil). This is the race-safe
 	// primitive for single-use credentials (verification tokens,
-	// authorization codes). Upstream TypeScript name: consumeOne.
+	// authorization codes).
 	ConsumeOne(context.Context, string, []Where) (map[string]any, error)
 	// IncrementOne atomically applies signed numeric deltas to a single row
 	// matching where (`field = field + delta` per increment entry; negative
@@ -360,7 +357,7 @@ type Adapter interface {
 	// Where is both selector AND guard (comparison operators honored); when
 	// the guard matches no row, it makes no change and returns (nil, nil).
 	// At least one of increment/set must be non-empty, else an error.
-	// Returns the updated row. Upstream TypeScript name: incrementOne.
+	// Returns the updated row.
 	IncrementOne(context.Context, string, []Where, map[string]int, map[string]any) (map[string]any, error)
 	// Transaction runs fn inside a real database transaction. Error-only
 	// (upstream returns generic R) with no sequential fallback for

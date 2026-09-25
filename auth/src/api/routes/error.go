@@ -11,20 +11,7 @@ import (
 )
 
 // GET /error renders the configurable default error page.
-//
-// Exact port of vendor/better-auth/packages/better-auth/src/api/routes/error.ts:
-//   - Query parameters are `error` (code) and `error_description`.
 //   - The code must match /^['A-Za-z0-9_-]+$/; anything else renders UNKNOWN.
-//   - Descriptions are HTML-sanitized (see sanitizeErrorHTML).
-//   - A configured onAPIError.errorURL receives a 302 with the safe error
-//     parameters instead of the page.
-//   - Production (NODE_ENV=production, mirroring the rate-limit default in
-//     auth/index.go) without customizeDefaultErrorPage bounces to / with the
-//     safe parameters instead of rendering.
-//   - Rendering honors every customizeDefaultErrorPage knob (colors, font,
-//     size, decoration toggles) with the upstream defaults. The Go-only
-//     ErrorPageSize RadiusMd/RadiusLg tokens have no upstream counterpart
-//     and are intentionally unused.
 func Error(api huma.API, basePath string, opts types.Options) {
 	op := &huma.Operation{
 		Tags:        []string{"Auth"},
@@ -87,15 +74,7 @@ func redirect(ctx huma.Context, location string) {
 	ctx.SetStatus(http.StatusFound)
 }
 
-// mergeErrorParams appends the safe error parameters to a base URL,
 // preserving existing query parameters and fragments (upstream
-// appendQueryParams in core/src/utils/url.ts:84-87: raw query text is
-// retained verbatim, new params concatenated with &).
-//
-// Default path (base carries no error/error_description keys) uses the
-// historical parse+Set+Encode form and stays byte-identical. When the base
-// already carries such keys, the existing RawQuery is preserved verbatim
-// (duplicates/encoding/order) and the encoded params are concatenated,
 // mirroring upstream raw-append instead of collapsing via q.Set.
 func mergeErrorParams(base string, params url.Values) string {
 	u, err := url.Parse(base)
@@ -131,7 +110,6 @@ func mergeErrorParams(base string, params url.Values) string {
 }
 
 // isValidErrorCode mirrors upstream /^['A-Za-z0-9_-]+$/ (invalid codes
-// render UNKNOWN).
 func isValidErrorCode(code string) bool {
 	if code == "" {
 		return false
@@ -149,7 +127,6 @@ func isValidErrorCode(code string) bool {
 
 // sanitizeErrorHTML mirrors the upstream sanitize helper: <, >, ", ' are
 // escaped, and & is escaped unless it already opens an HTML entity (amp,
-// lt, gt, quot, #39, #xHEX, #DEC).
 func sanitizeErrorHTML(input string) string {
 	s := strings.ReplaceAll(input, "<", "&lt;")
 	s = strings.ReplaceAll(s, ">", "&gt;")
@@ -167,7 +144,6 @@ func sanitizeErrorHTML(input string) string {
 	return out.String()
 }
 
-// isHTMLEntityAt reports whether s[i:] opens an HTML entity reference
 // (upstream /&(?!amp;|lt;|gt;|quot;|#39;|#x[0-9a-fA-F]+;|#[0-9]+;)/).
 func isHTMLEntityAt(s string, i int) bool {
 	rest := s[i+1:]
@@ -199,8 +175,6 @@ func isHexDigit(c byte) bool {
 	return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F'
 }
 
-// jsEncodeURIComponent mirrors encodeURIComponent for the error-code links
-// (unreserved marks stay raw, everything else %XX with uppercase hex).
 func jsEncodeURIComponent(s string) string {
 	var out strings.Builder
 	out.Grow(len(s))
@@ -245,7 +219,6 @@ func renderDefaultErrorPage(custom types.DefaultErrorPageOptions, code, descript
 	primaryFg := orErrorDefault(c.PrimaryForeground, "white")
 	background := orErrorDefault(c.Background, "white")
 	// bodyBackground mirrors the upstream body/grid-mask fallback
-	// (error.ts:36,148: custom?.colors?.background || "var(--background)"),
 	// which differs from the :root --background default ("white", error.ts:61).
 	bodyBackground := orErrorDefault(c.Background, "var(--background)")
 	foreground := orErrorDefault(c.Foreground, "oklch(0.271 0 0)")
