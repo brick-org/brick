@@ -76,7 +76,7 @@ func TestExcludedMarkerLedger(t *testing.T) {
 	if len(gotPending) != 0 {
 		t.Fatalf("Runtime: pending markers must be zero (Wave-10 closure); found %d.\n"+
 			"Wire the option (`Runtime: wired:<file:line>`) or file an intentional "+
-			"exclusion (`Runtime: excluded(W10-XX)` + ledger entry + PARITY_V2.md registry).",
+			"exclusion (`Runtime: excluded(W10-XX)` + ledger entry).",
 			len(gotPending))
 		for _, f := range gotPending {
 			t.Logf("  %s:%d %s pending:%s", f.file, f.line, f.symbol, f.owner)
@@ -84,7 +84,7 @@ func TestExcludedMarkerLedger(t *testing.T) {
 	}
 	if len(got) != len(excludedMarkerLedger) {
 		t.Fatalf("excluded marker count = %d, want %d (ledger).\n"+
-			"New exclusions require a ledger entry plus a PARITY_V2.md Wave-10 registry item; "+
+			"New exclusions require a ledger entry; "+
 			"wired options must flip to `Runtime: wired:<file:line>`.\nFound:",
 			len(got), len(excludedMarkerLedger))
 		for _, f := range got {
@@ -108,7 +108,7 @@ func TestExcludedMarkerLedger(t *testing.T) {
 			}
 		}
 		if !matched {
-			t.Errorf("unledgered excluded marker %s:%d symbol %q owner %q — add a ledger entry and a PARITY_V2.md Wave-10 registry item",
+			t.Errorf("unledgered excluded marker %s:%d symbol %q owner %q — add a ledger entry",
 				f.file, f.line, f.symbol, f.owner)
 		}
 	}

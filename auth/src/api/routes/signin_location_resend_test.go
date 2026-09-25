@@ -8,7 +8,7 @@ import (
 	"github.com/brick-org/brick/auth/src/types"
 )
 
-// P02 sign-in gaps (PARITY_V2.md P02): malformed-email 400 (GAP-1),
+// Sign-in gaps: malformed-email 400 (GAP-1),
 // Location header on trusted callbackURL (GAP-2), sendOnSignIn resend
 // coverage (GAP-3). Pinned upstream: Better Auth v1.7.5 @ 5468e6bf
 // (sign-in.ts:522-525, 625-627, 569-601).

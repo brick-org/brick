@@ -5,8 +5,7 @@ import (
 	"time"
 )
 
-// F9 contract pins for the P12-GAP-1/P12-GAP-2 tri-states (PARITY_V2.md,
-// Later-work backlog "Types-unfrozen work").
+// Tri-state contract pins (*bool/*int unset-vs-explicit).
 //
 //   - EmailVerificationOptions.SendOnSignUp is *bool: nil (unset) falls back
 //     to EmailAndPassword.RequireEmailVerification; non-nil is explicit.

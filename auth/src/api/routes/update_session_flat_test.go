@@ -1,9 +1,9 @@
 package routes
 
-// F4 parity gaps 4+7 (PARITY_V3.md; upstream update-session.ts:76-82 +
-// session.ts:853-870 @ 5468e6bf): update-session extras must serialize FLAT
-// top-level (session.theme) like parseSessionOutput, and revoke-other must
-// revoke only LIVE others with no cookie writes.
+// Update-session extras serialize FLAT top-level (upstream
+// update-session.ts:76-82, session.ts:853-870 @ 5468e6bf): (session.theme)
+// like parseSessionOutput, and revoke-other revokes only LIVE others with
+// no cookie writes.
 
 import (
 	"context"

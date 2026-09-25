@@ -1,6 +1,6 @@
 package routes
 
-// C1 email-validator characterization (PARITY_V2.md P02, second-pass note:
+// Email-validator characterization (upstream sign-in.ts @ 5468e6bf):
 // Upstream: z.email().safeParse(email) (vendor/better-auth
 // packages/better-auth/src/api/routes/sign-in.ts:522-525). The zod pin for
 // the vendored Better Auth (1.7.5 @ 5468e6bf) resolves via the

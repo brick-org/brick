@@ -1,7 +1,6 @@
 package routes
 
-// G2/G3/G7 lane (PARITY_V2.md P02 second-pass gaps; upstream sign-in.ts @
-// 5468e6bf): form-urlencoded accept (G2, sign-in.ts:406-407,446-449),
+// Sign-in lane (upstream sign-in.ts @ 5468e6bf): form-urlencoded accept (G2, sign-in.ts:406-407,446-449),
 // EMAIL_PASSWORD_DISABLED typed code (G3, sign-in.ts:512-520), and
 // UpgradeHashIfNeeded rotation wiring (G7).
 
