@@ -996,18 +996,30 @@ func consumeDeleteAccountToken(ctx context.Context, opts types.Options, token st
 
 // finishDeleteUser runs the shared delete-user tail used by POST /delete-user
 // (direct and token paths) and GET /delete-user/callback: beforeDelete hooks
-// (request-aware), the transactional record delete, then afterDelete hooks
-// (request-aware). Cleanup ordering mirrors upstream deleteUserCallback
-// (update-user.ts:644-657): hooks bracket the user/session/account deletes.
-// Upstream runs those deletes as sequential awaits with no rollback; Go keeps
-// the historical transactional delete as intentional hardening (all-or-nothing
-// instead of partial state on mid-flow failure).
+// (request-aware), the transactional record delete, the secondary-storage
+// session purge, then afterDelete hooks (request-aware). Cleanup ordering
+// mirrors upstream deleteUserCallback (update-user.ts:644-657): hooks bracket
+// the user/session/account deletes. Upstream runs those deletes as sequential
+// awaits with no rollback; Go keeps the historical transactional delete as
+// intentional hardening (all-or-nothing instead of partial state on mid-flow
+// failure).
 func finishDeleteUser(ctx context.Context, opts types.Options, userID string, user types.User) error {
 	if err := runBeforeDeleteHook(ctx, &opts.User.DeleteUser, &user); err != nil {
 		return err
 	}
 	if err := deleteUserRecords(ctx, opts.DB, userID); err != nil {
 		return err
+	}
+	// Secondary-storage fan-out (P08-G2; upstream deleteUserSessions):
+	// the transactional delete above purges only DB rows, so without this
+	// the active-sessions-* index + per-token entries survive deletion.
+	// Mirrors the deleteSecondaryAwareUserSessions call in ChangePassword
+	// (password.go); guarded on a configured backend so the DB-only path is
+	// a single transaction with no extra round-trip.
+	if opts.SecondaryStorage != nil {
+		if err := deleteSecondaryAwareUserSessions(ctx, opts, userID); err != nil {
+			return err
+		}
 	}
 	if err := runAfterDeleteHook(ctx, &opts.User.DeleteUser, &user); err != nil {
 		return err
